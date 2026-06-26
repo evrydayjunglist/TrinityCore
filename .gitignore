@@ -23,3 +23,13 @@ nbproject/*
 cmake-build-*/*
 .vs
 *.user
+
+# Local reference source trees. Kept beside this fork for comparison only.
+# Do not commit, build, link, or bulk-paste from these paths.
+/BfaCore-Reforged/
+/azerothcore-wotlk-master/
+/azerothcore-wotlk-Playerbot/
+/mod-playerbots-master/
+/azerothcore/
+/mod-playerbots/
+/azerothcore-playerbots/
