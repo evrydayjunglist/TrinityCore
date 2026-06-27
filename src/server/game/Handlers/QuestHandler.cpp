@@ -104,7 +104,7 @@ void WorldSession::HandleQuestgiverAcceptQuestOpcode(WorldPackets::Quest::QuestG
     {
         uint32 const pendingQuestId = interactionData.PendingAutoLaunchedQuestId;
 
-        TC_LOG_INFO("network", "Pending auto-launched quest {}: CMSG_QUEST_GIVER_ACCEPT_QUEST Giver={} PacketQuest={}",
+        TC_LOG_DEBUG("network", "Pending auto-launched quest {}: CMSG_QUEST_GIVER_ACCEPT_QUEST Giver={} PacketQuest={}",
             pendingQuestId, packet.QuestGiverGUID.ToString(), packet.QuestID);
 
         if (!object)
@@ -586,9 +586,9 @@ void WorldSession::HandleQuestgiverCloseQuest(WorldPackets::Quest::QuestGiverClo
     InteractionData& interactionData = _player->PlayerTalkClass->GetInteractionData();
     uint32 const questId = uint32(questGiverCloseQuest.QuestID);
 
-    if (interactionData.PendingAutoLaunchedQuestId)
+    if (interactionData.PendingAutoLaunchedQuestId == questId)
     {
-        TC_LOG_INFO("network", "Pending auto-launched quest {}: CMSG_QUEST_GIVER_CLOSE_QUEST QuestID={}",
+        TC_LOG_DEBUG("network", "Pending auto-launched quest {}: CMSG_QUEST_GIVER_CLOSE_QUEST QuestID={}",
             interactionData.PendingAutoLaunchedQuestId, questId);
 
         interactionData.ClearPendingAutoLaunchedQuest(_player);

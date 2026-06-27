@@ -474,14 +474,14 @@ bool PlayerMenu::TryGrantPendingAutoLaunchedQuest(Object* packetGiver, int32 exp
     uint32 const questId = interactionData.PendingAutoLaunchedQuestId;
     if (!questId || interactionData.Type != PlayerInteractionType::QuestGiver)
     {
-        TC_LOG_INFO("network", "TryGrantPendingAutoLaunchedQuest: skip — pending={} type={}",
+        TC_LOG_DEBUG("network", "TryGrantPendingAutoLaunchedQuest: skip — pending={} type={}",
             questId, AsUnderlyingType(interactionData.Type));
         return false;
     }
 
     if (expectedQuestId > 0 && questId != uint32(expectedQuestId))
     {
-        TC_LOG_INFO("network", "TryGrantPendingAutoLaunchedQuest: skip — pending {} != expected {}",
+        TC_LOG_DEBUG("network", "TryGrantPendingAutoLaunchedQuest: skip — pending {} != expected {}",
             questId, expectedQuestId);
         return false;
     }
@@ -489,14 +489,14 @@ bool PlayerMenu::TryGrantPendingAutoLaunchedQuest(Object* packetGiver, int32 exp
     Object* offerSource = interactionData.ResolvePendingOfferSource(player);
     if (!offerSource)
     {
-        TC_LOG_INFO("network", "TryGrantPendingAutoLaunchedQuest: skip — no offer source (SourceGuid={})",
+        TC_LOG_DEBUG("network", "TryGrantPendingAutoLaunchedQuest: skip — no offer source (SourceGuid={})",
             interactionData.SourceGuid.ToString());
         return false;
     }
 
     if (!IsValidPendingAutoLaunchedAcceptGiver(player, packetGiver, offerSource))
     {
-        TC_LOG_INFO("network", "TryGrantPendingAutoLaunchedQuest: skip — invalid giver packetGiver={} offerSource={}",
+        TC_LOG_DEBUG("network", "TryGrantPendingAutoLaunchedQuest: skip — invalid giver packetGiver={} offerSource={}",
             packetGiver ? packetGiver->GetGUID().ToString() : "null", offerSource->GetGUID().ToString());
         return false;
     }
@@ -504,19 +504,19 @@ bool PlayerMenu::TryGrantPendingAutoLaunchedQuest(Object* packetGiver, int32 exp
     Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
     if (!quest)
     {
-        TC_LOG_INFO("network", "TryGrantPendingAutoLaunchedQuest: skip — quest {} template missing", questId);
+        TC_LOG_DEBUG("network", "TryGrantPendingAutoLaunchedQuest: skip — quest {} template missing", questId);
         return false;
     }
 
     if (!player->CanTakeQuest(quest, false))
     {
-        TC_LOG_INFO("network", "TryGrantPendingAutoLaunchedQuest: skip — CanTakeQuest false for quest {}", questId);
+        TC_LOG_DEBUG("network", "TryGrantPendingAutoLaunchedQuest: skip — CanTakeQuest false for quest {}", questId);
         return false;
     }
 
     if (!player->CanAddQuest(quest, false))
     {
-        TC_LOG_INFO("network", "TryGrantPendingAutoLaunchedQuest: skip — CanAddQuest false for quest {}", questId);
+        TC_LOG_DEBUG("network", "TryGrantPendingAutoLaunchedQuest: skip — CanAddQuest false for quest {}", questId);
         return false;
     }
 
@@ -525,7 +525,7 @@ bool PlayerMenu::TryGrantPendingAutoLaunchedQuest(Object* packetGiver, int32 exp
     player->ClearQuestSharingInfo();
     player->AddQuestAndCheckCompletion(quest, offerSource);
 
-    TC_LOG_INFO("network", "TryGrantPendingAutoLaunchedQuest: granted quest {}", questId);
+    TC_LOG_DEBUG("network", "TryGrantPendingAutoLaunchedQuest: granted quest {}", questId);
 
     return true;
 }
@@ -727,10 +727,6 @@ void PlayerMenu::SendQuestGiverQuestDetails(Quest const* quest, ObjectGuid npcGU
     }
 
     _session->SendPacket(packet.Write());
-
-    if (autoLaunched && GetInteractionData().PendingAutoLaunchedQuestId == quest->GetQuestId())
-        TC_LOG_INFO("network", "Offered auto-launched quest {} giver={} displayPopup={} questGiverCreatureId={}",
-            quest->GetQuestId(), npcGUID.ToString(), displayPopup, packet.QuestGiverCreatureID);
 
     TC_LOG_DEBUG("network", "WORLD: Sent SMSG_QUEST_GIVER_QUEST_DETAILS NPC={}, questid={}", npcGUID.ToString(), quest->GetQuestId());
 }

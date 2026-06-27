@@ -1185,21 +1185,12 @@ void WorldSession::HandleCloseInteraction(WorldPackets::Misc::CloseInteraction& 
         if (interactionData.Type != PlayerInteractionType::QuestGiver
             || interactionData.SourceGuid != closeInteraction.SourceGuid)
         {
-            TC_LOG_INFO("network", "CMSG_CLOSE_INTERACTION pending quest {} — SourceGuid mismatch (offer={} close={})",
+            TC_LOG_DEBUG("network", "CMSG_CLOSE_INTERACTION pending quest {} — SourceGuid mismatch (offer={} close={}), clearing",
                 interactionData.PendingAutoLaunchedQuestId,
                 interactionData.SourceGuid.ToString(), closeInteraction.SourceGuid.ToString());
         }
-        else
-        {
-            TC_LOG_INFO("network", "CMSG_CLOSE_INTERACTION pending quest {} SourceGuid={}",
-                interactionData.PendingAutoLaunchedQuestId,
-                closeInteraction.SourceGuid.ToString());
 
-            TC_LOG_INFO("network", "CMSG_CLOSE_INTERACTION pending quest {} — cleared without grant",
-                interactionData.PendingAutoLaunchedQuestId);
-
-            interactionData.ClearPendingAutoLaunchedQuest(_player);
-        }
+        interactionData.ClearPendingAutoLaunchedQuest(_player);
     }
 
     if (_player->PlayerTalkClass->GetInteractionData().IsLaunchedByQuest)
