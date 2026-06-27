@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS `battlenet_account_warband_groups` (
   `contentSetId` int NOT NULL DEFAULT '0',
   `name` varchar(255) NOT NULL DEFAULT '',
   PRIMARY KEY (`battlenetAccountId`,`groupId`),
-  CONSTRAINT `fk_battlenet_account_warband_groups__accountId` FOREIGN KEY (`battlenetAccountId`) REFERENCES `battlenet_accounts` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+  CONSTRAINT `fk_battlenet_account_warband_groups__accountId` FOREIGN KEY (`battlenetAccountId`) REFERENCES `battlenet_accounts` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `battlenet_account_warband_group_members` (
@@ -19,5 +19,5 @@ CREATE TABLE IF NOT EXISTS `battlenet_account_warband_group_members` (
   `type` int NOT NULL DEFAULT '0',
   `contentSetId` int NOT NULL DEFAULT '0',
   PRIMARY KEY (`battlenetAccountId`,`groupId`,`characterGuid`),
-  CONSTRAINT `fk_battlenet_account_warband_group_members__accountId` FOREIGN KEY (`battlenetAccountId`) REFERENCES `battlenet_accounts` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+  CONSTRAINT `fk_battlenet_account_warband_group_members__accountId` FOREIGN KEY (`battlenetAccountId`) REFERENCES `battlenet_accounts` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
