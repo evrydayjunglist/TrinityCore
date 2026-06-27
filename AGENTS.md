@@ -73,9 +73,11 @@ After changes (unless user says otherwise): when a module system exists,
 - `docs/midnight-assessment/sql-update-conventions.md` — SQL update naming + upstream sync
 - `docs/midnight-assessment/dracthyr-forbidden-reach-handoff.md` — side project: Dracthyr intro overview; **§8 evidence/gap labels**
 - `docs/midnight-assessment/dracthyr-phase-1b-handoff.md` — Phase 1b lower War Creche (mostly done; playtest bugs B1–B3)
-- `docs/midnight-assessment/dracthyr-b4-azurathel-speak-handoff.md` — **active bugfix:** B4 Azurathel **181056** speak/turn-in blocker
-- `docs/midnight-assessment/dracthyr-intro-opening-retail-parity-handoff.md` — **retail parity** R1–R3 (R2 accept user-validated 2026-06-26)
-- `docs/midnight-assessment/dracthyr-intro-quest-accept-proper-fix-handoff.md` — **done:** Track B pending accept + `CLOSE_INTERACTION` popup grant (canonical)
+- `docs/midnight-assessment/dracthyr-intro-quest-popup-decline-handoff.md` — **R2 done:** Accept/Decline **64864** (`OfferedScriptQuestID` + `ACCEPT_QUEST` grant)
+- `docs/midnight-assessment/dracthyr-b4-azurathel-speak-handoff.md` — B4 Azurathel **181056** speak/turn-in blocker
+- `docs/midnight-assessment/dracthyr-intro-opening-retail-parity-handoff.md` — **retail parity** R1–R3 (R2 accept/decline done; R1/R3 open)
+- `docs/midnight-assessment/dracthyr-intro-quest-accept-history.md` — R2 chronology (superseded experiments; do not implement from)
+- `docs/midnight-assessment/dracthyr-intro-quest-accept-proper-fix-handoff.md` — Hack 1 Track B (done; final architecture in popup-decline handoff)
 - `docs/midnight-assessment/dracthyr-intro-quest-accept-fallback-removal-handoff.md` — **done:** Hack 2 (2s fallback) removed
 - `modules/README.md` — product module layout
 
