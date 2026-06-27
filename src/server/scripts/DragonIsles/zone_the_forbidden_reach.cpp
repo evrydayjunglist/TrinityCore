@@ -18,10 +18,25 @@
 #include "AreaTrigger.h"
 #include "AreaTriggerAI.h"
 #include "Containers.h"
+#include "Creature.h"
+#include "EventProcessor.h"
+#include "Log.h"
+#include "ObjectGuid.h"
+#include "ObjectMgr.h"
 #include "Player.h"
+#include "SceneMgr.h"
 #include "ScriptMgr.h"
 #include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "SpellScript.h"
+#include "TemporarySummon.h"
+#include <unordered_set>
+
+enum DracthyrForbiddenReach
+{
+    MAP_FORBIDDEN_REACH = 2570,
+    AREA_WAR_CRECHE     = 13806
+};
 
 enum DracthyrLoginSpells
 {
@@ -37,10 +52,25 @@ enum DracthyrLoginSpells
     SPELL_DRACTHYR_MOVIE_ROOM_04        = 394282, // scene for room 4
     //SPELL_DRACTHYR_MOVIE_ROOM_05        = 394283, // scene for room 5 (only plays sound, unused?)
     SPELL_MAINTAIN_DERVISHIAN           = 369731, // Alliance Personal Summon
+    SPELL_SUMMON_DERVISHIAN             = 369730,
     SPELL_MAINTAIN_KODETHI              = 370112, // Horde Personal Summon
+    SPELL_SUMMON_KODETHI                = 370111,
     SPELL_AWAKEN_DRACTYHR_QUEST_ABANDON = 369744,
     SPELL_STASIS_FEEDBACK_KNOCKBACK     = 364074,
-    SPELL_STASIS_FEEDBACK_VISUAL        = 374633
+    SPELL_STASIS_FEEDBACK_VISUAL        = 374633,
+    SPELL_DISINTEGRATE_SPELLCLICK       = 362355,
+    SPELL_DRACTHYR_STASIS_NPC           = 382137,
+    SPELL_DRACTHYR_STASIS_LOWER         = 362331,
+
+    NPC_DERVISHIAN                      = 181494,
+    NPC_KODETHI                         = 187223,
+    NPC_AZURATHEL_STASIS                = 183380,
+    NPC_AZURATHEL_QUEST_ENDER           = 181056,
+    NPC_KILL_CREDIT_CAVE_IN             = 187015,
+
+    QUEST_AWAKEN_DRACTYHR               = 64864,
+
+    SCENE_PKG_DRACTHYR_EVOKER_INTRO     = 3730
 };
 
 struct DracthyrLoginRoom
@@ -74,6 +104,336 @@ static constexpr std::array<DracthyrLoginRoom, 4> LoginRoomData =
     }
 }};
 
+static std::unordered_set<ObjectGuid> s_dracthyrIntroPending;
+static std::unordered_set<ObjectGuid> s_dracthyrIntroQuestOffered;
+static std::unordered_map<ObjectGuid, uint32> s_dracthyrLoginRoom;
+
+static Optional<uint32> GetDracthyrLoginRoomIndex(Player const* player)
+{
+    if (!player)
+        return {};
+
+    auto itr = s_dracthyrLoginRoom.find(player->GetGUID());
+    if (itr == s_dracthyrLoginRoom.end())
+        return {};
+
+    return itr->second;
+}
+
+static uint32 GetNearestDracthyrLoginRoomIndex(Player const* player)
+{
+    auto currentRoom = std::ranges::min_element(LoginRoomData, [player](DracthyrLoginRoom const& left, DracthyrLoginRoom const& right)
+    {
+        return player->GetDistance(left.PlayerPosition) < player->GetDistance(right.PlayerPosition);
+    });
+
+    if (currentRoom == LoginRoomData.end())
+        return 0;
+
+    return std::distance(LoginRoomData.begin(), currentRoom);
+}
+
+static uint32 GetDracthyrGuideEntry(Player const* player)
+{
+    return player->GetRace() == RACE_DRACTHYR_ALLIANCE ? NPC_DERVISHIAN : NPC_KODETHI;
+}
+
+static uint32 GetDracthyrMaintainSpell(Player const* player)
+{
+    return player->GetRace() == RACE_DRACTHYR_ALLIANCE ? SPELL_MAINTAIN_DERVISHIAN : SPELL_MAINTAIN_KODETHI;
+}
+
+static uint32 GetDracthyrSummonSpell(Player const* player)
+{
+    return player->GetRace() == RACE_DRACTHYR_ALLIANCE ? SPELL_SUMMON_DERVISHIAN : SPELL_SUMMON_KODETHI;
+}
+
+static Creature* FindDracthyrGuide(Player const* player)
+{
+    if (!player)
+        return nullptr;
+
+    uint32 const entry = GetDracthyrGuideEntry(player);
+
+    std::list<Creature*> creatures;
+    player->GetCreatureListWithOptionsInGrid(creatures, 100.0f, { .CreatureId = entry, .IgnorePhases = true, .PrivateObjectOwnerGuid = player->GetGUID() });
+    if (!creatures.empty())
+        return creatures.front();
+
+    if (Creature* guide = player->FindNearestCreatureWithOptions(100.0f, { .CreatureId = entry, .IgnorePhases = true }))
+        return guide;
+
+    return nullptr;
+}
+
+static bool IsDracthyrEvoker(Player const* player)
+{
+    if (!player || player->GetClass() != CLASS_EVOKER)
+        return false;
+
+    switch (player->GetRace())
+    {
+        case RACE_DRACTHYR_HORDE:
+        case RACE_DRACTHYR_ALLIANCE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static Optional<uint32> GetExpectedDracthyrLoginRoomIndex(Player const* player)
+{
+    if (Optional<uint32> stored = GetDracthyrLoginRoomIndex(player))
+        return stored;
+
+    return GetNearestDracthyrLoginRoomIndex(player);
+}
+
+static bool IsDracthyrGuideAtExpectedRoom(Player const* player)
+{
+    Creature* guide = FindDracthyrGuide(player);
+    if (!guide)
+        return false;
+
+    Optional<uint32> roomIndex = GetExpectedDracthyrLoginRoomIndex(player);
+    if (!roomIndex || *roomIndex >= LoginRoomData.size())
+        return false;
+
+    return guide->GetDistance(LoginRoomData[*roomIndex].SummonPosition) <= 20.0f;
+}
+
+static void DespawnDracthyrGuide(Player* player)
+{
+    if (!player)
+        return;
+
+    std::list<Creature*> guides;
+    player->GetCreatureListWithOptionsInGrid(guides, 100.0f,
+        { .CreatureId = GetDracthyrGuideEntry(player), .IgnorePhases = true, .PrivateObjectOwnerGuid = player->GetGUID() });
+    for (Creature* guide : guides)
+        guide->DespawnOrUnsummon(0s);
+
+    player->RemoveAura(SPELL_MAINTAIN_KODETHI);
+    player->RemoveAura(SPELL_MAINTAIN_DERVISHIAN);
+}
+
+static void SummonDracthyrGuideDirect(Player* player)
+{
+    if (!player || IsDracthyrGuideAtExpectedRoom(player))
+        return;
+
+    uint32 roomIndex = GetExpectedDracthyrLoginRoomIndex(player).value_or(0);
+    if (roomIndex >= LoginRoomData.size())
+        return;
+
+    uint32 const entry = GetDracthyrGuideEntry(player);
+    Position const pos = LoginRoomData[roomIndex].SummonPosition;
+
+    SummonPropertiesEntry const* props = nullptr;
+    if (SpellInfo const* summonInfo = sSpellMgr->GetSpellInfo(GetDracthyrSummonSpell(player), DIFFICULTY_NONE))
+    {
+        for (SpellEffectInfo const& effect : summonInfo->GetEffects())
+        {
+            if (effect.IsEffect(SPELL_EFFECT_SUMMON) || effect.IsEffect(SPELL_EFFECT_SUMMON_PET))
+            {
+                props = sSummonPropertiesStore.LookupEntry(effect.MiscValueB);
+                break;
+            }
+        }
+    }
+
+    player->GetMap()->SummonCreature(entry, pos, props, 0ms, player, GetDracthyrSummonSpell(player), 0, player->GetGUID());
+}
+
+static void EnsureDracthyrGuide(Player* player)
+{
+    if (!IsDracthyrEvoker(player))
+        return;
+
+    if (IsDracthyrGuideAtExpectedRoom(player))
+        return;
+
+    DespawnDracthyrGuide(player);
+
+    uint32 const maintainSpell = GetDracthyrMaintainSpell(player);
+    uint32 const summonSpell = GetDracthyrSummonSpell(player);
+
+    player->CastSpell(player, maintainSpell, true);
+    player->CastSpell(player, summonSpell, true);
+
+    if (!IsDracthyrGuideAtExpectedRoom(player))
+        SummonDracthyrGuideDirect(player);
+}
+
+static void ClearDracthyrIntroPresentationAuras(Player* player)
+{
+    if (!player)
+        return;
+
+    player->RemoveAurasDueToSpell(SPELL_STASIS_4);
+    player->RemoveAurasDueToSpell(SPELL_DRACTHYR_MOVIE_ROOM_01);
+    player->RemoveAurasDueToSpell(SPELL_DRACTHYR_MOVIE_ROOM_02);
+    player->RemoveAurasDueToSpell(SPELL_DRACTHYR_MOVIE_ROOM_03);
+    player->RemoveAurasDueToSpell(SPELL_DRACTHYR_MOVIE_ROOM_04);
+    player->GetSceneMgr().CancelSceneByPackageId(SCENE_PKG_DRACTHYR_EVOKER_INTRO);
+}
+
+static Creature* DespawnExtraDracthyrGuidesAndGetKeeper(Player* player)
+{
+    if (!player)
+        return nullptr;
+
+    uint32 const entry = GetDracthyrGuideEntry(player);
+    std::list<Creature*> guides;
+    player->GetCreatureListWithOptionsInGrid(guides, 100.0f,
+        { .CreatureId = entry, .IgnorePhases = true, .PrivateObjectOwnerGuid = player->GetGUID() });
+
+    Position keeperPos = player->GetPosition();
+    if (Optional<uint32> roomIndex = GetExpectedDracthyrLoginRoomIndex(player))
+        if (*roomIndex < LoginRoomData.size())
+            keeperPos = LoginRoomData[*roomIndex].SummonPosition;
+
+    Creature* keeper = nullptr;
+    for (Creature* guide : guides)
+    {
+        if (!keeper || guide->GetDistance(keeperPos) < keeper->GetDistance(keeperPos))
+            keeper = guide;
+    }
+
+    for (Creature* guide : guides)
+    {
+        if (guide != keeper)
+            guide->DespawnOrUnsummon(0s);
+    }
+
+    return keeper;
+}
+
+static bool TryOfferDracthyrAwakenQuest(Player* player)
+{
+    if (!player)
+        return false;
+
+    if (s_dracthyrIntroQuestOffered.contains(player->GetGUID()))
+        return true;
+
+    Quest const* quest = sObjectMgr->GetQuestTemplate(QUEST_AWAKEN_DRACTYHR);
+    if (!quest || player->GetQuestStatus(QUEST_AWAKEN_DRACTYHR) != QUEST_STATUS_NONE)
+        return true;
+
+    if (!player->CanTakeQuest(quest, false))
+        return false;
+
+    ClearDracthyrIntroPresentationAuras(player);
+    player->RemoveAurasWithInterruptFlags(SpellAuraInterruptFlags::Interacting);
+
+    EnsureDracthyrGuide(player);
+    Creature* guide = DespawnExtraDracthyrGuidesAndGetKeeper(player);
+    if (!guide)
+    {
+        TC_LOG_ERROR("scripts", "Dracthyr intro: cannot offer quest {} — personal guide not spawned", QUEST_AWAKEN_DRACTYHR);
+        return false;
+    }
+
+    player->PlayerTalkClass->SendCloseGossip();
+    player->PlayerTalkClass->SendQuestQueryResponse(quest);
+
+    // Player GUID + DisplayPopup shows the arch-range popup. QuestGiverCreatureID is the guide entry
+    // (portrait). Accept closes the UI with CMSG_CLOSE_INTERACTION; grant is handled there.
+    uint32 const guideEntry = GetDracthyrGuideEntry(player);
+    player->PlayerTalkClass->SendQuestGiverQuestDetails(
+        quest, player->GetGUID(), true, true, guideEntry, guide->GetDisplayId());
+
+    s_dracthyrIntroQuestOffered.insert(player->GetGUID());
+    return true;
+}
+
+struct DracthyrGuideSummonCheckEvent : public BasicEvent
+{
+    explicit DracthyrGuideSummonCheckEvent(Player* player) : _player(player) { }
+
+    bool Execute(uint64 /*time*/, uint32 /*diff*/) override
+    {
+        if (!_player || !_player->IsInWorld())
+            return true;
+
+        if (_player->GetQuestStatus(QUEST_AWAKEN_DRACTYHR) == QUEST_STATUS_INCOMPLETE)
+            EnsureDracthyrGuide(_player);
+        else if (!FindDracthyrGuide(_player))
+            EnsureDracthyrGuide(_player);
+
+        return true;
+    }
+
+private:
+    Player* _player;
+};
+
+static void RunDracthyrLoginIntro(Player* player, uint32 roomIndex, bool updateAreaAuras);
+
+struct DracthyrLoginIntroEvent : public BasicEvent
+{
+    DracthyrLoginIntroEvent(Player* player, uint32 roomIndex, bool updateAreaAuras)
+        : _player(player), _roomIndex(roomIndex), _updateAreaAuras(updateAreaAuras) { }
+
+    bool Execute(uint64 /*time*/, uint32 /*diff*/) override
+    {
+        RunDracthyrLoginIntro(_player, _roomIndex, _updateAreaAuras);
+        return true;
+    }
+
+private:
+    Player* _player;
+    uint32 _roomIndex;
+    bool _updateAreaAuras;
+};
+
+static void RunDracthyrLoginIntro(Player* player, uint32 roomIndex, bool /*updateAreaAuras*/)
+{
+    if (player)
+        s_dracthyrIntroPending.erase(player->GetGUID());
+
+    if (!player || !player->IsInWorld())
+        return;
+
+    if (roomIndex >= LoginRoomData.size())
+        return;
+
+    DracthyrLoginRoom const& room = LoginRoomData[roomIndex];
+
+    s_dracthyrLoginRoom[player->GetGUID()] = roomIndex;
+    s_dracthyrIntroQuestOffered.erase(player->GetGUID());
+    DespawnDracthyrGuide(player);
+
+    WorldLocation dest(player->GetMapId(), room.PlayerPosition);
+    if (!player->TeleportTo(dest, TELE_TO_SPELL, {}, SPELL_DRACTHYR_LOGIN))
+    {
+        TC_LOG_WARN("server", "Dracthyr login intro: teleport failed for {}", player->GetName());
+        return;
+    }
+
+    player->SetHomebind(*player, player->GetAreaId());
+    player->CastSpell(player, SPELL_STASIS_4, true);
+    player->CastSpell(player, room.MovieSpellId, true);
+    EnsureDracthyrGuide(player);
+    player->m_Events.AddEventAtOffset(new DracthyrGuideSummonCheckEvent(player), 500ms);
+}
+
+static void ScheduleDracthyrLoginIntro(Player* player, bool updateAreaAuras, Milliseconds delay = 1s)
+{
+    if (!player)
+        return;
+
+    ObjectGuid const guid = player->GetGUID();
+    if (s_dracthyrIntroPending.contains(guid))
+        return;
+
+    s_dracthyrIntroPending.insert(guid);
+
+    uint32 const roomIndex = urand(0, LoginRoomData.size() - 1);
+    player->m_Events.AddEventAtOffset(new DracthyrLoginIntroEvent(player, roomIndex, updateAreaAuras), delay);
+}
+
 // 369728 - Dracthyr Login
 // 369744 - Awaken, Dracthyr OnquestAbandon
 class spell_dracthyr_login : public SpellScript
@@ -83,26 +443,78 @@ class spell_dracthyr_login : public SpellScript
         return ValidateSpellInfo({ SPELL_DRACTHYR_MOVIE_ROOM_01, SPELL_DRACTHYR_MOVIE_ROOM_02, SPELL_DRACTHYR_MOVIE_ROOM_03, SPELL_DRACTHYR_MOVIE_ROOM_04 });
     }
 
-    void HandleTeleport(SpellEffIndex /*effIndex*/)
+    void HandleCast()
     {
-        DracthyrLoginRoom const& room = LoginRoomData[urand(0, 3)];
+        Player* player = GetCaster()->ToPlayer();
+        if (!player)
+            return;
 
-        WorldLocation dest = GetHitUnit()->GetWorldLocation();
-        SetExplTargetDest(dest);
+        ScheduleDracthyrLoginIntro(player, GetSpellInfo()->Id == SPELL_AWAKEN_DRACTYHR_QUEST_ABANDON);
+    }
 
-        GetHitDest()->Relocate(room.PlayerPosition);
-
-        GetCaster()->CastSpell(GetHitUnit(), room.MovieSpellId, true);
-
-        // relocate questgiver to new random room
-        if (GetSpellInfo()->Id == SPELL_AWAKEN_DRACTYHR_QUEST_ABANDON)
-            if (Player* player = GetCaster()->ToPlayer())
-                player->UpdateAreaDependentAuras(player->GetAreaId());
+    void SuppressDefaultTeleport(SpellEffIndex effIndex)
+    {
+        PreventHitDefaultEffect(effIndex);
     }
 
     void Register() override
     {
-        OnEffectHitTarget += SpellEffectFn(spell_dracthyr_login::HandleTeleport, EFFECT_0, SPELL_EFFECT_TELEPORT_UNITS);
+        OnCast += SpellCastFn(spell_dracthyr_login::HandleCast);
+        OnEffectHitTarget += SpellEffectFn(spell_dracthyr_login::SuppressDefaultTeleport, EFFECT_0, SPELL_EFFECT_TELEPORT_UNITS);
+    }
+};
+
+// First-login intro: playercreateinfo_cast_spell for 369728 is unreliable during the login
+// handshake, so drive the room teleport + movie from OnLogin instead (369744 abandon still uses spell_dracthyr_login).
+class player_dracthyr_intro_login : public PlayerScript
+{
+public:
+    player_dracthyr_intro_login() : PlayerScript("player_dracthyr_intro_login") { }
+
+    void OnLogin(Player* player, bool firstLogin) override
+    {
+        if (!IsDracthyrEvoker(player))
+            return;
+
+        if (firstLogin)
+        {
+            ObjectGuid const guid = player->GetGUID();
+            if (!s_dracthyrIntroPending.contains(guid))
+            {
+                s_dracthyrIntroPending.insert(guid);
+                uint32 const roomIndex = urand(0, LoginRoomData.size() - 1);
+                RunDracthyrLoginIntro(player, roomIndex, false);
+            }
+            return;
+        }
+
+        if (player->GetMapId() == MAP_FORBIDDEN_REACH &&
+            player->GetQuestStatus(QUEST_AWAKEN_DRACTYHR) == QUEST_STATUS_INCOMPLETE)
+            EnsureDracthyrGuide(player);
+    }
+
+    void OnUpdateZone(Player* player, uint32 /*newZone*/, uint32 newArea) override
+    {
+        if (!IsDracthyrEvoker(player) || player->GetMapId() != MAP_FORBIDDEN_REACH)
+            return;
+
+        // Hub spawn fires zone update before OnLogin intro; spell_area would summon at nearest room (wrong).
+        if (!GetDracthyrLoginRoomIndex(player) &&
+            player->GetQuestStatus(QUEST_AWAKEN_DRACTYHR) == QUEST_STATUS_NONE)
+            return;
+
+        if (newArea != AREA_WAR_CRECHE &&
+            player->GetQuestStatus(QUEST_AWAKEN_DRACTYHR) != QUEST_STATUS_INCOMPLETE)
+            return;
+
+        EnsureDracthyrGuide(player);
+    }
+
+    void OnLogout(Player* player) override
+    {
+        s_dracthyrLoginRoom.erase(player->GetGUID());
+        s_dracthyrIntroPending.erase(player->GetGUID());
+        s_dracthyrIntroQuestOffered.erase(player->GetGUID());
     }
 };
 
@@ -114,11 +526,13 @@ public:
 
     void OnSceneComplete(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* /*sceneTemplate*/) override
     {
+        EnsureDracthyrGuide(player);
         player->CastSpell(player, SPELL_STASIS_1, true);
     }
 
     void OnSceneCancel(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* /*sceneTemplate*/) override
     {
+        EnsureDracthyrGuide(player);
         player->CastSpell(player, SPELL_STASIS_1, true);
     }
 };
@@ -129,20 +543,105 @@ class spell_dracthyr_summon_dervishian : public SpellScript
 {
     void SetDest(SpellDestination& dest) const
     {
-        auto currentRoom = std::ranges::min_element(LoginRoomData, [caster = GetCaster()](DracthyrLoginRoom const& left, DracthyrLoginRoom const& right)
-        {
-            return caster->GetDistance(left.PlayerPosition) < caster->GetDistance(right.PlayerPosition);
-        });
-
-        if (currentRoom == LoginRoomData.end())
+        Player* player = GetCaster() ? GetCaster()->ToPlayer() : nullptr;
+        if (!player)
             return;
 
-        dest.Relocate(currentRoom->SummonPosition);
+        uint32 roomIndex = GetExpectedDracthyrLoginRoomIndex(player).value_or(0);
+        if (roomIndex >= LoginRoomData.size())
+            return;
+
+        Position const& targetPos = LoginRoomData[roomIndex].SummonPosition;
+        dest.Relocate(targetPos);
     }
 
     void Register() override
     {
         OnDestinationTargetSelect += SpellDestinationTargetSelectFn(spell_dracthyr_summon_dervishian::SetDest, EFFECT_0, TARGET_DEST_NEARBY_ENTRY);
+    }
+};
+
+// 366636 - Stasis 3 (Awaken, Dracthyr quest offer — player GUID like EffectQuestStart)
+class spell_dracthyr_stasis_3 : public SpellScript
+{
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return spellInfo->HasEffect(SPELL_EFFECT_QUEST_START);
+    }
+
+    void OfferAwakenQuest(SpellEffIndex effIndex)
+    {
+        if (GetEffectInfo().Effect != SPELL_EFFECT_QUEST_START)
+            return;
+
+        PreventHitDefaultEffect(effIndex);
+
+        Player* player = GetHitPlayer();
+        if (!player)
+            player = GetCaster() ? GetCaster()->ToPlayer() : nullptr;
+        if (!player)
+            return;
+
+        TryOfferDracthyrAwakenQuest(player);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_dracthyr_stasis_3::OfferAwakenQuest, EFFECT_ALL, SPELL_EFFECT_ANY);
+    }
+};
+
+// 362355 - Disintegrate (spellclick on stasis dracthyr)
+class spell_disintegrate_dracthyr_awaken : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DRACTHYR_STASIS_NPC, SPELL_DRACTHYR_STASIS_LOWER });
+    }
+
+    void HandleHitTarget()
+    {
+        Player* player = GetCaster() ? GetCaster()->ToPlayer() : nullptr;
+        Unit* target = GetHitUnit();
+        if (!player || !target)
+            return;
+
+        target->RemoveAurasDueToSpell(SPELL_DRACTHYR_STASIS_NPC);
+        target->RemoveAurasDueToSpell(SPELL_DRACTHYR_STASIS_LOWER);
+
+        uint32 const entry = target->GetEntry();
+        player->KilledMonsterCredit(entry, target->GetGUID());
+
+        if (CreatureTemplate const* cInfo = sObjectMgr->GetCreatureTemplate(entry))
+        {
+            for (uint32 killCredit : cInfo->KillCredit)
+            {
+                if (killCredit)
+                    player->KilledMonsterCredit(killCredit, ObjectGuid::Empty);
+            }
+        }
+
+        if (entry == NPC_AZURATHEL_STASIS)
+        {
+            player->KilledMonsterCredit(NPC_KILL_CREDIT_CAVE_IN, ObjectGuid::Empty);
+
+            if (Creature* creature = target->ToCreature())
+            {
+                creature->UpdateEntry(NPC_AZURATHEL_QUEST_ENDER);
+                creature->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+                creature->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP | UNIT_NPC_FLAG_QUESTGIVER);
+            }
+        }
+        else if (entry == NPC_KODETHI || entry == NPC_DERVISHIAN)
+        {
+            if (Creature* creature = target->ToCreature())
+                creature->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+        }
+    }
+
+    void Register() override
+    {
+        AfterHit += SpellHitFn(spell_disintegrate_dracthyr_awaken::HandleHitTarget);
     }
 };
 
@@ -152,8 +651,11 @@ class quest_awaken_dracthyr : public QuestScript
 public:
     quest_awaken_dracthyr() : QuestScript("quest_awaken_dracthyr") { }
 
-    void OnQuestStatusChange(Player* player, Quest const* /*quest*/, QuestStatus /*oldStatus*/, QuestStatus newStatus) override
+    void OnQuestStatusChange(Player* player, Quest const* quest, QuestStatus /*oldStatus*/, QuestStatus newStatus) override
     {
+        if (quest->GetQuestId() == QUEST_AWAKEN_DRACTYHR && newStatus == QUEST_STATUS_INCOMPLETE)
+            EnsureDracthyrGuide(player);
+
         if (newStatus == QUEST_STATUS_NONE)
         {
             player->CastSpell(player, SPELL_AWAKEN_DRACTYHR_QUEST_ABANDON, false);
@@ -182,9 +684,12 @@ struct at_dracthyr_stasis_feedback : AreaTriggerAI
 
 void AddSC_zone_the_forbidden_reach()
 {
+    new player_dracthyr_intro_login();
     RegisterSpellScript(spell_dracthyr_login);
     new scene_dracthyr_evoker_intro();
     RegisterSpellScript(spell_dracthyr_summon_dervishian);
+    RegisterSpellScript(spell_dracthyr_stasis_3);
+    RegisterSpellScript(spell_disintegrate_dracthyr_awaken);
     new quest_awaken_dracthyr();
     RegisterAreaTriggerAI(at_dracthyr_stasis_feedback);
 }

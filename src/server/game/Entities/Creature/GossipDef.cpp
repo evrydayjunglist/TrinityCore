@@ -390,10 +390,106 @@ void InteractionData::StartInteraction(ObjectGuid target, PlayerInteractionType 
 
 void InteractionData::Reset()
 {
+    // Auto-launched quest offers survive gossip UI close; Accept/Cancel handlers clear explicitly.
+    uint32 const pendingQuest = PendingAutoLaunchedQuestId;
+    ObjectGuid const pendingSource = SourceGuid;
+    bool const pendingDisplayPopup = PendingAutoLaunchedDisplayPopup;
+
     SourceGuid.Clear();
     Type = PlayerInteractionType::None;
     IsLaunchedByQuest = false;
+    PendingAutoLaunchedQuestId = 0;
+    PendingAutoLaunchedDisplayPopup = false;
     _data.emplace<std::monostate>();
+
+    if (pendingQuest)
+    {
+        SourceGuid = pendingSource;
+        Type = PlayerInteractionType::QuestGiver;
+        PendingAutoLaunchedQuestId = pendingQuest;
+        PendingAutoLaunchedDisplayPopup = pendingDisplayPopup;
+    }
+}
+
+void InteractionData::ClearPendingAutoLaunchedQuest()
+{
+    PendingAutoLaunchedQuestId = 0;
+    PendingAutoLaunchedDisplayPopup = false;
+    SourceGuid.Clear();
+    Type = PlayerInteractionType::None;
+}
+
+bool IsPersonalQuestGiverFor(Player const* player, Object const* questGiver)
+{
+    if (questGiver->GetGUID() == player->GetGUID())
+        return true;
+
+    if (Creature const* creature = questGiver->ToCreature())
+        return creature->GetPrivateObjectOwner() == player->GetGUID();
+
+    return false;
+}
+
+Object* InteractionData::ResolvePendingOfferSource(Player* player) const
+{
+    if (SourceGuid == player->GetGUID())
+        return player;
+
+    if (Object* source = ObjectAccessor::GetObjectByTypeMask(*player, SourceGuid, TYPEMASK_UNIT))
+        if (IsPersonalQuestGiverFor(player, source))
+            return source;
+
+    return nullptr;
+}
+
+namespace
+{
+bool IsValidPendingAutoLaunchedAcceptGiver(Player const* player, Object const* packetGiver, Object const* offerSource)
+{
+    if (offerSource->GetGUID() == player->GetGUID())
+        return true;
+
+    if (IsPersonalQuestGiverFor(player, offerSource))
+        return !packetGiver || packetGiver == offerSource || packetGiver->GetGUID() == player->GetGUID()
+            || IsPersonalQuestGiverFor(player, packetGiver);
+
+    if (!packetGiver)
+        return false;
+
+    if (packetGiver == offerSource || packetGiver->GetGUID() == player->GetGUID())
+        return true;
+
+    return IsPersonalQuestGiverFor(player, packetGiver);
+}
+}
+
+bool PlayerMenu::TryGrantPendingAutoLaunchedQuest(Object* packetGiver, int32 expectedQuestId)
+{
+    Player* player = _session->GetPlayer();
+    if (!player)
+        return false;
+
+    InteractionData& interactionData = GetInteractionData();
+    uint32 const questId = interactionData.PendingAutoLaunchedQuestId;
+    if (!questId || interactionData.Type != PlayerInteractionType::QuestGiver)
+        return false;
+
+    if (expectedQuestId > 0 && questId != uint32(expectedQuestId))
+        return false;
+
+    Object* offerSource = interactionData.ResolvePendingOfferSource(player);
+    if (!offerSource || !IsValidPendingAutoLaunchedAcceptGiver(player, packetGiver, offerSource))
+        return false;
+
+    Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
+    if (!quest || !player->CanTakeQuest(quest, false) || !player->CanAddQuest(quest, false))
+        return false;
+
+    interactionData.ClearPendingAutoLaunchedQuest();
+    SendCloseGossip();
+    player->ClearQuestSharingInfo();
+    player->AddQuestAndCheckCompletion(quest, offerSource);
+    return true;
 }
 
 void QuestMenu::ClearMenu()
@@ -467,9 +563,27 @@ void PlayerMenu::SendQuestGiverStatus(QuestGiverStatus questStatus, ObjectGuid n
     TC_LOG_DEBUG("network", "WORLD: Sent SMSG_QUESTGIVER_STATUS NPC={}, status={}", npcGUID.ToString(), AsUnderlyingType(questStatus));
 }
 
-void PlayerMenu::SendQuestGiverQuestDetails(Quest const* quest, ObjectGuid npcGUID, bool autoLaunched, bool displayPopup)
+void PlayerMenu::SendQuestGiverQuestDetails(Quest const* quest, ObjectGuid npcGUID, bool autoLaunched, bool displayPopup, uint32 questGiverCreatureIdOverride, uint32 portraitGiverOverride)
 {
     GetInteractionData().StartInteraction(npcGUID, PlayerInteractionType::QuestGiver);
+
+    if (autoLaunched && _session->GetPlayer()->GetQuestStatus(quest->GetQuestId()) == QUEST_STATUS_NONE)
+    {
+        Player* player = _session->GetPlayer();
+        bool personalGiver = npcGUID == player->GetGUID();
+        if (!personalGiver)
+        {
+            if (Creature const* creature = ObjectAccessor::GetCreature(*player, npcGUID))
+                personalGiver = creature->GetPrivateObjectOwner() == player->GetGUID();
+        }
+
+        if (personalGiver)
+        {
+            GetInteractionData().PendingAutoLaunchedQuestId = quest->GetQuestId();
+            if (displayPopup)
+                GetInteractionData().PendingAutoLaunchedDisplayPopup = true;
+        }
+    }
 
     WorldPackets::Quest::QuestGiverQuestDetails packet;
 
@@ -523,8 +637,24 @@ void PlayerMenu::SendQuestGiverQuestDetails(Quest const* quest, ObjectGuid npcGU
     packet.SuggestedPartyMembers = quest->GetSuggestedPlayers();
 
     // Is there a better way? what about game objects?
-    if (Creature const* creature = ObjectAccessor::GetCreature(*_session->GetPlayer(), npcGUID))
+    Player* player = _session->GetPlayer();
+    if (Creature const* creature = ObjectAccessor::GetCreature(*player, npcGUID))
+    {
         packet.QuestGiverCreatureID = creature->GetCreatureTemplate()->Entry;
+        if (!packet.PortraitGiver)
+            packet.PortraitGiver = creature->GetDisplayId();
+    }
+    else if (npcGUID == player->GetGUID())
+    {
+        if (uint32 portraitEntry = quest->GetQuestGiverPortrait())
+            packet.QuestGiverCreatureID = portraitEntry;
+    }
+
+    if (questGiverCreatureIdOverride)
+        packet.QuestGiverCreatureID = questGiverCreatureIdOverride;
+
+    if (portraitGiverOverride)
+        packet.PortraitGiver = portraitGiverOverride;
 
     // RewardSpell can teach multiple spells in trigger spell effects. But not all effects must be SPELL_EFFECT_LEARN_SPELL. See example spell 33950
     if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(quest->GetRewSpell(), DIFFICULTY_NONE))

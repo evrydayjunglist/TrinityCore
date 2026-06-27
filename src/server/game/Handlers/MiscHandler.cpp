@@ -1178,6 +1178,23 @@ void WorldSession::HandleMountSetFavorite(WorldPackets::Misc::MountSetFavorite& 
 
 void WorldSession::HandleCloseInteraction(WorldPackets::Misc::CloseInteraction& closeInteraction)
 {
+    InteractionData& interactionData = _player->PlayerTalkClass->GetInteractionData();
+
+    if (interactionData.PendingAutoLaunchedQuestId
+        && interactionData.PendingAutoLaunchedDisplayPopup
+        && interactionData.Type == PlayerInteractionType::QuestGiver
+        && interactionData.SourceGuid == closeInteraction.SourceGuid)
+    {
+        Object* packetGiver = nullptr;
+        if (closeInteraction.SourceGuid == _player->GetGUID())
+            packetGiver = _player;
+        else if (!closeInteraction.SourceGuid.IsPlayer())
+            packetGiver = ObjectAccessor::GetObjectByTypeMask(*_player, closeInteraction.SourceGuid, TYPEMASK_UNIT | TYPEMASK_GAMEOBJECT | TYPEMASK_ITEM);
+
+        if (_player->PlayerTalkClass->TryGrantPendingAutoLaunchedQuest(packetGiver))
+            return;
+    }
+
     if (_player->PlayerTalkClass->GetInteractionData().IsLaunchedByQuest)
         _player->PlayerTalkClass->GetInteractionData().IsLaunchedByQuest = false;
     else if (_player->PlayerTalkClass->GetInteractionData().SourceGuid == closeInteraction.SourceGuid)
