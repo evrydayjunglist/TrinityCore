@@ -2,13 +2,28 @@
 
 **Full onboarding for new agents:** read [`docs/new-agent-intro.md`](docs/new-agent-intro.md) first.
 
+**Fork steering (canonical):** [`docs/midnight-assessment/project-focus.md`](docs/midnight-assessment/project-focus.md)
+
 ## What this repository is
 
-**TrinityCore `master`**: Midnight-era emulator fork. **Phase 1 complete** (2026-06-25):
-empty AzerothCore-like `modules/` shell (`MODULES=none` default). Playerbots = gated
-Phase 2+ under `modules/mod-playerbots/`. Default path = human Battle.net login.
+**TrinityCore `master` fork** (Midnight era): tracks upstream TC `master` while adding
+fork-specific work. This is **not** a vanilla TC checkout — it is a personal/special-interest
+fork with its own gates, modules, and content goals.
 
 Living status: `docs/midnight-assessment/current-state.md`
+
+## Work tracks
+
+Three tracks coexist — **follow the user's current task.** Full detail:
+[`docs/midnight-assessment/project-focus.md`](docs/midnight-assessment/project-focus.md).
+
+| Track | One line |
+|-------|----------|
+| **Upstream sync** | Stay current with TC `master` |
+| **Primary** | AC-like `modules/` + native gated `mod-playerbots` (Phase 2 next) |
+| **Alternate** | Retail-parity content (Dracthyr intro today) |
+
+Default path for all tracks: human Battle.net login on `MODULES=none`.
 
 ## Reference vs implementation
 
@@ -40,8 +55,16 @@ Reference trees: `.gitignore`d, do not commit, do not link or bulk-paste.
 
 ## Direction
 
+**Primary (special interest):**
+
 - **AzerothCore-like:** modular, config-driven, small gates, baseline protected
 - **mod-playerbots-like:** real player bots/sessions — **no** WotLK wholesale import
+
+**Alternate (retail parity):**
+
+- Script/content work that matches live retail behavior where TC `master` is thin
+- Scoped diffs in core scripts and SQL; handoff docs per feature area
+- Does not change module layout or Playerbots gates unless the user explicitly ties them together
 
 **AzerothCore alignment is the default.** Module layout, config paths, CMake
 surface, and runtime behavior should match AzerothCore (and BfaCore process where
@@ -60,6 +83,7 @@ After changes (unless user says otherwise): when a module system exists,
 
 ## Key docs
 
+- `docs/midnight-assessment/project-focus.md` — **canonical fork steering** (work tracks, routing)
 - `docs/README.md` — fork vs upstream `doc/` (singular)
 - `docs/new-agent-intro.md` — complete agent introduction
 - `docs/midnight-assessment/current-state.md` — canonical living status

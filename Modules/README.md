@@ -2,6 +2,11 @@
 
 Opt-in native module root for this TrinityCore fork.
 
+This is part of the **primary work track** (AzerothCore-like architecture +
+native Playerbots). See [`docs/midnight-assessment/project-focus.md`](../docs/midnight-assessment/project-focus.md)
+for fork steering; retail-parity work usually lives in `src/server/scripts/` and
+`sql/updates/` instead.
+
 Full reference standards: [`docs/midnight-assessment/reference-trees-and-standards.md`](../docs/midnight-assessment/reference-trees-and-standards.md)
 
 ## Layout
