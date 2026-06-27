@@ -33,3 +33,6 @@ cmake-build-*/*
 /azerothcore/
 /mod-playerbots/
 /azerothcore-playerbots/
+
+# Local playtest scratch, sniff dumps, and server logs — not product artifacts.
+/temp/
