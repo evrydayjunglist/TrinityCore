@@ -4,27 +4,22 @@ param(
     [string]$Configuration = "RelWithDebInfo",
     [string]$Scripts = "static",
     [string]$Modules = "none",
-    [string[]]$Targets = @("worldserver", "bnetserver")
+    [string[]]$Targets = @("worldserver", "bnetserver"),
+    [switch]$SkipConfigure
 )
 
 $ErrorActionPreference = "Stop"
 
-if (-not $SourceDir) {
-    $SourceDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path -replace '\\', '/'
-}
+. (Join-Path $PSScriptRoot "trinitycore-build-common.ps1")
 
-if (-not $BuildDir) {
-    $repoName = Split-Path -Leaf $SourceDir
-    $BuildDir = "D:/WOWEmulation/Emulators/Builds/$repoName"
-}
+$SourceDir = Get-TrinityCoreSourceDir $SourceDir
+$BuildDir = Get-TrinityCoreBuildDir $SourceDir $BuildDir
 
-cmake -S $SourceDir -B $BuildDir -G "Visual Studio 17 2022" -A x64 `
-    "-DSERVERS=1" `
-    "-DTOOLS=1" `
-    "-DSCRIPTS=$Scripts" `
-    "-DMODULES=$Modules" `
-    "-DMYSQL_INCLUDE_DIR=C:/Program Files/MySQL/MySQL Server 8.4/include" `
-    "-DMYSQL_LIBRARY=C:/Program Files/MySQL/MySQL Server 8.4/lib/libmysql.lib" `
-    "-DOPENSSL_ROOT_DIR=C:/Program Files/OpenSSL-Win64"
+if (-not $SkipConfigure) {
+    Invoke-TrinityCoreCmakeConfigure -SourceDir $SourceDir -BuildDir $BuildDir -Scripts $Scripts -Modules $Modules
+}
+else {
+    Write-Host "Skipping CMake configure (-SkipConfigure). Use only when no new source files or CMake changes." -ForegroundColor Yellow
+}
 
 cmake --build $BuildDir --config $Configuration --target $Targets
