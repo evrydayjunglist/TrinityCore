@@ -393,6 +393,44 @@ ByteBuffer& operator<<(ByteBuffer& data, WarbandGroup const& warbandGroup)
     return data;
 }
 
+ByteBuffer& operator>>(ByteBuffer& data, WarbandGroupMember& warbandGroupMember)
+{
+    data >> warbandGroupMember.WarbandScenePlacementID;
+    data >> warbandGroupMember.Type;
+    data >> warbandGroupMember.ContentSetID;
+    if (warbandGroupMember.Type == 0)
+        data >> warbandGroupMember.Guid;
+
+    return data;
+}
+
+ByteBuffer& operator>>(ByteBuffer& data, SetupWarbandGroup& warbandGroup)
+{
+    data >> warbandGroup.GroupID;
+    data >> warbandGroup.OrderIndex;
+    data >> warbandGroup.WarbandSceneID;
+    data >> warbandGroup.Flags;
+    data >> warbandGroup.ContentSetID;
+    data >> Size<uint32>(warbandGroup.Members);
+
+    for (WarbandGroupMember& member : warbandGroup.Members)
+        data >> member;
+
+    data >> SizedString::BitsSize<9>(warbandGroup.Name);
+    data.FlushBits();
+
+    data >> SizedString::Data(warbandGroup.Name);
+
+    return data;
+}
+
+void SetupWarbandGroups::Read()
+{
+    _worldPacket >> Size<uint32>(Groups);
+    for (SetupWarbandGroup& group : Groups)
+        _worldPacket >> group;
+}
+
 EnumCharactersResult::CharacterInfo::CharacterInfo(Field const* fields) : Basic(fields)
 {
 }
