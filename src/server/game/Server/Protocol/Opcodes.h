@@ -1421,6 +1421,7 @@ enum OpcodeServer : uint32
     SMSG_DISPLAY_GAME_ERROR                                         = 0x420035,
     SMSG_DISPLAY_PLAYER_CHOICE                                      = 0x5F0004,
     SMSG_DISPLAY_PROMOTION                                          = 0x4200F3,
+    SMSG_DISPLAY_QUEST_POPUP                                        = 0x60001E,
     SMSG_DISPLAY_TOAST                                              = 0x4200CC,
     SMSG_DISPLAY_WORLD_TEXT                                         = 0x420296,
     SMSG_DISPLAY_WORLD_TEXT_ON_TARGET                               = 0x620055,
