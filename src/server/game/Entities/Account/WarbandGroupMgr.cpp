@@ -23,13 +23,6 @@
 #include "Log.h"
 #include "WorldSession.h"
 
-namespace
-{
-    std::vector<uint32> const PlacementsScene29 = { 148, 149, 150, 151 };
-    std::vector<uint32> const PlacementsScene1 = { 1, 4, 6, 8 };
-    std::vector<uint32> const PlacementsScene4 = { 48, 50, 52, 54 };
-}
-
 WarbandGroupMgr::WarbandGroupMgr(WorldSession* owner) : _owner(owner)
 {
 }
@@ -92,21 +85,19 @@ uint32 WarbandGroupMgr::GetDefaultWarbandSceneId()
 
 std::vector<uint32> WarbandGroupMgr::GetDefaultPlacementIdsForScene(uint32 warbandSceneId, uint32 memberCount)
 {
-    std::vector<uint32> const* placements = nullptr;
-    switch (warbandSceneId)
+    std::vector<uint32> result;
+    std::vector<WarbandScenePlacementEntry const*> const* placements = sDB2Manager.GetWarbandScenePlacementsForScene(warbandSceneId);
+    if (!placements)
+        return result;
+
+    for (WarbandScenePlacementEntry const* placement : *placements)
     {
-        case 29: placements = &PlacementsScene29; break;
-        case 1: placements = &PlacementsScene1; break;
-        case 4: placements = &PlacementsScene4; break;
-        default: break;
+        if (result.size() >= memberCount)
+            break;
+
+        result.push_back(placement->ID);
     }
 
-    std::vector<uint32> result;
-    if (placements)
-    {
-        for (uint32 i = 0; i < memberCount && i < placements->size(); ++i)
-            result.push_back((*placements)[i]);
-    }
     return result;
 }
 
