@@ -289,7 +289,7 @@ public:
     void StartInteraction(ObjectGuid target, PlayerInteractionType type);
     bool IsInteractingWith(ObjectGuid target, PlayerInteractionType type) const { return SourceGuid == target && Type == type; }
     void Reset();
-    void ClearPendingAutoLaunchedQuest();
+    void ClearPendingAutoLaunchedQuest(Player* player = nullptr);
     Object* ResolvePendingOfferSource(Player* player) const;
 
     ObjectGuid SourceGuid;
@@ -307,7 +307,6 @@ public:
 
     bool IsLaunchedByQuest = false;
     uint32 PendingAutoLaunchedQuestId = 0;
-    bool PendingAutoLaunchedDisplayPopup = false;
 
 private:
     uint16 _playerChoiceResponseIdentifierGenerator = 0; // not reset between interactions

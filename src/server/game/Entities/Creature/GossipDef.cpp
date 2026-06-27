@@ -393,13 +393,11 @@ void InteractionData::Reset()
     // Auto-launched quest offers survive gossip UI close; Accept/Cancel handlers clear explicitly.
     uint32 const pendingQuest = PendingAutoLaunchedQuestId;
     ObjectGuid const pendingSource = SourceGuid;
-    bool const pendingDisplayPopup = PendingAutoLaunchedDisplayPopup;
 
     SourceGuid.Clear();
     Type = PlayerInteractionType::None;
     IsLaunchedByQuest = false;
     PendingAutoLaunchedQuestId = 0;
-    PendingAutoLaunchedDisplayPopup = false;
     _data.emplace<std::monostate>();
 
     if (pendingQuest)
@@ -407,16 +405,19 @@ void InteractionData::Reset()
         SourceGuid = pendingSource;
         Type = PlayerInteractionType::QuestGiver;
         PendingAutoLaunchedQuestId = pendingQuest;
-        PendingAutoLaunchedDisplayPopup = pendingDisplayPopup;
     }
 }
 
-void InteractionData::ClearPendingAutoLaunchedQuest()
+void InteractionData::ClearPendingAutoLaunchedQuest(Player* player)
 {
+    bool const hadPending = PendingAutoLaunchedQuestId != 0;
+
     PendingAutoLaunchedQuestId = 0;
-    PendingAutoLaunchedDisplayPopup = false;
     SourceGuid.Clear();
     Type = PlayerInteractionType::None;
+
+    if (player && hadPending)
+        player->SetOfferedScriptQuestID(0);
 }
 
 bool IsPersonalQuestGiverFor(Player const* player, Object const* questGiver)
@@ -472,23 +473,60 @@ bool PlayerMenu::TryGrantPendingAutoLaunchedQuest(Object* packetGiver, int32 exp
     InteractionData& interactionData = GetInteractionData();
     uint32 const questId = interactionData.PendingAutoLaunchedQuestId;
     if (!questId || interactionData.Type != PlayerInteractionType::QuestGiver)
+    {
+        TC_LOG_INFO("network", "TryGrantPendingAutoLaunchedQuest: skip — pending={} type={}",
+            questId, AsUnderlyingType(interactionData.Type));
         return false;
+    }
 
     if (expectedQuestId > 0 && questId != uint32(expectedQuestId))
+    {
+        TC_LOG_INFO("network", "TryGrantPendingAutoLaunchedQuest: skip — pending {} != expected {}",
+            questId, expectedQuestId);
         return false;
+    }
 
     Object* offerSource = interactionData.ResolvePendingOfferSource(player);
-    if (!offerSource || !IsValidPendingAutoLaunchedAcceptGiver(player, packetGiver, offerSource))
+    if (!offerSource)
+    {
+        TC_LOG_INFO("network", "TryGrantPendingAutoLaunchedQuest: skip — no offer source (SourceGuid={})",
+            interactionData.SourceGuid.ToString());
         return false;
+    }
+
+    if (!IsValidPendingAutoLaunchedAcceptGiver(player, packetGiver, offerSource))
+    {
+        TC_LOG_INFO("network", "TryGrantPendingAutoLaunchedQuest: skip — invalid giver packetGiver={} offerSource={}",
+            packetGiver ? packetGiver->GetGUID().ToString() : "null", offerSource->GetGUID().ToString());
+        return false;
+    }
 
     Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
-    if (!quest || !player->CanTakeQuest(quest, false) || !player->CanAddQuest(quest, false))
+    if (!quest)
+    {
+        TC_LOG_INFO("network", "TryGrantPendingAutoLaunchedQuest: skip — quest {} template missing", questId);
         return false;
+    }
 
-    interactionData.ClearPendingAutoLaunchedQuest();
+    if (!player->CanTakeQuest(quest, false))
+    {
+        TC_LOG_INFO("network", "TryGrantPendingAutoLaunchedQuest: skip — CanTakeQuest false for quest {}", questId);
+        return false;
+    }
+
+    if (!player->CanAddQuest(quest, false))
+    {
+        TC_LOG_INFO("network", "TryGrantPendingAutoLaunchedQuest: skip — CanAddQuest false for quest {}", questId);
+        return false;
+    }
+
+    interactionData.ClearPendingAutoLaunchedQuest(player);
     SendCloseGossip();
     player->ClearQuestSharingInfo();
     player->AddQuestAndCheckCompletion(quest, offerSource);
+
+    TC_LOG_INFO("network", "TryGrantPendingAutoLaunchedQuest: granted quest {}", questId);
+
     return true;
 }
 
@@ -579,9 +617,9 @@ void PlayerMenu::SendQuestGiverQuestDetails(Quest const* quest, ObjectGuid npcGU
 
         if (personalGiver)
         {
-            GetInteractionData().PendingAutoLaunchedQuestId = quest->GetQuestId();
-            if (displayPopup)
-                GetInteractionData().PendingAutoLaunchedDisplayPopup = true;
+            InteractionData& interactionData = GetInteractionData();
+            interactionData.PendingAutoLaunchedQuestId = quest->GetQuestId();
+            player->SetOfferedScriptQuestID(quest->GetQuestId());
         }
     }
 
@@ -618,7 +656,12 @@ void PlayerMenu::SendQuestGiverQuestDetails(Quest const* quest, ObjectGuid npcGU
     }
 
     packet.QuestGiverGUID = npcGUID;
-    packet.InformUnit = _session->GetPlayer()->GetPlayerSharingQuest();
+    Player* player = _session->GetPlayer();
+    ObjectGuid const& sharingQuest = player->GetPlayerSharingQuest();
+    if (!sharingQuest.IsEmpty())
+        packet.InformUnit = sharingQuest;
+    else if (autoLaunched && npcGUID == player->GetGUID())
+        packet.InformUnit = player->GetGUID();
     packet.QuestID = quest->GetQuestId();
     packet.QuestPackageID = quest->GetQuestPackageID();
     packet.PortraitGiver = quest->GetQuestGiverPortrait();
@@ -637,7 +680,6 @@ void PlayerMenu::SendQuestGiverQuestDetails(Quest const* quest, ObjectGuid npcGU
     packet.SuggestedPartyMembers = quest->GetSuggestedPlayers();
 
     // Is there a better way? what about game objects?
-    Player* player = _session->GetPlayer();
     if (Creature const* creature = ObjectAccessor::GetCreature(*player, npcGUID))
     {
         packet.QuestGiverCreatureID = creature->GetCreatureTemplate()->Entry;
@@ -656,13 +698,16 @@ void PlayerMenu::SendQuestGiverQuestDetails(Quest const* quest, ObjectGuid npcGU
     if (portraitGiverOverride)
         packet.PortraitGiver = portraitGiverOverride;
 
-    // RewardSpell can teach multiple spells in trigger spell effects. But not all effects must be SPELL_EFFECT_LEARN_SPELL. See example spell 33950
-    if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(quest->GetRewSpell(), DIFFICULTY_NONE))
-        for (SpellEffectInfo const& spellEffectInfo : spellInfo->GetEffects())
-            if (spellEffectInfo.IsEffect(SPELL_EFFECT_LEARN_SPELL))
-                packet.LearnSpells.push_back(spellEffectInfo.TriggerSpell);
+    // Retail auto-launched offers omit learn-spell list in QUEST_DETAILS (reward spell still in Rewards).
+    if (!autoLaunched)
+    {
+        if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(quest->GetRewSpell(), DIFFICULTY_NONE))
+            for (SpellEffectInfo const& spellEffectInfo : spellInfo->GetEffects())
+                if (spellEffectInfo.IsEffect(SPELL_EFFECT_LEARN_SPELL))
+                    packet.LearnSpells.push_back(spellEffectInfo.TriggerSpell);
+    }
 
-    quest->BuildQuestRewards(packet.Rewards, _session->GetPlayer());
+    quest->BuildQuestRewards(packet.Rewards, player);
 
     packet.DescEmotes.resize(QUEST_EMOTE_COUNT);
     for (uint32 i = 0; i < QUEST_EMOTE_COUNT; ++i)
@@ -682,6 +727,10 @@ void PlayerMenu::SendQuestGiverQuestDetails(Quest const* quest, ObjectGuid npcGU
     }
 
     _session->SendPacket(packet.Write());
+
+    if (autoLaunched && GetInteractionData().PendingAutoLaunchedQuestId == quest->GetQuestId())
+        TC_LOG_INFO("network", "Offered auto-launched quest {} giver={} displayPopup={} questGiverCreatureId={}",
+            quest->GetQuestId(), npcGUID.ToString(), displayPopup, packet.QuestGiverCreatureID);
 
     TC_LOG_DEBUG("network", "WORLD: Sent SMSG_QUEST_GIVER_QUEST_DETAILS NPC={}, questid={}", npcGUID.ToString(), quest->GetQuestId());
 }

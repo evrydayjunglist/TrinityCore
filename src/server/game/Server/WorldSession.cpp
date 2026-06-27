@@ -30,6 +30,7 @@
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "GameTime.h"
+#include "GossipDef.h"
 #include "Group.h"
 #include "Guild.h"
 #include "GuildMgr.h"

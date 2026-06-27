@@ -1180,19 +1180,26 @@ void WorldSession::HandleCloseInteraction(WorldPackets::Misc::CloseInteraction& 
 {
     InteractionData& interactionData = _player->PlayerTalkClass->GetInteractionData();
 
-    if (interactionData.PendingAutoLaunchedQuestId
-        && interactionData.PendingAutoLaunchedDisplayPopup
-        && interactionData.Type == PlayerInteractionType::QuestGiver
-        && interactionData.SourceGuid == closeInteraction.SourceGuid)
+    if (interactionData.PendingAutoLaunchedQuestId)
     {
-        Object* packetGiver = nullptr;
-        if (closeInteraction.SourceGuid == _player->GetGUID())
-            packetGiver = _player;
-        else if (!closeInteraction.SourceGuid.IsPlayer())
-            packetGiver = ObjectAccessor::GetObjectByTypeMask(*_player, closeInteraction.SourceGuid, TYPEMASK_UNIT | TYPEMASK_GAMEOBJECT | TYPEMASK_ITEM);
+        if (interactionData.Type != PlayerInteractionType::QuestGiver
+            || interactionData.SourceGuid != closeInteraction.SourceGuid)
+        {
+            TC_LOG_INFO("network", "CMSG_CLOSE_INTERACTION pending quest {} — SourceGuid mismatch (offer={} close={})",
+                interactionData.PendingAutoLaunchedQuestId,
+                interactionData.SourceGuid.ToString(), closeInteraction.SourceGuid.ToString());
+        }
+        else
+        {
+            TC_LOG_INFO("network", "CMSG_CLOSE_INTERACTION pending quest {} SourceGuid={}",
+                interactionData.PendingAutoLaunchedQuestId,
+                closeInteraction.SourceGuid.ToString());
 
-        if (_player->PlayerTalkClass->TryGrantPendingAutoLaunchedQuest(packetGiver))
-            return;
+            TC_LOG_INFO("network", "CMSG_CLOSE_INTERACTION pending quest {} — cleared without grant",
+                interactionData.PendingAutoLaunchedQuestId);
+
+            interactionData.ClearPendingAutoLaunchedQuest(_player);
+        }
     }
 
     if (_player->PlayerTalkClass->GetInteractionData().IsLaunchedByQuest)

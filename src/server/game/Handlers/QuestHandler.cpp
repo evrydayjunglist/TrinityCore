@@ -100,13 +100,21 @@ void WorldSession::HandleQuestgiverAcceptQuestOpcode(WorldPackets::Quest::QuestG
     else
         object = ObjectAccessor::FindPlayer(packet.QuestGiverGUID);
 
-    if (interactionData.PendingAutoLaunchedQuestId == uint32(packet.QuestID))
+    if (interactionData.PendingAutoLaunchedQuestId)
     {
+        uint32 const pendingQuestId = interactionData.PendingAutoLaunchedQuestId;
+
+        TC_LOG_INFO("network", "Pending auto-launched quest {}: CMSG_QUEST_GIVER_ACCEPT_QUEST Giver={} PacketQuest={}",
+            pendingQuestId, packet.QuestGiverGUID.ToString(), packet.QuestID);
+
         if (!object)
             object = interactionData.ResolvePendingOfferSource(_player);
 
-        if (_player->PlayerTalkClass->TryGrantPendingAutoLaunchedQuest(object, packet.QuestID))
+        if (_player->PlayerTalkClass->TryGrantPendingAutoLaunchedQuest(object, pendingQuestId))
             return;
+
+        TC_LOG_INFO("network", "Pending auto-launched quest {}: ACCEPT_QUEST TryGrant failed — falling through normal accept",
+            pendingQuestId);
     }
 
     auto CLOSE_GOSSIP_CLEAR_SHARING_INFO = Trinity::make_unique_ptr_with_deleter(_player, [](Player* player)
@@ -163,7 +171,7 @@ void WorldSession::HandleQuestgiverAcceptQuestOpcode(WorldPackets::Quest::QuestG
 
     (void)CLOSE_GOSSIP_CLEAR_SHARING_INFO.release();
 
-    interactionData.ClearPendingAutoLaunchedQuest();
+    interactionData.ClearPendingAutoLaunchedQuest(_player);
     _player->AddQuestAndCheckCompletion(quest, object);
 
     if (quest->IsPushedToPartyOnAccept())
@@ -578,13 +586,13 @@ void WorldSession::HandleQuestgiverCloseQuest(WorldPackets::Quest::QuestGiverClo
     InteractionData& interactionData = _player->PlayerTalkClass->GetInteractionData();
     uint32 const questId = uint32(questGiverCloseQuest.QuestID);
 
-    if (interactionData.PendingAutoLaunchedQuestId == questId)
+    if (interactionData.PendingAutoLaunchedQuestId)
     {
-        Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
-        if (quest && quest->IsAutoAccept() && _player->PlayerTalkClass->TryGrantPendingAutoLaunchedQuest(nullptr))
-            return;
+        TC_LOG_INFO("network", "Pending auto-launched quest {}: CMSG_QUEST_GIVER_CLOSE_QUEST QuestID={}",
+            interactionData.PendingAutoLaunchedQuestId, questId);
 
-        interactionData.ClearPendingAutoLaunchedQuest();
+        interactionData.ClearPendingAutoLaunchedQuest(_player);
+        return;
     }
 
     if (_player->FindQuestSlot(questGiverCloseQuest.QuestID) >= MAX_QUEST_LOG_SIZE)

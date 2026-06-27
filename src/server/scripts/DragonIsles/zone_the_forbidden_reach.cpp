@@ -30,7 +30,7 @@
 #include "SpellMgr.h"
 #include "SpellScript.h"
 #include "TemporarySummon.h"
-#include <unordered_set>
+#include <unordered_map>
 
 enum DracthyrForbiddenReach
 {
@@ -104,20 +104,31 @@ static constexpr std::array<DracthyrLoginRoom, 4> LoginRoomData =
     }
 }};
 
-static std::unordered_set<ObjectGuid> s_dracthyrIntroPending;
-static std::unordered_set<ObjectGuid> s_dracthyrIntroQuestOffered;
-static std::unordered_map<ObjectGuid, uint32> s_dracthyrLoginRoom;
+struct DracthyrIntroPlayerState
+{
+    Optional<uint32> RoomIndex;
+    bool IntroPending = false;
+    bool QuestOffered = false;
+};
+
+static std::unordered_map<ObjectGuid, DracthyrIntroPlayerState> s_dracthyrIntroByPlayer;
+
+static DracthyrIntroPlayerState* GetDracthyrIntroState(ObjectGuid guid)
+{
+    auto itr = s_dracthyrIntroByPlayer.find(guid);
+    return itr != s_dracthyrIntroByPlayer.end() ? &itr->second : nullptr;
+}
 
 static Optional<uint32> GetDracthyrLoginRoomIndex(Player const* player)
 {
     if (!player)
         return {};
 
-    auto itr = s_dracthyrLoginRoom.find(player->GetGUID());
-    if (itr == s_dracthyrLoginRoom.end())
+    DracthyrIntroPlayerState* state = GetDracthyrIntroState(player->GetGUID());
+    if (!state || !state->RoomIndex)
         return {};
 
-    return itr->second;
+    return *state->RoomIndex;
 }
 
 static uint32 GetNearestDracthyrLoginRoomIndex(Player const* player)
@@ -157,13 +168,7 @@ static Creature* FindDracthyrGuide(Player const* player)
 
     std::list<Creature*> creatures;
     player->GetCreatureListWithOptionsInGrid(creatures, 100.0f, { .CreatureId = entry, .IgnorePhases = true, .PrivateObjectOwnerGuid = player->GetGUID() });
-    if (!creatures.empty())
-        return creatures.front();
-
-    if (Creature* guide = player->FindNearestCreatureWithOptions(100.0f, { .CreatureId = entry, .IgnorePhases = true }))
-        return guide;
-
-    return nullptr;
+    return creatures.empty() ? nullptr : creatures.front();
 }
 
 static bool IsDracthyrEvoker(Player const* player)
@@ -217,13 +222,9 @@ static void DespawnDracthyrGuide(Player* player)
     player->RemoveAura(SPELL_MAINTAIN_DERVISHIAN);
 }
 
-static void SummonDracthyrGuideDirect(Player* player)
+static void SummonDracthyrGuideDirect(Player* player, uint32 roomIndex)
 {
-    if (!player || IsDracthyrGuideAtExpectedRoom(player))
-        return;
-
-    uint32 roomIndex = GetExpectedDracthyrLoginRoomIndex(player).value_or(0);
-    if (roomIndex >= LoginRoomData.size())
+    if (!player || roomIndex >= LoginRoomData.size())
         return;
 
     uint32 const entry = GetDracthyrGuideEntry(player);
@@ -247,22 +248,20 @@ static void SummonDracthyrGuideDirect(Player* player)
 
 static void EnsureDracthyrGuide(Player* player)
 {
-    if (!IsDracthyrEvoker(player))
+    if (!IsDracthyrEvoker(player) || IsDracthyrGuideAtExpectedRoom(player))
         return;
 
-    if (IsDracthyrGuideAtExpectedRoom(player))
+    Optional<uint32> roomIndex = GetExpectedDracthyrLoginRoomIndex(player);
+    if (!roomIndex || *roomIndex >= LoginRoomData.size())
         return;
 
     DespawnDracthyrGuide(player);
 
-    uint32 const maintainSpell = GetDracthyrMaintainSpell(player);
-    uint32 const summonSpell = GetDracthyrSummonSpell(player);
-
-    player->CastSpell(player, maintainSpell, true);
-    player->CastSpell(player, summonSpell, true);
+    player->CastSpell(player, GetDracthyrMaintainSpell(player), true);
+    player->CastSpell(player, GetDracthyrSummonSpell(player), true);
 
     if (!IsDracthyrGuideAtExpectedRoom(player))
-        SummonDracthyrGuideDirect(player);
+        SummonDracthyrGuideDirect(player, *roomIndex);
 }
 
 static void ClearDracthyrIntroPresentationAuras(Player* player)
@@ -314,7 +313,8 @@ static bool TryOfferDracthyrAwakenQuest(Player* player)
     if (!player)
         return false;
 
-    if (s_dracthyrIntroQuestOffered.contains(player->GetGUID()))
+    DracthyrIntroPlayerState* state = GetDracthyrIntroState(player->GetGUID());
+    if (state && state->QuestOffered)
         return true;
 
     Quest const* quest = sObjectMgr->GetQuestTemplate(QUEST_AWAKEN_DRACTYHR);
@@ -338,13 +338,12 @@ static bool TryOfferDracthyrAwakenQuest(Player* player)
     player->PlayerTalkClass->SendCloseGossip();
     player->PlayerTalkClass->SendQuestQueryResponse(quest);
 
-    // Player GUID + DisplayPopup shows the arch-range popup. QuestGiverCreatureID is the guide entry
-    // (portrait). Accept closes the UI with CMSG_CLOSE_INTERACTION; grant is handled there.
-    uint32 const guideEntry = GetDracthyrGuideEntry(player);
+    // Retail 12.0.7 sniff: player GUID, AutoLaunched, DisplayPopup=false, QuestGiverCreatureID=0.
+    // Accept: CMSG_QUEST_GIVER_ACCEPT_QUEST then CLOSE; Decline: CLOSE only (grant on ACCEPT only).
     player->PlayerTalkClass->SendQuestGiverQuestDetails(
-        quest, player->GetGUID(), true, true, guideEntry, guide->GetDisplayId());
+        quest, player->GetGUID(), true, false);
 
-    s_dracthyrIntroQuestOffered.insert(player->GetGUID());
+    s_dracthyrIntroByPlayer[player->GetGUID()].QuestOffered = true;
     return true;
 }
 
@@ -390,9 +389,6 @@ private:
 
 static void RunDracthyrLoginIntro(Player* player, uint32 roomIndex, bool /*updateAreaAuras*/)
 {
-    if (player)
-        s_dracthyrIntroPending.erase(player->GetGUID());
-
     if (!player || !player->IsInWorld())
         return;
 
@@ -401,8 +397,11 @@ static void RunDracthyrLoginIntro(Player* player, uint32 roomIndex, bool /*updat
 
     DracthyrLoginRoom const& room = LoginRoomData[roomIndex];
 
-    s_dracthyrLoginRoom[player->GetGUID()] = roomIndex;
-    s_dracthyrIntroQuestOffered.erase(player->GetGUID());
+    DracthyrIntroPlayerState& state = s_dracthyrIntroByPlayer[player->GetGUID()];
+    state.IntroPending = false;
+    state.RoomIndex = roomIndex;
+    state.QuestOffered = false;
+
     DespawnDracthyrGuide(player);
 
     WorldLocation dest(player->GetMapId(), room.PlayerPosition);
@@ -425,10 +424,11 @@ static void ScheduleDracthyrLoginIntro(Player* player, bool updateAreaAuras, Mil
         return;
 
     ObjectGuid const guid = player->GetGUID();
-    if (s_dracthyrIntroPending.contains(guid))
+    DracthyrIntroPlayerState& state = s_dracthyrIntroByPlayer[guid];
+    if (state.IntroPending)
         return;
 
-    s_dracthyrIntroPending.insert(guid);
+    state.IntroPending = true;
 
     uint32 const roomIndex = urand(0, LoginRoomData.size() - 1);
     player->m_Events.AddEventAtOffset(new DracthyrLoginIntroEvent(player, roomIndex, updateAreaAuras), delay);
@@ -478,10 +478,10 @@ public:
 
         if (firstLogin)
         {
-            ObjectGuid const guid = player->GetGUID();
-            if (!s_dracthyrIntroPending.contains(guid))
+            DracthyrIntroPlayerState& state = s_dracthyrIntroByPlayer[player->GetGUID()];
+            if (!state.IntroPending)
             {
-                s_dracthyrIntroPending.insert(guid);
+                state.IntroPending = true;
                 uint32 const roomIndex = urand(0, LoginRoomData.size() - 1);
                 RunDracthyrLoginIntro(player, roomIndex, false);
             }
@@ -512,9 +512,7 @@ public:
 
     void OnLogout(Player* player) override
     {
-        s_dracthyrLoginRoom.erase(player->GetGUID());
-        s_dracthyrIntroPending.erase(player->GetGUID());
-        s_dracthyrIntroQuestOffered.erase(player->GetGUID());
+        s_dracthyrIntroByPlayer.erase(player->GetGUID());
     }
 };
 
@@ -524,16 +522,20 @@ class scene_dracthyr_evoker_intro : public SceneScript
 public:
     scene_dracthyr_evoker_intro() : SceneScript("scene_dracthyr_evoker_intro") { }
 
-    void OnSceneComplete(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* /*sceneTemplate*/) override
+    void OnSceneEnd(Player* player)
     {
         EnsureDracthyrGuide(player);
         player->CastSpell(player, SPELL_STASIS_1, true);
     }
 
+    void OnSceneComplete(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* /*sceneTemplate*/) override
+    {
+        OnSceneEnd(player);
+    }
+
     void OnSceneCancel(Player* player, uint32 /*sceneInstanceID*/, SceneTemplate const* /*sceneTemplate*/) override
     {
-        EnsureDracthyrGuide(player);
-        player->CastSpell(player, SPELL_STASIS_1, true);
+        OnSceneEnd(player);
     }
 };
 
