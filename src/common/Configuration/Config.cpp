@@ -27,6 +27,7 @@
 #include <cstdlib>
 #include <memory>
 #include <mutex>
+#include <unordered_set>
 
 namespace bpt = boost::property_tree;
 namespace fs  = boost::filesystem;
@@ -190,6 +191,66 @@ bool ConfigMgr::LoadAdditionalDir(std::string const& dir, bool keepOnReload, std
             loadedFiles.push_back(std::move(fileName));
         else
             errors.push_back(std::move(error));
+    }
+
+    return errors.empty();
+}
+
+bool ConfigMgr::LoadModuleConfigDir(std::string const& dir, bool keepOnReload, std::vector<std::string>& loadedFiles, std::vector<std::string>& errors)
+{
+    fs::path dirPath = dir;
+    if (!fs::exists(dirPath) || !fs::is_directory(dirPath))
+        return true;
+
+    std::vector<fs::path> confFiles;
+    std::vector<fs::path> confDistFiles;
+
+    for (fs::directory_entry const& entry : fs::directory_iterator(dirPath))
+    {
+        if (!fs::is_regular_file(entry))
+            continue;
+
+        fs::path const& filePath = entry.path();
+        std::string const filename = filePath.filename().generic_string();
+
+        if (filename.size() > 5 && filename.ends_with(".conf"))
+            confFiles.push_back(fs::absolute(filePath));
+        else if (filename.size() > 10 && filename.ends_with(".conf.dist"))
+            confDistFiles.push_back(fs::absolute(filePath));
+    }
+
+    auto loadConfigFile = [&](fs::path const& configPath)
+    {
+        std::string fileName = configPath.generic_string();
+        std::string error;
+        if (LoadAdditionalFile(fileName, keepOnReload, error))
+            loadedFiles.push_back(std::move(fileName));
+        else
+            errors.push_back(std::move(error));
+    };
+
+    std::sort(confFiles.begin(), confFiles.end());
+    for (fs::path const& confFile : confFiles)
+        loadConfigFile(confFile);
+
+    std::unordered_set<std::string> loadedConfBasenames;
+    for (fs::path const& confFile : confFiles)
+        loadedConfBasenames.insert(confFile.stem().generic_string());
+
+    std::sort(confDistFiles.begin(), confDistFiles.end());
+    for (fs::path const& confDistFile : confDistFiles)
+    {
+        std::string distStem = confDistFile.filename().generic_string();
+        if (distStem.size() > 5)
+            distStem.erase(distStem.size() - 5); // strip ".dist"
+
+        if (distStem.size() > 5)
+            distStem.erase(distStem.size() - 5); // strip ".conf" -> basename
+
+        if (loadedConfBasenames.contains(distStem))
+            continue;
+
+        loadConfigFile(confDistFile);
     }
 
     return errors.empty();

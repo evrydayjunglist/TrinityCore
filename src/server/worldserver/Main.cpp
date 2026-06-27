@@ -41,6 +41,7 @@
 #include "ProcessPriority.h"
 #include "RASession.h"
 #include "RealmList.h"
+#include "ModulesScriptLoader.h"
 #include "ScriptLoader.h"
 #include "ScriptMgr.h"
 #include "ScriptReloadMgr.h"
@@ -221,6 +222,20 @@ int main(int argc, char** argv)
         return 1;
     }
 
+    std::vector<std::string> loadedModuleConfigFiles;
+    std::vector<std::string> moduleConfigErrors;
+    bool moduleConfigLoadSuccess = sConfigMgr->LoadModuleConfigDir("modules", true, loadedModuleConfigFiles, moduleConfigErrors);
+    for (std::string const& loadedModuleConfigFile : loadedModuleConfigFiles)
+        printf("Loaded module config file %s\n", loadedModuleConfigFile.c_str());
+
+    if (!moduleConfigLoadSuccess)
+    {
+        for (std::string const& moduleConfigError : moduleConfigErrors)
+            printf("Error in module config files: %s\n", moduleConfigError.c_str());
+
+        return 1;
+    }
+
     std::vector<std::string> overriddenKeys = sConfigMgr->OverrideWithEnvVariablesIfAny();
 
     std::shared_ptr<Trinity::Asio::IoContext> ioContext = std::make_shared<Trinity::Asio::IoContext>();
@@ -346,7 +361,10 @@ int main(int argc, char** argv)
 
     auto scriptReloadMgrHandle = Trinity::make_unique_ptr_with_deleter<&ScriptReloadMgr::Unload>(sScriptReloadMgr);
 
-    sScriptMgr->SetScriptLoader(AddScripts);
+    sScriptMgr->SetScriptLoader([]() {
+        AddScripts();
+        AddModulesScripts();
+    });
     auto sScriptMgrHandle = Trinity::make_unique_ptr_with_deleter<&ScriptMgr::Unload>(sScriptMgr);
 
     // Initialize the World

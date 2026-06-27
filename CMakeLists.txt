@@ -46,6 +46,7 @@ endif()
 include(CheckCXXSourceRuns)
 include(CheckIncludeFiles)
 include(ConfigureScripts)
+include(ConfigureModules)
 
 # set default buildoptions and print them
 include(cmake/options.cmake)
@@ -82,6 +83,10 @@ add_subdirectory(dep)
 
 # add core sources
 add_subdirectory(src)
+
+if(SERVERS)
+  add_subdirectory(modules)
+endif()
 
 include(CTest)
 if(BUILD_TESTING)
