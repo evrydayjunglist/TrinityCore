@@ -799,7 +799,7 @@ class spell_dk_festering_strike : public SpellScript
 
     void Register() override
     {
-        OnEffectHitTarget += SpellEffectFn(spell_dk_festering_strike::HandleScriptEffect, EFFECT_1, SPELL_EFFECT_DUMMY);
+        OnEffectHitTarget += SpellEffectFn(spell_dk_festering_strike::HandleScriptEffect, EFFECT_2, SPELL_EFFECT_DUMMY);
     }
 };
 
@@ -841,8 +841,8 @@ class spell_dk_ghoul_explode : public SpellScript
 
     void Register() override
     {
-        OnEffectHitTarget += SpellEffectFn(spell_dk_ghoul_explode::HandleDamage, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
-        OnEffectHitTarget += SpellEffectFn(spell_dk_ghoul_explode::Suicide, EFFECT_1, SPELL_EFFECT_SCHOOL_DAMAGE);
+        OnEffectHitTarget += SpellEffectFn(spell_dk_ghoul_explode::HandleDamage, EFFECT_0, SPELL_EFFECT_WEAPON_PERCENT_DAMAGE);
+        OnEffectHitTarget += SpellEffectFn(spell_dk_ghoul_explode::Suicide, EFFECT_1, SPELL_EFFECT_INSTAKILL);
     }
 };
 
@@ -1085,7 +1085,7 @@ class spell_dk_obliteration : public AuraScript
 
     void Register() override
     {
-        AfterEffectProc += AuraEffectProcFn(spell_dk_obliteration::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+        AfterEffectProc += AuraEffectProcFn(spell_dk_obliteration::HandleProc, EFFECT_0, SPELL_AURA_ADD_FLAT_MODIFIER_BY_SPELL_LABEL);
     }
 };
 
@@ -1210,7 +1210,7 @@ class spell_dk_raise_dead : public SpellScript
 
     void Register() override
     {
-        OnEffectHitTarget += SpellEffectFn(spell_dk_raise_dead::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+        OnEffectHitTarget += SpellEffectFn(spell_dk_raise_dead::HandleDummy, EFFECT_0, SPELL_EFFECT_TRIGGER_SPELL);
     }
 };
 
@@ -1244,7 +1244,7 @@ class spell_dk_reaper_of_souls : public SpellScript
     void Register() override
     {
         OnObjectTargetSelect += SpellObjectTargetSelectFn(spell_dk_reaper_of_souls::HandleDefault, EFFECT_1, TARGET_UNIT_TARGET_ENEMY);
-        OnEffectLaunch += SpellEffectFn(spell_dk_reaper_of_souls::HandleReaperOfSouls, EFFECT_3, SPELL_EFFECT_TRIGGER_SPELL);
+        OnEffectLaunch += SpellEffectFn(spell_dk_reaper_of_souls::HandleReaperOfSouls, EFFECT_1, SPELL_EFFECT_TRIGGER_SPELL);
     }
 };
 
@@ -1267,7 +1267,7 @@ class spell_dk_rime : public AuraScript
 
     void Register() override
     {
-        DoCheckEffectProc += AuraCheckEffectProcFn(spell_dk_rime::CheckProc, EFFECT_0, SPELL_AURA_PROC_TRIGGER_SPELL);
+        DoCheckEffectProc += AuraCheckEffectProcFn(spell_dk_rime::CheckProc, EFFECT_0, SPELL_AURA_DUMMY);
     }
 };
 
@@ -1428,7 +1428,7 @@ class spell_dk_vampiric_blood : public AuraScript
 
     void Register() override
     {
-        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_dk_vampiric_blood::CalculateAmount, EFFECT_1, SPELL_AURA_MOD_INCREASE_HEALTH_2);
+        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_dk_vampiric_blood::CalculateAmount, EFFECT_1, SPELL_AURA_MOD_INCREASE_HEALTH);
     }
 };
 

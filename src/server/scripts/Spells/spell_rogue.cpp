@@ -176,7 +176,7 @@ class spell_rog_acrobatic_strikes : public AuraScript
 
     void Register() override
     {
-        OnEffectProc += AuraEffectProcFn(spell_rog_acrobatic_strikes::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+        OnEffectProc += AuraEffectProcFn(spell_rog_acrobatic_strikes::HandleProc, EFFECT_0, SPELL_AURA_PROC_TRIGGER_SPELL);
     }
 };
 
@@ -302,7 +302,7 @@ class spell_rog_blade_flurry : public AuraScript
     {
         DoCheckProc += AuraCheckProcFn(spell_rog_blade_flurry::CheckProc);
         if (m_scriptSpellId == SPELL_ROGUE_BLADE_FLURRY)
-            OnEffectProc += AuraEffectProcFn(spell_rog_blade_flurry::HandleProc, EFFECT_0, SPELL_AURA_MOD_POWER_REGEN_PERCENT);
+            OnEffectProc += AuraEffectProcFn(spell_rog_blade_flurry::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
         else
             OnEffectProc += AuraEffectProcFn(spell_rog_blade_flurry::HandleProc, EFFECT_0, SPELL_AURA_MOD_MELEE_HASTE);
     }
@@ -428,8 +428,8 @@ class spell_rog_deepening_shadows : public AuraScript
 
     void Register() override
     {
-        DoCheckEffectProc += AuraCheckEffectProcFn(spell_rog_deepening_shadows::CheckProc, EFFECT_0, SPELL_AURA_DUMMY);
-        OnEffectProc += AuraEffectProcFn(spell_rog_deepening_shadows::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+        DoCheckEffectProc += AuraCheckEffectProcFn(spell_rog_deepening_shadows::CheckProc, EFFECT_0, SPELL_AURA_LINKED_2);
+        OnEffectProc += AuraEffectProcFn(spell_rog_deepening_shadows::HandleProc, EFFECT_0, SPELL_AURA_LINKED_2);
     }
 };
 
@@ -503,7 +503,7 @@ class spell_rog_grand_melee : public AuraScript
     void Register() override
     {
         DoCheckProc += AuraCheckProcFn(spell_rog_grand_melee::HandleCheckProc);
-        OnEffectProc += AuraEffectProcFn(spell_rog_grand_melee::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+        OnEffectProc += AuraEffectProcFn(spell_rog_grand_melee::HandleProc, EFFECT_0, SPELL_AURA_ADD_PCT_MODIFIER);
     }
 };
 
@@ -716,8 +716,7 @@ class spell_rog_killing_spree : public SpellScript
 
     void Register() override
     {
-        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_rog_killing_spree::FilterTargets, EFFECT_1, TARGET_UNIT_DEST_AREA_ENEMY);
-        OnEffectHitTarget += SpellEffectFn(spell_rog_killing_spree::HandleDummy, EFFECT_1, SPELL_EFFECT_DUMMY);
+        OnEffectHitTarget += SpellEffectFn(spell_rog_killing_spree::HandleDummy, EFFECT_1, SPELL_EFFECT_APPLY_AURA);
     }
 };
 
@@ -731,7 +730,7 @@ class spell_rog_kingsbane : public AuraScript
 
     void Register() override
     {
-        DoCheckEffectProc += AuraCheckEffectProcFn(spell_rog_kingsbane::CheckProc, EFFECT_4, SPELL_AURA_PROC_TRIGGER_SPELL);;
+        DoCheckEffectProc += AuraCheckEffectProcFn(spell_rog_kingsbane::CheckProc, EFFECT_4, SPELL_AURA_DUMMY);
     }
 };
 
@@ -1291,7 +1290,7 @@ class spell_rog_sinister_strike : public SpellScript
 
     void Register() override
     {
-        OnEffectHitTarget += SpellEffectFn(spell_rog_sinister_strike::HandleDummy, EFFECT_2, SPELL_EFFECT_DUMMY);
+        OnEffectHitTarget += SpellEffectFn(spell_rog_sinister_strike::HandleDummy, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
     }
 };
 

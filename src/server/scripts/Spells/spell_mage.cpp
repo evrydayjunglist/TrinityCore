@@ -335,7 +335,7 @@ class spell_mage_blazing_barrier : public AuraScript
     void Register() override
     {
         DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_mage_blazing_barrier::CalculateAmount, EFFECT_0, SPELL_AURA_SCHOOL_ABSORB);
-        OnEffectProc += AuraEffectProcFn(spell_mage_blazing_barrier::HandleProc, EFFECT_1, SPELL_AURA_PROC_TRIGGER_SPELL);
+        OnEffectProc += AuraEffectProcFn(spell_mage_blazing_barrier::HandleProc, EFFECT_1, SPELL_AURA_DUMMY);
     }
 };
 
@@ -448,7 +448,7 @@ class spell_mage_cauterize_AuraScript : public AuraScript
 
     void Register() override
     {
-        OnEffectAbsorb += AuraEffectAbsorbFn(spell_mage_cauterize_AuraScript::HandleAbsorb, EFFECT_0);
+        OnEffectAbsorb += AuraEffectAbsorbOverkillFn(spell_mage_cauterize_AuraScript::HandleAbsorb, EFFECT_0);
     }
 };
 
@@ -615,7 +615,7 @@ class spell_mage_ethereal_blink : public AuraScript
 
     void Register() override
     {
-        OnEffectProc += AuraEffectProcFn(spell_mage_ethereal_blink::HandleProc, EFFECT_1, SPELL_AURA_PROC_TRIGGER_SPELL);
+        OnEffectProc += AuraEffectProcFn(spell_mage_ethereal_blink::HandleProc, EFFECT_0, SPELL_AURA_PROC_TRIGGER_SPELL);
     }
 };
 
@@ -718,7 +718,7 @@ class spell_mage_fiery_rush_aura : public AuraScript
 
     void Register() override
     {
-        AfterEffectRemove += AuraEffectRemoveFn(spell_mage_fiery_rush_aura::AfterRemove, EFFECT_2, SPELL_AURA_PERIODIC_DUMMY, AURA_EFFECT_HANDLE_REAL);
+        AfterEffectRemove += AuraEffectRemoveFn(spell_mage_fiery_rush_aura::AfterRemove, EFFECT_4, SPELL_AURA_PERIODIC_DUMMY, AURA_EFFECT_HANDLE_REAL);
     }
 };
 
@@ -840,18 +840,18 @@ class spell_mage_flame_on : public AuraScript
    {
        return ValidateSpellInfo({ SPELL_MAGE_FIRE_BLAST })
            && sSpellCategoryStore.HasRecord(sSpellMgr->AssertSpellInfo(SPELL_MAGE_FIRE_BLAST, DIFFICULTY_NONE)->ChargeCategoryId)
-           && ValidateSpellEffect({ { spellInfo->Id, EFFECT_2 } });
+           && ValidateSpellEffect({ { spellInfo->Id, EFFECT_0 } });
    }
 
    void CalculateAmount(AuraEffect const* /*aurEff*/, SpellEffectValue& amount, bool& canBeRecalculated)
    {
        canBeRecalculated = false;
-       amount = -GetPctOf<SpellEffectValue>(GetEffectInfo(EFFECT_2).CalcValue() * int32(IN_MILLISECONDS), sSpellCategoryStore.AssertEntry(sSpellMgr->AssertSpellInfo(SPELL_MAGE_FIRE_BLAST, DIFFICULTY_NONE)->ChargeCategoryId)->ChargeRecoveryTime);
+       amount = -GetPctOf<SpellEffectValue>(GetEffectInfo(EFFECT_0).CalcValue() * int32(IN_MILLISECONDS), sSpellCategoryStore.AssertEntry(sSpellMgr->AssertSpellInfo(SPELL_MAGE_FIRE_BLAST, DIFFICULTY_NONE)->ChargeCategoryId)->ChargeRecoveryTime);
    }
 
    void Register() override
    {
-        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_mage_flame_on::CalculateAmount, EFFECT_1, SPELL_AURA_CHARGE_RECOVERY_MULTIPLIER);
+        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_mage_flame_on::CalculateAmount, EFFECT_1, SPELL_AURA_CHARGE_RECOVERY_MOD);
    }
 };
 
@@ -970,7 +970,7 @@ class spell_mage_flurry_damage : public SpellScript
 
     void Register() override
     {
-        OnEffectHitTarget += SpellEffectFn(spell_mage_flurry_damage::HandleDamage, EFFECT_1, SPELL_EFFECT_SCHOOL_DAMAGE);
+        OnEffectHitTarget += SpellEffectFn(spell_mage_flurry_damage::HandleDamage, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
     }
 };
 
@@ -1399,7 +1399,7 @@ class spell_mage_improved_combustion : public AuraScript
     void Register() override
     {
         DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_mage_improved_combustion::CalcAmount, EFFECT_1, SPELL_AURA_MOD_RATING);
-        OnEffectPeriodic += AuraEffectPeriodicFn(spell_mage_improved_combustion::UpdatePeriodic, EFFECT_2, SPELL_AURA_PERIODIC_DUMMY);
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_mage_improved_combustion::UpdatePeriodic, EFFECT_4, SPELL_AURA_PERIODIC_DUMMY);
     }
 };
 
@@ -1536,7 +1536,7 @@ class spell_mage_living_bomb_periodic : public AuraScript
 
     void Register() override
     {
-        AfterEffectRemove += AuraEffectRemoveFn(spell_mage_living_bomb_periodic::AfterRemove, EFFECT_2, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
+        AfterEffectRemove += AuraEffectRemoveFn(spell_mage_living_bomb_periodic::AfterRemove, EFFECT_1, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
     }
 };
 
@@ -1778,8 +1778,8 @@ class spell_mage_ray_of_frost_aura : public AuraScript
 
     void Register() override
     {
-        OnEffectPeriodic += AuraEffectPeriodicFn(spell_mage_ray_of_frost_aura::HandleEffectPeriodic, EFFECT_1, SPELL_AURA_PERIODIC_DAMAGE);
-        AfterEffectRemove += AuraEffectRemoveFn(spell_mage_ray_of_frost_aura::OnRemove, EFFECT_1, SPELL_AURA_PERIODIC_DAMAGE, AURA_EFFECT_HANDLE_REAL);
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_mage_ray_of_frost_aura::HandleEffectPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_DAMAGE);
+        AfterEffectRemove += AuraEffectRemoveFn(spell_mage_ray_of_frost_aura::OnRemove, EFFECT_0, SPELL_AURA_PERIODIC_DAMAGE, AURA_EFFECT_HANDLE_REAL);
     }
 };
 

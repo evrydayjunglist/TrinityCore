@@ -526,8 +526,8 @@ class spell_dru_dream_of_cenarius_guardian : public AuraScript
 
     void Register() override
     {
-        DoCheckEffectProc += AuraCheckEffectProcFn(spell_dru_dream_of_cenarius_guardian::CheckEffectProc, EFFECT_0, SPELL_AURA_DUMMY);
-        OnEffectProc += AuraEffectProcFn(spell_dru_dream_of_cenarius_guardian::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+        DoCheckEffectProc += AuraCheckEffectProcFn(spell_dru_dream_of_cenarius_guardian::CheckEffectProc, EFFECT_0, SPELL_AURA_PROC_TRIGGER_SPELL);
+        OnEffectProc += AuraEffectProcFn(spell_dru_dream_of_cenarius_guardian::HandleProc, EFFECT_0, SPELL_AURA_PROC_TRIGGER_SPELL);
     }
 };
 

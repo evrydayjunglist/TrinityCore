@@ -395,7 +395,7 @@ class spell_sha_ascendance_restoration : public AuraScript
     void Register() override
     {
         DoCheckProc += AuraCheckProcFn(spell_sha_ascendance_restoration::CheckProc);
-        OnEffectProc += AuraEffectProcFn(spell_sha_ascendance_restoration::OnProcHeal, EFFECT_8, SPELL_AURA_DUMMY);
+        OnEffectProc += AuraEffectProcFn(spell_sha_ascendance_restoration::OnProcHeal, EFFECT_8, SPELL_AURA_ADD_FLAT_MODIFIER);
         OnEffectPeriodic += AuraEffectPeriodicFn(spell_sha_ascendance_restoration::HandleEffectPeriodic, EFFECT_6, SPELL_AURA_PERIODIC_DUMMY);
     }
 
@@ -418,7 +418,7 @@ class spell_sha_ashen_catalyst : public AuraScript
 
     void Register() override
     {
-        OnEffectProc += AuraEffectProcFn(spell_sha_ashen_catalyst::ReduceLavaLashCooldown, EFFECT_0, SPELL_AURA_PROC_TRIGGER_SPELL);
+        OnEffectProc += AuraEffectProcFn(spell_sha_ashen_catalyst::ReduceLavaLashCooldown, EFFECT_0, SPELL_AURA_DUMMY);
     }
 };
 
@@ -452,7 +452,7 @@ class spell_sha_chain_lightning_crash_lightning : public SpellScript
 
     void Register() override
     {
-        OnEffectLaunch += SpellEffectFn(spell_sha_chain_lightning_crash_lightning::HandleCooldownReduction, EFFECT_2, SPELL_EFFECT_DUMMY);
+        OnEffectLaunch += SpellEffectFn(spell_sha_chain_lightning_crash_lightning::HandleCooldownReduction, EFFECT_1, SPELL_EFFECT_DUMMY);
         OnEffectLaunch += SpellEffectFn(spell_sha_chain_lightning_crash_lightning::HandleDamageBuff, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
     }
 };
@@ -1467,7 +1467,7 @@ class spell_sha_ice_strike : public SpellScript
 
     void Register() override
     {
-        OnEffectHit += SpellEffectFn(spell_sha_ice_strike::EnergizeMaelstrom, EFFECT_3, SPELL_EFFECT_DUMMY);
+        OnEffectHit += SpellEffectFn(spell_sha_ice_strike::EnergizeMaelstrom, EFFECT_2, SPELL_EFFECT_DUMMY);
     }
 };
 
@@ -2340,7 +2340,7 @@ class spell_sha_molten_thunder_sundering : public SpellScript
 
     void Register() override
     {
-        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_sha_molten_thunder_sundering::RemoveIncapacitateEffect, EFFECT_3, TARGET_UNIT_RECT_CASTER_ENEMY);
+        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_sha_molten_thunder_sundering::RemoveIncapacitateEffect, EFFECT_0, TARGET_UNIT_RECT_CASTER_ENEMY);
         AfterCast += SpellCastFn(spell_sha_molten_thunder_sundering::RollReset);
     }
 };
@@ -2750,7 +2750,6 @@ class spell_sha_stormweaver : public SpellScript
     void Register() override
     {
         OnObjectTargetSelect += SpellObjectTargetSelectFn(spell_sha_stormweaver::PreventAffectingHealingSpells, EFFECT_2, TARGET_UNIT_CASTER);
-        OnObjectTargetSelect += SpellObjectTargetSelectFn(spell_sha_stormweaver::PreventAffectingHealingSpells, EFFECT_4, TARGET_UNIT_CASTER);
     }
 };
 
@@ -3258,8 +3257,8 @@ class spell_sha_voltaic_blaze : public SpellScript
 
     void Register() override
     {
-        OnEffectHitTarget += SpellEffectFn(spell_sha_voltaic_blaze::ApplyFlameShock, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
-        OnEffectHitTarget += SpellEffectFn(spell_sha_voltaic_blaze::EnergizeMaelstrom, EFFECT_1, SPELL_EFFECT_DUMMY);
+        OnEffectHitTarget += SpellEffectFn(spell_sha_voltaic_blaze::ApplyFlameShock, EFFECT_0, SPELL_EFFECT_DUMMY);
+        OnEffectHitTarget += SpellEffectFn(spell_sha_voltaic_blaze::EnergizeMaelstrom, EFFECT_2, SPELL_EFFECT_ENERGIZE);
     }
 };
 

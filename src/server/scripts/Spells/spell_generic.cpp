@@ -150,7 +150,7 @@ class spell_gen_adaptive_warding : public AuraScript
     void Register() override
     {
         DoCheckProc += AuraCheckProcFn(spell_gen_adaptive_warding::CheckProc);
-        OnEffectProc += AuraEffectProcFn(spell_gen_adaptive_warding::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+        OnEffectProc += AuraEffectProcFn(spell_gen_adaptive_warding::HandleProc, EFFECT_0, SPELL_AURA_MOD_STAT);
     }
 };
 
@@ -1648,7 +1648,10 @@ class spell_gen_feast : public SpellScript
 
     void Register() override
     {
-        OnEffectHitTarget += SpellEffectFn(spell_gen_feast::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+        if (m_scriptSpellId == SPELL_BOUNTIFUL_FEAST)
+            OnEffectHitTarget += SpellEffectFn(spell_gen_feast::HandleScript, EFFECT_0, SPELL_EFFECT_TRIGGER_SPELL);
+        else
+            OnEffectHitTarget += SpellEffectFn(spell_gen_feast::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
     }
 };
 
@@ -1693,8 +1696,8 @@ class spell_gen_feign_death_all_flags : public AuraScript
 
     void Register() override
     {
-        OnEffectApply += AuraEffectApplyFn(spell_gen_feign_death_all_flags::HandleEffectApply, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
-        OnEffectRemove += AuraEffectRemoveFn(spell_gen_feign_death_all_flags::OnRemove, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
+        OnEffectApply += AuraEffectApplyFn(spell_gen_feign_death_all_flags::HandleEffectApply, EFFECT_FIRST_FOUND, SPELL_AURA_ANY, AURA_EFFECT_HANDLE_REAL);
+        OnEffectRemove += AuraEffectRemoveFn(spell_gen_feign_death_all_flags::OnRemove, EFFECT_FIRST_FOUND, SPELL_AURA_ANY, AURA_EFFECT_HANDLE_REAL);
     }
 };
 
@@ -1728,8 +1731,8 @@ class spell_gen_feign_death_all_flags_uninteractible : public AuraScript
 
     void Register() override
     {
-        OnEffectApply += AuraEffectApplyFn(spell_gen_feign_death_all_flags_uninteractible::HandleEffectApply, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
-        OnEffectRemove += AuraEffectRemoveFn(spell_gen_feign_death_all_flags_uninteractible::OnRemove, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
+        OnEffectApply += AuraEffectApplyFn(spell_gen_feign_death_all_flags_uninteractible::HandleEffectApply, EFFECT_FIRST_FOUND, SPELL_AURA_ANY, AURA_EFFECT_HANDLE_REAL);
+        OnEffectRemove += AuraEffectRemoveFn(spell_gen_feign_death_all_flags_uninteractible::OnRemove, EFFECT_FIRST_FOUND, SPELL_AURA_ANY, AURA_EFFECT_HANDLE_REAL);
     }
 };
 
@@ -2153,7 +2156,7 @@ private:
 
     void Register() override
     {
-        OnEffectHitTarget += SpellEffectFn(spell_gen_knock_away_threat_reduction::HandleScript, EFFECT_2, SPELL_EFFECT_SCRIPT_EFFECT);
+        OnEffectHitTarget += SpellEffectFn(spell_gen_knock_away_threat_reduction::HandleScript, EFFECT_FIRST_FOUND, SPELL_EFFECT_SCRIPT_EFFECT);
     }
 };
 
@@ -5391,7 +5394,7 @@ SpellEffectValue GetBonusMultiplier(Unit const* unit, uint32 spellId)
                 break;
             case SPELL_PRIEST_LUMINOUS_BARRIER:
                 bonusSpellId = spellId;
-                effIndex = EFFECT_1;
+                effIndex = EFFECT_0;
                 break;
             case SPELL_SHAMAN_HEALING_TIDE_TOTEM_HEAL:
                 bonusSpellId = SPELL_SHAMAN_HEALING_TIDE_TOTEM;
@@ -5403,7 +5406,7 @@ SpellEffectValue GetBonusMultiplier(Unit const* unit, uint32 spellId)
                 break;
             case SPELL_EVOKER_REWIND:
                 bonusSpellId = spellId;
-                effIndex = EFFECT_3;
+                effIndex = EFFECT_0;
                 break;
             default:
                 return 0.0f;
@@ -5456,9 +5459,8 @@ class spell_gen_major_healing_cooldown_modifier_aura : public AuraScript
     {
         return ValidateSpellEffect
         ({
-            { SPELL_DRUID_TRANQUILITY,         EFFECT_2 },
-            { SPELL_PRIEST_LUMINOUS_BARRIER,   EFFECT_1 },
-            { SPELL_EVOKER_REWIND,             EFFECT_3 }
+            { SPELL_PRIEST_LUMINOUS_BARRIER,   EFFECT_0 },
+            { SPELL_EVOKER_REWIND,             EFFECT_0 }
         });
     }
 
@@ -5470,7 +5472,7 @@ class spell_gen_major_healing_cooldown_modifier_aura : public AuraScript
 
     void Register() override
     {
-        DoEffectCalcDamageAndHealing += AuraEffectCalcHealingFn(spell_gen_major_healing_cooldown_modifier_aura::CalculateHealingBonus, EFFECT_ALL, SPELL_AURA_ANY);
+        DoEffectCalcDamageAndHealing += AuraEffectCalcHealingFn(spell_gen_major_healing_cooldown_modifier_aura::CalculateHealingBonus, EFFECT_FIRST_FOUND, SPELL_AURA_ANY);
     }
 };
 

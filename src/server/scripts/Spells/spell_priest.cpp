@@ -1993,7 +1993,7 @@ class spell_pri_eternal_sanctity : public AuraScript
     void Register() override
     {
         DoCheckProc += AuraCheckProcFn(spell_pri_eternal_sanctity::CheckProc);
-        OnEffectProc += AuraEffectProcFn(spell_pri_eternal_sanctity::HandleEffectProc, EFFECT_0, SPELL_AURA_DUMMY);
+        OnEffectProc += AuraEffectProcFn(spell_pri_eternal_sanctity::HandleEffectProc, EFFECT_0, SPELL_AURA_ADD_FLAT_MODIFIER_BY_SPELL_LABEL);
     }
 };
 
@@ -2170,8 +2170,8 @@ class spell_pri_guardian_spirit : public AuraScript
 
     void Register() override
     {
-        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_pri_guardian_spirit::CalculateAmount, EFFECT_1, SPELL_AURA_SCHOOL_ABSORB);
-        OnEffectAbsorb += AuraEffectAbsorbFn(spell_pri_guardian_spirit::Absorb, EFFECT_1);
+        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_pri_guardian_spirit::CalculateAmount, EFFECT_2, SPELL_AURA_SCHOOL_ABSORB_OVERKILL);
+        OnEffectAbsorb += AuraEffectAbsorbOverkillFn(spell_pri_guardian_spirit::Absorb, EFFECT_2);
     }
 };
 
@@ -2273,31 +2273,23 @@ class spell_pri_halo_effect_selector : public SpellScript
         Optional<SpellEffIndex> selectedEffect;
         if (Unit* caster = GetSpell() ? GetCaster() : nullptr)
         {
-            if (caster->HasAura(SPELL_PRIEST_DIVINE_HALO))
-                selectedEffect = caster->HasAura(SPELL_PRIEST_PHANTOM_REACH) ? EFFECT_5 : EFFECT_2;
-            else if (caster->HasAura(SPELL_PRIEST_POWER_SURGE))
-                selectedEffect = caster->HasAura(SPELL_PRIEST_PHANTOM_REACH) ? EFFECT_4 : EFFECT_1;
+            if (caster->HasAura(SPELL_PRIEST_DIVINE_HALO) || caster->HasAura(SPELL_PRIEST_POWER_SURGE))
+                selectedEffect = caster->HasAura(SPELL_PRIEST_PHANTOM_REACH) ? EFFECT_3 : EFFECT_2;
             else
-                selectedEffect = caster->HasAura(SPELL_PRIEST_PHANTOM_REACH) ? EFFECT_3 : EFFECT_0;
+                selectedEffect = caster->HasAura(SPELL_PRIEST_PHANTOM_REACH) ? EFFECT_1 : EFFECT_0;
         }
 
         if (selectedEffect != EFFECT_0)
             OnEffectLaunch += SpellEffectFn(spell_pri_halo_effect_selector::PreventHitDefaultEffect, EFFECT_0, SPELL_EFFECT_CREATE_AREATRIGGER);
 
         if (selectedEffect != EFFECT_1)
-            OnEffectLaunch += SpellEffectFn(spell_pri_halo_effect_selector::PreventHitDefaultEffect, EFFECT_1, SPELL_EFFECT_CREATE_AREATRIGGER);
+            OnObjectTargetSelect += SpellObjectTargetSelectFn(spell_pri_halo_effect_selector::PreventUnwantedAura, EFFECT_1, TARGET_UNIT_CASTER);
 
         if (selectedEffect != EFFECT_2)
-            OnObjectTargetSelect += SpellObjectTargetSelectFn(spell_pri_halo_effect_selector::PreventUnwantedAura, EFFECT_2, TARGET_UNIT_CASTER);
+            OnEffectLaunch += SpellEffectFn(spell_pri_halo_effect_selector::PreventHitDefaultEffect, EFFECT_2, SPELL_EFFECT_CREATE_AREATRIGGER);
 
         if (selectedEffect != EFFECT_3)
-            OnEffectLaunch += SpellEffectFn(spell_pri_halo_effect_selector::PreventHitDefaultEffect, EFFECT_3, SPELL_EFFECT_CREATE_AREATRIGGER);
-
-        if (selectedEffect != EFFECT_4)
-            OnEffectLaunch += SpellEffectFn(spell_pri_halo_effect_selector::PreventHitDefaultEffect, EFFECT_4, SPELL_EFFECT_CREATE_AREATRIGGER);
-
-        if (selectedEffect != EFFECT_5)
-            OnObjectTargetSelect += SpellObjectTargetSelectFn(spell_pri_halo_effect_selector::PreventUnwantedAura, EFFECT_5, TARGET_UNIT_CASTER);
+            OnObjectTargetSelect += SpellObjectTargetSelectFn(spell_pri_halo_effect_selector::PreventUnwantedAura, EFFECT_3, TARGET_UNIT_CASTER);
     }
 };
 
@@ -2342,7 +2334,7 @@ class spell_pri_halo_shadow : public SpellScript
 
     void Register() override
     {
-        OnEffectHitTarget += SpellEffectFn(spell_pri_halo_shadow::HandleHitTarget, EFFECT_6, SPELL_EFFECT_ENERGIZE);
+        OnEffectHitTarget += SpellEffectFn(spell_pri_halo_shadow::HandleHitTarget, EFFECT_4, SPELL_EFFECT_ENERGIZE);
     }
 };
 
@@ -2857,7 +2849,7 @@ class spell_pri_mental_decay : public AuraScript
 
     void Register() override
     {
-        OnEffectProc += AuraEffectProcFn(spell_pri_mental_decay::HandleEffectProc, EFFECT_0, SPELL_AURA_DUMMY);
+        OnEffectProc += AuraEffectProcFn(spell_pri_mental_decay::HandleEffectProc, EFFECT_0, SPELL_AURA_ADD_PCT_MODIFIER);
     }
 };
 
@@ -2921,7 +2913,7 @@ class spell_pri_mind_devourer_buff_aura : public AuraScript
 
     void Register() override
     {
-        DoEffectCalcDamageAndHealing += AuraEffectCalcDamageFn(spell_pri_mind_devourer_buff_aura::CalculateDamage, EFFECT_1, SPELL_AURA_PERIODIC_LEECH);
+        DoEffectCalcDamageAndHealing += AuraEffectCalcDamageFn(spell_pri_mind_devourer_buff_aura::CalculateDamage, EFFECT_2, SPELL_AURA_PERIODIC_LEECH);
     }
 
 public:
@@ -3321,7 +3313,7 @@ class spell_pri_power_surge : public AuraScript
 
     void Register() override
     {
-        OnEffectProc += AuraEffectProcFn(spell_pri_power_surge::HandleProc, EFFECT_1, SPELL_AURA_DUMMY);
+        OnEffectProc += AuraEffectProcFn(spell_pri_power_surge::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
     }
 };
 
@@ -4820,34 +4812,26 @@ class spell_pri_train_of_thought : public AuraScript
         });
     }
 
-    static bool CheckEffect0(AuraScript const&, AuraEffect const* /*aurEff*/, ProcEventInfo const& eventInfo)
+    static bool CheckProc(AuraScript const&, AuraEffect const* /*aurEff*/, ProcEventInfo const& eventInfo)
     {
-        // Renew & Flash Heal
-        return eventInfo.GetSpellInfo()->IsAffected(SPELLFAMILY_PRIEST, { 0x840 });
+        SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
+        return spellInfo->IsAffected(SPELLFAMILY_PRIEST, { 0x840 }) // Renew & Flash Heal
+            || spellInfo->IsAffected(SPELLFAMILY_PRIEST, { 0x80 }); // Smite
     }
 
-    static bool CheckEffect1(AuraScript const&, AuraEffect const* /*aurEff*/, ProcEventInfo const& eventInfo)
+    void HandleProc(AuraEffect const* aurEff, ProcEventInfo const& eventInfo) const
     {
-        // Smite
-        return eventInfo.GetSpellInfo()->IsAffected(SPELLFAMILY_PRIEST, { 0x80 });
-    }
-
-    void ReducePowerWordShieldCooldown(AuraEffect const* aurEff, ProcEventInfo const& /*eventInfo*/) const
-    {
-        GetTarget()->GetSpellHistory()->ModifyCooldown(SPELL_PRIEST_POWER_WORD_SHIELD, Milliseconds(aurEff->GetAmountAsInt()));
-    }
-
-    void ReducePenanceCooldown(AuraEffect const* aurEff, ProcEventInfo const& /*eventInfo*/) const
-    {
-        GetTarget()->GetSpellHistory()->ModifyCooldown(SPELL_PRIEST_PENANCE, Milliseconds(aurEff->GetAmountAsInt()));
+        SpellInfo const* spellInfo = eventInfo.GetSpellInfo();
+        if (spellInfo->IsAffected(SPELLFAMILY_PRIEST, { 0x840 }))
+            GetTarget()->GetSpellHistory()->ModifyCooldown(SPELL_PRIEST_POWER_WORD_SHIELD, Milliseconds(aurEff->GetAmountAsInt()));
+        else if (spellInfo->IsAffected(SPELLFAMILY_PRIEST, { 0x80 }))
+            GetTarget()->GetSpellHistory()->ModifyCooldown(SPELL_PRIEST_PENANCE, Milliseconds(aurEff->GetAmountAsInt()));
     }
 
     void Register() override
     {
-        DoCheckEffectProc += AuraCheckEffectProcFn(spell_pri_train_of_thought::CheckEffect0, EFFECT_0, SPELL_AURA_DUMMY);
-        OnEffectProc += AuraEffectProcFn(spell_pri_train_of_thought::ReducePowerWordShieldCooldown, EFFECT_0, SPELL_AURA_DUMMY);
-        DoCheckEffectProc += AuraCheckEffectProcFn(spell_pri_train_of_thought::CheckEffect1, EFFECT_1, SPELL_AURA_DUMMY);
-        OnEffectProc += AuraEffectProcFn(spell_pri_train_of_thought::ReducePenanceCooldown, EFFECT_1, SPELL_AURA_DUMMY);
+        DoCheckEffectProc += AuraCheckEffectProcFn(spell_pri_train_of_thought::CheckProc, EFFECT_0, SPELL_AURA_ADD_FLAT_MODIFIER);
+        OnEffectProc += AuraEffectProcFn(spell_pri_train_of_thought::HandleProc, EFFECT_0, SPELL_AURA_ADD_FLAT_MODIFIER);
     }
 };
 
@@ -5203,7 +5187,7 @@ class spell_pri_vampiric_embrace : public AuraScript
     void Register() override
     {
         DoCheckProc += AuraCheckProcFn(spell_pri_vampiric_embrace::CheckProc);
-        OnEffectProc += AuraEffectProcFn(spell_pri_vampiric_embrace::HandleEffectProc, EFFECT_0, SPELL_AURA_DUMMY);
+        OnEffectProc += AuraEffectProcFn(spell_pri_vampiric_embrace::HandleEffectProc, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
     }
 };
 
@@ -5217,7 +5201,7 @@ class spell_pri_vampiric_embrace_target : public SpellScript
 
     void Register() override
     {
-        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_pri_vampiric_embrace_target::FilterTargets, EFFECT_0, TARGET_UNIT_CASTER_AREA_PARTY);
+        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_pri_vampiric_embrace_target::FilterTargets, EFFECT_0, TARGET_UNIT_CASTER_AREA_RAID);
     }
 };
 
