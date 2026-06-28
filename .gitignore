@@ -36,3 +36,5 @@ cmake-build-*/*
 
 # Local playtest scratch, sniff dumps, and server logs — not product artifacts.
 /temp/
+# Local packet captures at repo root (prefer temp/ for sniff work)
+/*.pkt
