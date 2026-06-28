@@ -9,6 +9,10 @@ for fork steering; retail-parity work usually lives in `src/server/scripts/` and
 
 Full reference standards: [`docs/midnight-assessment/reference-trees-and-standards.md`](../docs/midnight-assessment/reference-trees-and-standards.md)
 
+**Platform note:** The git path is lowercase **`modules/`** (matches CMake
+`add_subdirectory(modules)` and AzerothCore convention). Previously tracked as
+`Modules/` on Windows-only case-insensitive checkouts; renamed for Linux parity.
+
 ## Layout
 
 A directory under `modules/` is a module only when it has a `src/` subfolder:
@@ -20,7 +24,7 @@ modules/
       Script/
         example_loader.cpp    # void Addmod_exampleScripts()
     conf/
-      example.conf.dist
+      mod-example.conf.dist
 ```
 
 CMake `string(MAKE_C_IDENTIFIER)` maps directory names to loader symbols:
@@ -45,11 +49,12 @@ CMake `string(MAKE_C_IDENTIFIER)` maps directory names to loader symbols:
 
 ## Runtime config
 
-Module configs copy to flat `modules/` beside `worldserver.exe`, **keeping `.dist`**:
+Module configs copy to flat `modules/` beside `worldserver.exe`, **keeping `.dist`**.
+Config basename must match the module directory name (e.g. `mod-playerbots.conf.dist`):
 
 ```text
-modules/mod-playerbots/conf/playerbots.conf.dist
-  → bin/RelWithDebInfo/modules/playerbots.conf.dist
+modules/mod-playerbots/conf/mod-playerbots.conf.dist
+  → bin/RelWithDebInfo/modules/mod-playerbots.conf.dist
 ```
 
 `worldserver` loads `modules/` separately from `worldserver.conf.d`:
@@ -60,7 +65,7 @@ modules/mod-playerbots/conf/playerbots.conf.dist
 ## Playerbots (Gate 1 complete)
 
 The compile-only stub lives at `modules/mod-playerbots/` (loader, `.playerbots status`,
-`playerbots.conf.dist`). Opt-in via `-DMODULES=static -DMODULE_MOD_PLAYERBOTS=static`;
+`mod-playerbots.conf.dist`). Opt-in via `-DMODULES=static -DMODULE_MOD_PLAYERBOTS=static`;
 default `MODULES=none` leaves it under **disabled**, not linked.
 
 Gate result: [`docs/midnight-assessment/playerbots-gate-01-compile-result.md`](../docs/midnight-assessment/playerbots-gate-01-compile-result.md).

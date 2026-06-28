@@ -15,8 +15,8 @@ Default path (`MODULES=none`) does not link this module.
 
 ## Runtime config
 
-- Shipped default: `bin/RelWithDebInfo/modules/playerbots.conf.dist`
-- User override: `bin/RelWithDebInfo/modules/playerbots.conf`
+- Shipped default: `bin/RelWithDebInfo/modules/mod-playerbots.conf.dist`
+- User override: `bin/RelWithDebInfo/modules/mod-playerbots.conf`
 
 Loaded via `ConfigMgr::LoadModuleConfigDir("modules")` — separate from `worldserver.conf.d`.
 

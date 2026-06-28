@@ -1,8 +1,8 @@
 ###############################################################################
 # Playerbots module (Gate 1 compile-only stub)
 #
-# Copied to bin/.../modules/playerbots.conf.dist at build time.
-# Override with modules/playerbots.conf beside worldserver.exe (not overwritten).
+# Copied to bin/.../modules/mod-playerbots.conf.dist at build time.
+# Override with modules/mod-playerbots.conf beside worldserver.exe (not overwritten).
 #
 # See modules/mod-playerbots/README.md and modules/README.md
 ###############################################################################
