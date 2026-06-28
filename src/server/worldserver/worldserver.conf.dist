@@ -1456,6 +1456,14 @@ FeatureSystem.CharacterUndelete.Enabled = 0
 FeatureSystem.CharacterUndelete.Cooldown = 2592000
 
 #
+#   FeatureSystem.AccountCurrencyTransfer.Enabled
+#        Description: Enables warband currency transfer UI, handlers, and transfer log (Phases 1 + 1.5).
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+
+FeatureSystem.AccountCurrencyTransfer.Enabled = 1
+
+#
 #    AllowLoggingIPAddressesInDatabase
 #        Description: Specifies if IP addresses can be logged to the database
 #        Default:     1 - (Enabled)
