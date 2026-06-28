@@ -56,7 +56,7 @@ enum WarlockSpells
     SPELL_WARLOCK_CORRUPTION_DAMAGE                 = 146739,
     SPELL_WARLOCK_CREATE_HEALTHSTONE                = 23517,
     SPELL_WARLOCK_CURSE_OF_EXHAUSTION               = 334275,
-    SPELL_WARLOCK_DEATHS_EMBRACE                    = 453189,
+    SPELL_WARLOCK_DEATHS_EMBRACE                    = 234876,
     SPELL_WARLOCK_DEMONBOLT_ENERGIZE                = 280127,
     SPELL_WARLOCK_DEMONIC_CIRCLE_ALLOW_CAST         = 62388,
     SPELL_WARLOCK_DEMONIC_CIRCLE_SUMMON             = 48018,
@@ -65,7 +65,6 @@ enum WarlockSpells
     SPELL_WARLOCK_DOOM_ENERGIZE                     = 193318,
     SPELL_WARLOCK_DRAIN_SOUL_ENERGIZE               = 205292,
     SPELL_WARLOCK_FLAMESHADOW                       = 37379,
-    SPELL_WARLOCK_GLYPH_OF_DEMON_TRAINING           = 56249,
     SPELL_WARLOCK_GLYPH_OF_SOUL_SWAP                = 56226,
     SPELL_WARLOCK_GLYPH_OF_SUCCUBUS                 = 56250,
     SPELL_WARLOCK_IMMOLATE_PERIODIC                 = 157736,
@@ -554,16 +553,25 @@ class spell_warl_dark_pact : public AuraScript
 
 struct spell_warl_deaths_embrace_impl
 {
-    static void HandleDamageOrHealingCalculation(Unit const* caster, Unit const* target, float& pctMod, SpellEffIndex inreaseEffect, SpellEffIndex healthLimitEffect)
+    static int32 GetEffectAmount(Aura const* deathsEmbrace, Unit const* caster, SpellEffIndex effectIndex)
     {
-        Aura const* deathsEmbrace = caster->GetAura(SPELL_WARLOCK_DEATHS_EMBRACE, ObjectGuid::Empty, ObjectGuid::Empty, 1 << inreaseEffect | 1 << healthLimitEffect);
+        if (AuraEffect const* auraEffect = deathsEmbrace->GetEffect(effectIndex))
+            return auraEffect->GetAmount();
+
+        return deathsEmbrace->GetSpellInfo()->GetEffect(effectIndex).CalcValue(caster);
+    }
+
+    static void HandleDamageOrHealingCalculation(Unit const* caster, Unit const* target, float& pctMod, SpellEffIndex increaseEffect, SpellEffIndex healthLimitEffect)
+    {
+        // 234876 only applies EFFECT_0 as a unit aura; EFFECT_1 (35% threshold) is spell data only.
+        Aura const* deathsEmbrace = caster->GetAura(SPELL_WARLOCK_DEATHS_EMBRACE);
         if (!deathsEmbrace)
             return;
 
-        if (!target->HealthBelowPct(deathsEmbrace->GetEffect(healthLimitEffect)->GetAmount()))
+        if (!target->HealthBelowPct(GetEffectAmount(deathsEmbrace, caster, healthLimitEffect)))
             return;
 
-        AddPct(pctMod, deathsEmbrace->GetEffect(inreaseEffect)->GetAmount());
+        AddPct(pctMod, GetEffectAmount(deathsEmbrace, caster, increaseEffect));
     }
 };
 
@@ -572,12 +580,12 @@ class spell_warl_deaths_embrace : public SpellScript
 {
     bool Validate(SpellInfo const* /*spellInfo*/) override
     {
-        return ValidateSpellEffect({ { SPELL_WARLOCK_DEATHS_EMBRACE, EFFECT_3 } });
+        return ValidateSpellEffect({ { SPELL_WARLOCK_DEATHS_EMBRACE, EFFECT_1 } });
     }
 
     void HandleDamageCalculation(SpellEffectInfo const& /*spellEffectInfo*/, Unit const* victim, int32 const& /*damage*/, int32 const& /*flatMod*/, float& pctMod) const
     {
-        spell_warl_deaths_embrace_impl::HandleDamageOrHealingCalculation(GetCaster(), victim, pctMod, EFFECT_2, EFFECT_3);
+        spell_warl_deaths_embrace_impl::HandleDamageOrHealingCalculation(GetCaster(), victim, pctMod, EFFECT_0, EFFECT_1);
     }
 
     void Register() override
@@ -591,13 +599,13 @@ class spell_warl_deaths_embrace_dots : public AuraScript
 {
     bool Validate(SpellInfo const* /*spellInfo*/) override
     {
-        return ValidateSpellEffect({ { SPELL_WARLOCK_DEATHS_EMBRACE, EFFECT_3 } });
+        return ValidateSpellEffect({ { SPELL_WARLOCK_DEATHS_EMBRACE, EFFECT_1 } });
     }
 
     void CalculateDamage(AuraEffect const* /*aurEff*/, Unit const* victim, int32& /*damage*/, int32& /*flatMod*/, float& pctMod) const
     {
         if (Unit const* caster = GetCaster())
-            spell_warl_deaths_embrace_impl::HandleDamageOrHealingCalculation(caster, victim, pctMod, EFFECT_2, EFFECT_3);
+            spell_warl_deaths_embrace_impl::HandleDamageOrHealingCalculation(caster, victim, pctMod, EFFECT_0, EFFECT_1);
     }
 
     void Register() override
@@ -719,7 +727,7 @@ class spell_warl_devour_magic : public SpellScript
 {
     bool Validate(SpellInfo const* spellInfo) override
     {
-        return ValidateSpellInfo({ SPELL_WARLOCK_GLYPH_OF_DEMON_TRAINING, SPELL_WARLOCK_DEVOUR_MAGIC_HEAL })
+        return ValidateSpellInfo({ SPELL_WARLOCK_DEVOUR_MAGIC_HEAL })
             && ValidateSpellEffect({ { spellInfo->Id, EFFECT_1 } });
     }
 
@@ -731,11 +739,6 @@ class spell_warl_devour_magic : public SpellScript
         args.AddSpellBP0(GetEffectInfo(EFFECT_1).CalcValue(caster));
 
         caster->CastSpell(caster, SPELL_WARLOCK_DEVOUR_MAGIC_HEAL, args);
-
-        // Glyph of Felhunter
-        if (Unit* owner = caster->GetOwner())
-            if (owner->GetAura(SPELL_WARLOCK_GLYPH_OF_DEMON_TRAINING))
-                owner->CastSpell(owner, SPELL_WARLOCK_DEVOUR_MAGIC_HEAL, args);
     }
 
     void Register() override
