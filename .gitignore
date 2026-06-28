@@ -34,6 +34,9 @@ cmake-build-*/*
 /mod-playerbots/
 /azerothcore-playerbots/
 
+# Fork-local PowerShell/Python helpers — local only; do not commit.
+/scripts/
+
 # Local playtest scratch, sniff dumps, and server logs — not product artifacts.
 /temp/
 # Local packet captures at repo root (prefer temp/ for sniff work)
