@@ -423,6 +423,7 @@ namespace WorldPackets
     namespace Housing
     {
         class DeclineNeighborhoodInvites;
+        class GetPlayerHousesInfo;
     }
 
     namespace Inspect
@@ -820,6 +821,27 @@ namespace WorldPackets
         class ClassTalentsDeleteConfig;
         class ClassTalentsSetStarterBuildActive;
         class ClassTalentsSetUsesSharedActionBars;
+    }
+
+    namespace UpstreamStub
+    {
+        class GetLastCatalogFetch;
+        class RequestStoreFrontInfoUpdate;
+        class GetLandingPageShipments;
+        class GetRemainingGameTime;
+        class GetRafAccountInfo;
+        class QuickJoinAutoAcceptRequests;
+        class RequestScheduledPvpInfo;
+        class RequestWeeklyRewards;
+        class RequestMythicPlusSeasonData;
+        class LfgListGetStatus;
+        class RequestLfgListBlacklist;
+        class RequestInstanceEncounterEventSync;
+        class OpenTradeskillNpc;
+        class PerksProgramStatusRequest;
+        class GetAccountCharacterList;
+        class OverrideScreenFlash;
+        class SetExcludedChatCensorSources;
     }
 
     namespace Transmogrification
@@ -1471,6 +1493,7 @@ class TC_GAME_API WorldSession
         void HandleDeclineGuildInvites(WorldPackets::Guild::DeclineGuildInvites& packet);
 
         void HandleDeclineNeighborhoodInvites(WorldPackets::Housing::DeclineNeighborhoodInvites const& declineNeighborhoodInvites);
+        void HandleGetPlayerHousesInfo(WorldPackets::Housing::GetPlayerHousesInfo& packet);
 
         void HandleEnableTaxiNodeOpcode(WorldPackets::Taxi::EnableTaxiNode& enableTaxiNode);
         void HandleTaxiNodeStatusQueryOpcode(WorldPackets::Taxi::TaxiNodeStatusQuery& taxiNodeStatusQuery);
@@ -1916,6 +1939,25 @@ class TC_GAME_API WorldSession
         void SendAzeriteRespecNPC(ObjectGuid npc);
 
         void HandleRequestLatestSplashScreen(WorldPackets::Misc::RequestLatestSplashScreen& requestLatestSplashScreen);
+
+        // Upstream rank 8 — unhandled opcode stubs (login log hygiene)
+        void HandleGetLastCatalogFetch(WorldPackets::UpstreamStub::GetLastCatalogFetch& packet);
+        void HandleRequestStoreFrontInfoUpdate(WorldPackets::UpstreamStub::RequestStoreFrontInfoUpdate& packet);
+        void HandleGetLandingPageShipments(WorldPackets::UpstreamStub::GetLandingPageShipments& packet);
+        void HandleGetRemainingGameTime(WorldPackets::UpstreamStub::GetRemainingGameTime& packet);
+        void HandleGetRafAccountInfo(WorldPackets::UpstreamStub::GetRafAccountInfo& packet);
+        void HandleQuickJoinAutoAcceptRequests(WorldPackets::UpstreamStub::QuickJoinAutoAcceptRequests& packet);
+        void HandleRequestScheduledPvpInfo(WorldPackets::UpstreamStub::RequestScheduledPvpInfo& packet);
+        void HandleRequestWeeklyRewards(WorldPackets::UpstreamStub::RequestWeeklyRewards& packet);
+        void HandleRequestMythicPlusSeasonData(WorldPackets::UpstreamStub::RequestMythicPlusSeasonData& packet);
+        void HandleLfgListGetStatus(WorldPackets::UpstreamStub::LfgListGetStatus& packet);
+        void HandleRequestLfgListBlacklist(WorldPackets::UpstreamStub::RequestLfgListBlacklist& packet);
+        void HandleRequestInstanceEncounterEventSync(WorldPackets::UpstreamStub::RequestInstanceEncounterEventSync& packet);
+        void HandleOpenTradeskillNpc(WorldPackets::UpstreamStub::OpenTradeskillNpc& packet);
+        void HandlePerksProgramStatusRequest(WorldPackets::UpstreamStub::PerksProgramStatusRequest& packet);
+        void HandleGetAccountCharacterList(WorldPackets::UpstreamStub::GetAccountCharacterList& packet);
+        void HandleOverrideScreenFlash(WorldPackets::UpstreamStub::OverrideScreenFlash& packet);
+        void HandleSetExcludedChatCensorSources(WorldPackets::UpstreamStub::SetExcludedChatCensorSources& packet);
 
         void HandleSocialContractRequest(WorldPackets::Social::SocialContractRequest& socialContractRequest);
 

@@ -78,6 +78,7 @@
 #include "TradePackets.h"
 #include "TraitPackets.h"
 #include "TransmogrificationPackets.h"
+#include "UpstreamOpcodeStubPackets.h"
 #include "VehiclePackets.h"
 #include "VignettePackets.h"
 #include "WhoPackets.h"

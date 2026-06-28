@@ -26,3 +26,10 @@ void WorldSession::HandleDeclineNeighborhoodInvites(WorldPackets::Housing::Decli
     else
         GetPlayer()->RemovePlayerFlagEx(PLAYER_FLAGS_EX_AUTO_DECLINE_NEIGHBORHOOD);
 }
+
+void WorldSession::HandleGetPlayerHousesInfo(WorldPackets::Housing::GetPlayerHousesInfo& /*packet*/)
+{
+    WorldPackets::Housing::GetPlayerHousesInfoResponse response;
+    /// @todo: player house summary from PlayerHouseInfoComponentData / persistence
+    SendPacket(response.Write());
+}

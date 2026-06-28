@@ -31,6 +31,25 @@ namespace WorldPackets::Housing
 
         bool Allow = false;
     };
+
+    class GetPlayerHousesInfo final : public ClientPacket
+    {
+    public:
+        explicit GetPlayerHousesInfo(WorldPacket&& packet) : ClientPacket(CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO, std::move(packet)) { }
+
+        void Read() override { }
+    };
+
+    class GetPlayerHousesInfoResponse final : public ServerPacket
+    {
+    public:
+        GetPlayerHousesInfoResponse() : ServerPacket(SMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO_RESPONSE, 5) { }
+
+        WorldPacket const* Write() override;
+
+        uint32 PlayerHousesCount = 0;
+        uint8 Result = 0;
+    };
 }
 
 #endif // TRINITYCORE_HOUSING_PACKETS_H

@@ -24,4 +24,11 @@ void DeclineNeighborhoodInvites::Read()
 {
     _worldPacket >> Bits<1>(Allow);
 }
+
+WorldPacket const* GetPlayerHousesInfoResponse::Write()
+{
+    _worldPacket << uint32(PlayerHousesCount);
+    _worldPacket << uint8(Result);
+    return &_worldPacket;
+}
 }
