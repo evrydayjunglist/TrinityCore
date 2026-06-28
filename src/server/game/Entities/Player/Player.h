@@ -1607,6 +1607,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void SetCurrencyFlagsFromClient(uint32 id, CurrencyDbFlags flags);
 
         static bool IsCurrencyAccountTransferable(CurrencyTypesEntry const* currency);
+        static bool IsCurrencyAccountWide(CurrencyTypesEntry const* currency);
         static uint32 GetCurrencyTransferTotalCost(CurrencyTypesEntry const* currency, uint32 quantityToReceive);
         /// @return 0 on success, otherwise ERR_CURRENCY_TRANSFER_* from SharedDefines.h
         uint32 ValidateCurrencyTransferReceive(CurrencyTypesEntry const* currency, uint32 quantity) const;
@@ -3161,6 +3162,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void _LoadTraits(PreparedQueryResult configsResult, PreparedQueryResult entriesResult);
         void _LoadPetStable(uint32 summonedPetNumber, PreparedQueryResult result);
         void _LoadCurrency(PreparedQueryResult result);
+        void ConsolidateLegacyAccountWideCurrency();
+        void OverlayAccountWideCurrencies();
         void _LoadCUFProfiles(PreparedQueryResult result);
         void _LoadPlayerData(PreparedQueryResult elementsResult, PreparedQueryResult flagsResult);
         void _LoadCharacterBankTabSettings(PreparedQueryResult result);

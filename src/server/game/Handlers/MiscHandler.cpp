@@ -1438,7 +1438,7 @@ void WorldSession::HandleRequestCurrencyDataForAccountCharacters(WorldPackets::M
 
             uint32 const currencyId = fields[1].GetUInt16();
             CurrencyTypesEntry const* currency = sCurrencyTypesStore.LookupEntry(currencyId);
-            if (!Player::IsCurrencyAccountTransferable(currency))
+            if (!Player::IsCurrencyAccountTransferable(currency) || Player::IsCurrencyAccountWide(currency))
                 continue;
 
             WorldPackets::Misc::AccountCharacterCurrencyListCharacter* character = nullptr;

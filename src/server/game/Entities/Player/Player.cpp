@@ -19,6 +19,7 @@
 #include "AreaTrigger.h"
 #include "Account.h"
 #include "AccountMgr.h"
+#include "AccountCurrencyMgr.h"
 #include "AchievementMgr.h"
 #include "ArenaTeam.h"
 #include "ArenaTeamMgr.h"
@@ -6932,6 +6933,82 @@ void Player::_LoadCurrency(PreparedQueryResult result)
     } while (result->NextRow());
 }
 
+void Player::ConsolidateLegacyAccountWideCurrency()
+{
+    if (!GetSession())
+        return;
+
+    AccountCurrencyMgr* accountCurrencyMgr = GetSession()->GetAccountCurrencyMgr();
+
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_ACCOUNT_CHARACTER_CURRENCY_BY_ACCOUNT);
+    stmt->setUInt32(0, GetSession()->GetAccountId());
+
+    PreparedQueryResult result = CharacterDatabase.Query(stmt);
+    if (!result)
+        return;
+
+    std::unordered_map<uint32, PlayerCurrency> aggregated;
+    std::vector<std::pair<ObjectGuid, uint16>> rowsToDelete;
+
+    do
+    {
+        Field* fields = result->Fetch();
+
+        ObjectGuid characterGuid = ObjectGuid::Create<HighGuid::Player>(fields[0].GetUInt64());
+        uint16 currencyId = fields[1].GetUInt16();
+
+        CurrencyTypesEntry const* currency = sCurrencyTypesStore.LookupEntry(currencyId);
+        if (!IsCurrencyAccountWide(currency))
+            continue;
+
+        PlayerCurrency& aggregate = aggregated[currencyId];
+        aggregate.Quantity += fields[2].GetUInt32();
+        aggregate.WeeklyQuantity = std::max(aggregate.WeeklyQuantity, fields[3].GetUInt32());
+        aggregate.TrackedQuantity = std::max(aggregate.TrackedQuantity, fields[4].GetUInt32());
+        aggregate.IncreasedCapQuantity = std::max(aggregate.IncreasedCapQuantity, fields[5].GetUInt32());
+        aggregate.EarnedQuantity = std::max(aggregate.EarnedQuantity, fields[6].GetUInt32());
+        aggregate.Flags = CurrencyDbFlags(std::max(AsUnderlyingType(aggregate.Flags), fields[7].GetUInt8()));
+
+        rowsToDelete.emplace_back(characterGuid, currencyId);
+    } while (result->NextRow());
+
+    if (aggregated.empty())
+        return;
+
+    for (auto const& aggregatePair : aggregated)
+    {
+        CurrencyTypesEntry const* currency = sCurrencyTypesStore.LookupEntry(aggregatePair.first);
+        accountCurrencyMgr->MergeMigrationCurrency(currency, aggregatePair.second, this);
+        _currencyStorage.erase(aggregatePair.first);
+    }
+
+    for (auto const& row : rowsToDelete)
+    {
+        CharacterDatabasePreparedStatement* delStmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_CURRENCY_BY_GUID);
+        delStmt->setUInt64(0, row.first.GetCounter());
+        delStmt->setUInt16(1, row.second);
+        CharacterDatabase.Execute(delStmt);
+    }
+}
+
+void Player::OverlayAccountWideCurrencies()
+{
+    if (!GetSession())
+        return;
+
+    AccountCurrencyMgr const* accountCurrencyMgr = GetSession()->GetAccountCurrencyMgr();
+    for (auto const& currencyPair : accountCurrencyMgr->GetCurrencies())
+    {
+        CurrencyTypesEntry const* currency = sCurrencyTypesStore.LookupEntry(currencyPair.first);
+        if (!IsCurrencyAccountWide(currency))
+            continue;
+
+        PlayerCurrency overlay = currencyPair.second;
+        overlay.state = PLAYERCURRENCY_UNCHANGED;
+        _currencyStorage[currencyPair.first] = overlay;
+    }
+}
+
 void Player::_SaveCurrency(CharacterDatabaseTransaction trans)
 {
     CharacterDatabasePreparedStatement* stmt;
@@ -6939,6 +7016,9 @@ void Player::_SaveCurrency(CharacterDatabaseTransaction trans)
     {
         CurrencyTypesEntry const* entry = sCurrencyTypesStore.LookupEntry(itr->first);
         if (!entry) // should never happen
+            continue;
+
+        if (IsCurrencyAccountWide(entry))
             continue;
 
         switch (itr->second.state)
@@ -7032,6 +7112,19 @@ void Player::SendPvpRewards() const
 
 void Player::SetCreateCurrency(uint32 id, uint32 amount)
 {
+    CurrencyTypesEntry const* currency = sCurrencyTypesStore.LookupEntry(id);
+    if (currency && IsCurrencyAccountWide(currency))
+    {
+        AccountCurrencyMgr* accountCurrencyMgr = GetSession()->GetAccountCurrencyMgr();
+        PlayerCurrency* accountCurrency = accountCurrencyMgr->GetOrCreateCurrency(id);
+        accountCurrency->Quantity = amount;
+        if (accountCurrency->state != PLAYERCURRENCY_NEW)
+            accountCurrency->state = PLAYERCURRENCY_CHANGED;
+
+        OverlayAccountWideCurrencies();
+        return;
+    }
+
     PlayerCurrenciesMap::iterator itr = _currencyStorage.find(id);
     if (itr == _currencyStorage.end())
     {
@@ -7097,6 +7190,55 @@ void Player::ModifyCurrency(uint32 id, int32 amount, CurrencyGainSource gainSour
         if (amount > 0)
             if (Item* heartOfAzeroth = GetItemByEntry(ITEM_ID_HEART_OF_AZEROTH, ItemSearchLocation::Everywhere))
                 heartOfAzeroth->ToAzeriteItem()->GiveXP(uint64(amount));
+        return;
+    }
+
+    if (IsCurrencyAccountWide(currency))
+    {
+        AccountCurrencyMgr* accountCurrencyMgr = GetSession()->GetAccountCurrencyMgr();
+        if (!accountCurrencyMgr->ModifyCurrency(this, currency, amount, ignoreCaps, isGainOnRefund, gainSource == CurrencyGainSource::UpdatingVersion))
+            return;
+
+        PlayerCurrency const* accountCurrency = accountCurrencyMgr->GetCurrency(id);
+        if (!accountCurrency)
+            return;
+
+        PlayerCurrency& viewCurrency = _currencyStorage[id];
+        viewCurrency = *accountCurrency;
+        viewCurrency.state = PLAYERCURRENCY_UNCHANGED;
+
+        if (amount > 0 && !ignoreCaps && !isGainOnRefund)
+        {
+            UpdateCriteria(CriteriaType::CurrencyGained, id, amount);
+            if (gainSource == CurrencyGainSource::RenownRepGain)
+                UpdateCriteria(CriteriaType::ReachRenownLevel, id, viewCurrency.Quantity);
+        }
+
+        CurrencyChanged(id, amount);
+
+        WorldPackets::Misc::SetCurrency packet;
+        packet.Type = currency->ID;
+        packet.Quantity = viewCurrency.Quantity;
+        packet.Flags = CurrencyGainFlags::None;
+
+        if ((viewCurrency.WeeklyQuantity / currency->GetScaler()) > 0)
+            packet.WeeklyQuantity = viewCurrency.WeeklyQuantity;
+
+        if (currency->HasMaxQuantity(false, gainSource == CurrencyGainSource::UpdatingVersion))
+            packet.MaxQuantity = GetCurrencyMaxQuantity(currency);
+
+        if (currency->HasTotalEarned())
+            packet.TotalEarned = viewCurrency.EarnedQuantity;
+
+        packet.SuppressChatLog = currency->IsSuppressingChatLog(gainSource == CurrencyGainSource::UpdatingVersion);
+        packet.QuantityChange = amount;
+
+        if (amount > 0)
+            packet.QuantityGainSource = gainSource;
+        else
+            packet.QuantityLostSource = destroyReason;
+
+        SendDirectMessage(packet.Write());
         return;
     }
 
@@ -7222,6 +7364,37 @@ void Player::IncreaseCurrencyCap(uint32 id, uint32 amount)
             amount = CURRENCY_MAX_CAP_ANCIENT_MANA - maxQuantity;
     }
 
+    if (IsCurrencyAccountWide(currency))
+    {
+        AccountCurrencyMgr* accountCurrencyMgr = GetSession()->GetAccountCurrencyMgr();
+        PlayerCurrency* accountCurrency = accountCurrencyMgr->GetOrCreateCurrency(id);
+        accountCurrency->IncreasedCapQuantity += amount;
+
+        if (accountCurrency->state != PLAYERCURRENCY_NEW)
+            accountCurrency->state = PLAYERCURRENCY_CHANGED;
+
+        PlayerCurrency& viewCurrency = _currencyStorage[id];
+        viewCurrency = *accountCurrency;
+        viewCurrency.state = PLAYERCURRENCY_UNCHANGED;
+
+        WorldPackets::Misc::SetCurrency packet;
+        packet.Type = currency->ID;
+        packet.Quantity = viewCurrency.Quantity;
+        packet.Flags = CurrencyGainFlags::None;
+
+        if ((viewCurrency.WeeklyQuantity / currency->GetScaler()) > 0)
+            packet.WeeklyQuantity = viewCurrency.WeeklyQuantity;
+
+        if (currency->IsTrackingQuantity())
+            packet.TrackedQuantity = viewCurrency.TrackedQuantity;
+
+        packet.MaxQuantity = GetCurrencyMaxQuantity(currency);
+        packet.SuppressChatLog = currency->IsSuppressingChatLog();
+
+        SendDirectMessage(packet.Write());
+        return;
+    }
+
     PlayerCurrenciesMap::iterator itr = _currencyStorage.find(id);
     if (itr == _currencyStorage.end())
     {
@@ -7277,6 +7450,24 @@ void Player::ResetCurrencyWeekCap()
 
     for (PlayerCurrenciesMap::iterator itr = _currencyStorage.begin(); itr != _currencyStorage.end(); ++itr)
     {
+        CurrencyTypesEntry const* currency = sCurrencyTypesStore.LookupEntry(itr->first);
+        if (currency && IsCurrencyAccountWide(currency))
+        {
+            if (AccountCurrencyMgr* accountCurrencyMgr = GetSession()->GetAccountCurrencyMgr())
+            {
+                if (PlayerCurrency* accountCurrency = accountCurrencyMgr->GetOrCreateCurrency(itr->first))
+                {
+                    accountCurrency->WeeklyQuantity = 0;
+                    if (accountCurrency->state != PLAYERCURRENCY_NEW)
+                        accountCurrency->state = PLAYERCURRENCY_CHANGED;
+                }
+            }
+
+            itr->second.WeeklyQuantity = 0;
+            itr->second.state = PLAYERCURRENCY_UNCHANGED;
+            continue;
+        }
+
         itr->second.WeeklyQuantity = 0;
         itr->second.state = PLAYERCURRENCY_CHANGED;
     }
@@ -7370,6 +7561,14 @@ void Player::SetCurrencyFlagsFromClient(uint32 id, CurrencyDbFlags flags)
     itr->second.Flags = newValue;
     if (itr->second.state != PLAYERCURRENCY_NEW)
         itr->second.state = PLAYERCURRENCY_CHANGED;
+}
+
+bool Player::IsCurrencyAccountWide(CurrencyTypesEntry const* currency)
+{
+    if (!currency)
+        return false;
+
+    return currency->GetFlags().HasFlag(CurrencyTypesFlags::AccountWide);
 }
 
 bool Player::IsCurrencyAccountTransferable(CurrencyTypesEntry const* currency)
@@ -18330,6 +18529,8 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     _LoadGroup(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GROUP));
 
     _LoadCurrency(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_CURRENCY));
+    ConsolidateLegacyAccountWideCurrency();
+    OverlayAccountWideCurrencies();
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::LifetimeHonorableKills), fields.totalKills);
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::TodayHonorableKills), fields.totalKills);
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::YesterdayHonorableKills), fields.yesterdayKills);
@@ -20837,6 +21038,7 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
 
     // TODO: Move this out
     GetSession()->GetCollectionMgr()->SaveToDB(loginTransaction);
+    GetSession()->GetAccountCurrencyMgr()->SaveToDB(loginTransaction);
     GetSession()->GetBattlePetMgr()->SaveToDB(loginTransaction);
     GetSession()->SavePlayerDataAccount(loginTransaction);
 
