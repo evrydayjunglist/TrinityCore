@@ -17,6 +17,7 @@
 
 #include "Battleground.h"
 #include "BattlegroundScript.h"
+#include "DB2Stores.h"
 #include "GameObject.h"
 #include "Map.h"
 #include "ObjectAccessor.h"
@@ -298,5 +299,6 @@ private:
 
 void AddSC_arena_ring_of_valor()
 {
-    RegisterBattlegroundMapScript(arena_ring_of_valor, 618);
+    if (sMapStore.HasRecord(618))
+        RegisterBattlegroundMapScript(arena_ring_of_valor, 618);
 }
