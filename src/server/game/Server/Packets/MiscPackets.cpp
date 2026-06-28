@@ -122,6 +122,88 @@ void SetCurrencyFlags::Read()
     _worldPacket >> As<uint8>(Flags);
 }
 
+void TransferCurrencyFromAccountCharacter::Read()
+{
+    _worldPacket >> SourceCharacterGuid;
+    _worldPacket >> CurrencyID;
+    _worldPacket >> Quantity;
+}
+
+namespace
+{
+#if defined(_MSC_VER)
+#pragma optimize("g", off)
+__declspec(noinline)
+#endif
+void WriteAccountCharacterCurrencyListMiddleIndex(ByteBuffer& buffer, uint32 middleIndex)
+{
+    buffer.append<uint32>(middleIndex);
+}
+#if defined(_MSC_VER)
+#pragma optimize("g", on)
+#endif
+}
+
+WorldPacket const* AccountCharacterCurrencyLists::Write()
+{
+    _worldPacket << uint32(Characters.size());
+
+    for (AccountCharacterCurrencyListCharacter const& character : Characters)
+    {
+        _worldPacket << character.CharacterGuid;
+        WriteAccountCharacterCurrencyListMiddleIndex(_worldPacket, character.MiddleIndex);
+
+        for (AccountCharacterCurrencyListCurrency const& currency : character.Currencies)
+        {
+            _worldPacket << uint32(currency.CurrencyID);
+            _worldPacket << uint32(currency.Quantity);
+        }
+    }
+
+    return &_worldPacket;
+}
+
+WorldPacket const* CurrencyTransferResult::Write()
+{
+    _worldPacket << uint32(Result);
+    _worldPacket << SourceCharacterGuid;
+    _worldPacket << uint32(CurrencyID);
+    _worldPacket << uint32(Quantity);
+    _worldPacket << uint32(TotalQuantityConsumed);
+    _worldPacket << uint32(SourceRemainingQuantity);
+    _worldPacket << uint64(Timestamp);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* CurrencyTransferLog::Write()
+{
+    _worldPacket << uint32(Entries.size());
+
+    for (CurrencyTransferLogEntry const& entry : Entries)
+    {
+        _worldPacket << entry.SourceCharacterGuid;
+        _worldPacket << SizedString::BitsSize<7>(entry.SourceCharacterName);
+        _worldPacket << SizedString::BitsSize<9>(entry.FullSourceCharacterName);
+        _worldPacket << entry.DestinationCharacterGuid;
+        _worldPacket << SizedString::BitsSize<7>(entry.DestinationCharacterName);
+        _worldPacket << SizedString::BitsSize<9>(entry.FullDestinationCharacterName);
+        _worldPacket.FlushBits();
+
+        _worldPacket << SizedString::Data(entry.SourceCharacterName);
+        _worldPacket << SizedString::Data(entry.FullSourceCharacterName);
+        _worldPacket << SizedString::Data(entry.DestinationCharacterName);
+        _worldPacket << SizedString::Data(entry.FullDestinationCharacterName);
+
+        _worldPacket << uint32(entry.CurrencyID);
+        _worldPacket << uint32(entry.QuantityTransferred);
+        _worldPacket << uint32(entry.TotalQuantityConsumed);
+        _worldPacket << uint64(entry.Timestamp);
+    }
+
+    return &_worldPacket;
+}
+
 void SetSelection::Read()
 {
     _worldPacket >> Selection;

@@ -1606,6 +1606,11 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         bool HasCurrency(uint32 id, uint32 amount) const;
         void SetCurrencyFlagsFromClient(uint32 id, CurrencyDbFlags flags);
 
+        static bool IsCurrencyAccountTransferable(CurrencyTypesEntry const* currency);
+        static uint32 GetCurrencyTransferTotalCost(CurrencyTypesEntry const* currency, uint32 quantityToReceive);
+        /// @return 0 on success, otherwise ERR_CURRENCY_TRANSFER_* from SharedDefines.h
+        uint32 ValidateCurrencyTransferReceive(CurrencyTypesEntry const* currency, uint32 quantity) const;
+
         void SetInvSlot(uint32 slot, ObjectGuid guid) { SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::InvSlots, slot), guid); }
 
         void ApplyEquipCooldown(Item* pItem);

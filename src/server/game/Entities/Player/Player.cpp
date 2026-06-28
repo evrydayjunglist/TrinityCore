@@ -48,6 +48,7 @@
 #include "CombatLogPackets.h"
 #include "CombatPackets.h"
 #include "Common.h"
+#include <cmath>
 #include "ConditionMgr.h"
 #include "Containers.h"
 #include "CreatureAI.h"
@@ -7369,6 +7370,63 @@ void Player::SetCurrencyFlagsFromClient(uint32 id, CurrencyDbFlags flags)
     itr->second.Flags = newValue;
     if (itr->second.state != PLAYERCURRENCY_NEW)
         itr->second.state = PLAYERCURRENCY_CHANGED;
+}
+
+bool Player::IsCurrencyAccountTransferable(CurrencyTypesEntry const* currency)
+{
+    if (!currency)
+        return false;
+
+    if (currency->AccountTransferPercentage <= 0.f)
+        return false;
+
+    if (currency->GetFlags().HasFlag(CurrencyTypesFlags::AccountWide))
+        return false;
+
+    return true;
+}
+
+uint32 Player::GetCurrencyTransferTotalCost(CurrencyTypesEntry const* currency, uint32 quantityToReceive)
+{
+    if (!currency || !quantityToReceive)
+        return 0;
+
+    // CurrencyTypes.db2 AccountTransferPercentage: percent of transfer quantity received on target (0-100 scale on retail)
+    float const transferPercentage = currency->AccountTransferPercentage;
+    if (transferPercentage <= 0.f)
+        return 0;
+
+    if (transferPercentage >= 100.f)
+        return quantityToReceive;
+
+    return uint32(std::ceil(float(quantityToReceive) * 100.f / transferPercentage));
+}
+
+uint32 Player::ValidateCurrencyTransferReceive(CurrencyTypesEntry const* currency, uint32 quantity) const
+{
+    if (!IsCurrencyAccountTransferable(currency) || !quantity)
+        return uint32(GameError::ERR_CURRENCY_TRANSFER_INVALID_CURRENCY);
+
+    if ((currency->IsAlliance() && GetTeam() != ALLIANCE) ||
+        (currency->IsHorde() && GetTeam() != HORDE))
+        return uint32(GameError::ERR_CURRENCY_TRANSFER_UNMET_REQUIREMENTS);
+
+    if (!ConditionMgr::IsPlayerMeetingCondition(this, currency->AwardConditionID))
+        return uint32(GameError::ERR_CURRENCY_TRANSFER_UNMET_REQUIREMENTS);
+
+    if (uint32 const maxCap = GetCurrencyMaxQuantity(currency, false, false))
+    {
+        if (GetCurrencyQuantity(currency->ID) + quantity > maxCap)
+            return uint32(GameError::ERR_CURRENCY_TRANSFER_MAX_QUANTITY);
+    }
+
+    if (uint32 const weeklyCap = GetCurrencyWeeklyCap(currency))
+    {
+        if (GetCurrencyWeeklyQuantity(currency->ID) + quantity > weeklyCap)
+            return uint32(GameError::ERR_CURRENCY_TRANSFER_MAX_QUANTITY);
+    }
+
+    return 0;
 }
 
 void Player::SetInGuild(ObjectGuid::LowType guildId)
