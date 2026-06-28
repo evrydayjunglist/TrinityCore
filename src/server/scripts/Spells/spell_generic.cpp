@@ -917,8 +917,7 @@ class spell_gen_clone : public SpellScript
         }
         else
         {
-            OnEffectHitTarget += SpellEffectFn(spell_gen_clone::HandleScriptEffect, EFFECT_1, SPELL_EFFECT_SCRIPT_EFFECT);
-            OnEffectHitTarget += SpellEffectFn(spell_gen_clone::HandleScriptEffect, EFFECT_2, SPELL_EFFECT_SCRIPT_EFFECT);
+            OnEffectHitTarget += SpellEffectFn(spell_gen_clone::HandleScriptEffect, EFFECT_FIRST_FOUND, SPELL_EFFECT_SCRIPT_EFFECT);
         }
     }
 };
@@ -1045,8 +1044,8 @@ class spell_gen_clone_weapon_aura : public AuraScript
 
     void Register() override
     {
-        OnEffectApply += AuraEffectApplyFn(spell_gen_clone_weapon_aura::OnApply, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY, AURA_EFFECT_HANDLE_REAL_OR_REAPPLY_MASK);
-        OnEffectRemove += AuraEffectRemoveFn(spell_gen_clone_weapon_aura::OnRemove, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY, AURA_EFFECT_HANDLE_REAL_OR_REAPPLY_MASK);
+        OnEffectApply += AuraEffectApplyFn(spell_gen_clone_weapon_aura::OnApply, EFFECT_FIRST_FOUND, SPELL_AURA_ANY, AURA_EFFECT_HANDLE_REAL_OR_REAPPLY_MASK);
+        OnEffectRemove += AuraEffectRemoveFn(spell_gen_clone_weapon_aura::OnRemove, EFFECT_FIRST_FOUND, SPELL_AURA_ANY, AURA_EFFECT_HANDLE_REAL_OR_REAPPLY_MASK);
     }
 
     uint32 prevItem = 0;
@@ -3463,11 +3462,17 @@ class spell_gen_trigger_exclude_caster_aura_spell : public SpellScript
 {
     bool Validate(SpellInfo const* spellInfo) override
     {
+        if (!spellInfo->ExcludeCasterAuraSpell)
+            return true;
+
         return ValidateSpellInfo({ spellInfo->ExcludeCasterAuraSpell });
     }
 
     void HandleTrigger()
     {
+        if (!GetSpellInfo()->ExcludeCasterAuraSpell)
+            return;
+
         // Blizz seems to just apply aura without bothering to cast
         GetCaster()->AddAura(GetSpellInfo()->ExcludeCasterAuraSpell, GetCaster());
     }
@@ -3482,11 +3487,17 @@ class spell_gen_trigger_exclude_target_aura_spell : public SpellScript
 {
     bool Validate(SpellInfo const* spellInfo) override
     {
+        if (!spellInfo->ExcludeTargetAuraSpell)
+            return true;
+
         return ValidateSpellInfo({ spellInfo->ExcludeTargetAuraSpell });
     }
 
     void HandleTrigger()
     {
+        if (!GetSpellInfo()->ExcludeTargetAuraSpell)
+            return;
+
         if (Unit* target = GetHitUnit())
             // Blizz seems to just apply aura without bothering to cast
             GetCaster()->AddAura(GetSpellInfo()->ExcludeTargetAuraSpell, target);
