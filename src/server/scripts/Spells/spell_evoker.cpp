@@ -154,7 +154,7 @@ class spell_evo_blessing_of_the_bronze : public SpellScript
 
     void Register() override
     {
-        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_evo_blessing_of_the_bronze::RemoveInvalidTargets, EFFECT_ALL, TARGET_UNIT_CASTER_AREA_RAID);
+        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_evo_blessing_of_the_bronze::RemoveInvalidTargets, EFFECT_0, TARGET_UNIT_TARGET_ALLY_OR_RAID);
     }
 };
 
@@ -669,7 +669,7 @@ class spell_evo_scouring_flame : public SpellScript
     void Register() override
     {
         OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_evo_scouring_flame::HandleScouringFlame, EFFECT_3, TARGET_UNIT_CONE_CASTER_TO_DEST_ENEMY);
-        OnEffectHitTarget += SpellEffectFn(spell_evo_scouring_flame::CalcDispelCount, EFFECT_3, SPELL_EFFECT_DISPEL);
+        OnEffectHitTarget += SpellEffectFn(spell_evo_scouring_flame::CalcDispelCount, EFFECT_5, SPELL_EFFECT_DISPEL);
     }
 };
 

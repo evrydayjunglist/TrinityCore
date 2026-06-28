@@ -286,7 +286,7 @@ class spell_varos_energize_core_area_enemy : public SpellScript
 
     void Register() override
     {
-        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_varos_energize_core_area_enemy::FilterTargets, EFFECT_0, TARGET_UNIT_SRC_AREA_ENEMY);
+        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_varos_energize_core_area_enemy::FilterTargets, EFFECT_0, TARGET_UNIT_CONE_180_DEG_ENEMY);
     }
 };
 
@@ -319,7 +319,7 @@ class spell_varos_energize_core_area_entry : public SpellScript
 
     void Register() override
     {
-        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_varos_energize_core_area_entry::FilterTargets, EFFECT_0, TARGET_UNIT_SRC_AREA_ENTRY);
+        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_varos_energize_core_area_entry::FilterTargets, EFFECT_0, TARGET_UNIT_CONE_180_DEG_ENEMY);
     }
 };
 
