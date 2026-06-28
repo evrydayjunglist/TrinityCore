@@ -406,6 +406,8 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_DEL_PLAYER_CURRENCY, "DELETE FROM character_currency WHERE CharacterGuid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_ACCOUNT_CHARACTER_CURRENCY_FOR_TRANSFER, "SELECT cc.CharacterGuid, cc.Currency, cc.Quantity, c.slot FROM character_currency cc "
                      "INNER JOIN characters c ON c.guid = cc.CharacterGuid WHERE c.account = ? AND c.deleteDate IS NULL AND cc.Quantity > 0", CONNECTION_BOTH);
+    PrepareStatement(CHAR_SEL_ACCOUNT_CHARACTER_CURRENCY_BY_ACCOUNT, "SELECT cc.CharacterGuid, cc.Currency, cc.Quantity, cc.WeeklyQuantity, cc.TrackedQuantity, cc.IncreasedCapQuantity, cc.EarnedQuantity, cc.Flags FROM character_currency cc "
+                     "INNER JOIN characters c ON c.guid = cc.CharacterGuid WHERE c.account = ? AND c.deleteDate IS NULL", CONNECTION_BOTH);
     PrepareStatement(CHAR_SEL_CHARACTER_CURRENCY_QUANTITY, "SELECT Quantity FROM character_currency WHERE CharacterGuid = ? AND Currency = ?", CONNECTION_BOTH);
     PrepareStatement(CHAR_UPD_CHARACTER_CURRENCY_QUANTITY, "UPDATE character_currency SET Quantity = ? WHERE CharacterGuid = ? AND Currency = ?", CONNECTION_BOTH);
     PrepareStatement(CHAR_DEL_CHARACTER_CURRENCY_BY_GUID, "DELETE FROM character_currency WHERE CharacterGuid = ? AND Currency = ?", CONNECTION_BOTH);
