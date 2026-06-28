@@ -57,7 +57,11 @@ modules/mod-playerbots/conf/playerbots.conf.dist
 - `modules/*.conf` — your overrides (survive rebuilds)
 - `modules/*.conf.dist` — shipped defaults when no matching `.conf` exists
 
-## Phase 2
+## Playerbots (Gate 1 complete)
 
-Playerbots compiles under `modules/mod-playerbots/` after this shell is proven.
-See [`docs/midnight-assessment/module-support-prereq.md`](../docs/midnight-assessment/module-support-prereq.md).
+The compile-only stub lives at `modules/mod-playerbots/` (loader, `.playerbots status`,
+`playerbots.conf.dist`). Opt-in via `-DMODULES=static -DMODULE_MOD_PLAYERBOTS=static`;
+default `MODULES=none` leaves it under **disabled**, not linked.
+
+Gate result: [`docs/midnight-assessment/playerbots-gate-01-compile-result.md`](../docs/midnight-assessment/playerbots-gate-01-compile-result.md).
+Guardrails: [`docs/midnight-assessment/module-support-prereq.md`](../docs/midnight-assessment/module-support-prereq.md).
