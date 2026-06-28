@@ -108,6 +108,7 @@ After changes (unless user says otherwise): when a module system exists,
 - `docs/midnight-assessment/module-support-prereq.md` — module guardrails (target design)
 - `docs/midnight-assessment/playerbots/playerbots-integration-plan.md` — Playerbots constraints and phases
 - `scripts/build-trinitycore-master.ps1` — canonical local build script (auto-detects evry paths)
+- `scripts/README.md` — fork helper script inventory (build, log triage, validators, sniff)
 - `scripts/validate-rank5-deaths-embrace.ps1` — Rank 5 R5-A guard (code + log grep + SpellEffect layout)
 - `doc/` — upstream TrinityCore how-tos (`HowToScript.txt`, `UnixInstall.txt`, …)
 - `docs/midnight-assessment/reference-trees-and-standards.md` — reference tree paths + AC/module standards
