@@ -91,28 +91,29 @@ After changes (unless user says otherwise): when a module system exists,
 - `docs/midnight-assessment/successful-local-baseline.md` — build/run/login (confirmed 2026-06-25; re-verify after upstream merges)
 - `docs/midnight-assessment/build-and-run-readiness.md` — build/run gates + module pitfalls
 - `docs/midnight-assessment/module-support-prereq.md` — module guardrails (target design)
-- `docs/midnight-assessment/playerbots-integration-plan.md` — Playerbots constraints and phases
+- `docs/midnight-assessment/playerbots/playerbots-integration-plan.md` — Playerbots constraints and phases
 - `scripts/build-trinitycore-master.ps1` — canonical local build script (auto-detects evry paths)
 - `doc/` — upstream TrinityCore how-tos (`HowToScript.txt`, `UnixInstall.txt`, …)
 - `docs/midnight-assessment/reference-trees-and-standards.md` — reference tree paths + AC/module standards
 - `docs/midnight-assessment/sql-update-conventions.md` — SQL update naming + upstream sync
 - `docs/midnight-assessment/retail-data-first-checklist.md` — **before hardcoding client ids:** grep DB2, map packet fields, self-review (warband placements case study)
-- `docs/midnight-assessment/char-select-campsites-handoff.md` — char-select campsites (**complete** user 2026-06-27; not in-game housing)
-- `docs/midnight-assessment/warbands-overall-handoff.md` — **warbands overall** (Phases 1 + 1.5 + **2 complete** user 2026-06-27; Phase 3–4 next)
-- `docs/midnight-assessment/warbands-phase2-account-wide-currency-handoff.md` — Phase 2 account-wide currency **complete** (implementation spec + R1–R3 follow-ups)
-- `docs/midnight-assessment/warbands-renown-stub-handoff.md` — **Renown stub** (Adventure Guide UI + quest gates; deferred — backend currency done)
-- `docs/midnight-assessment/warbands-phase2plus-account-wide-earning-handoff.md` — Phase 2+ earning eligibility (**deferred** — kickoff on failing gameplay source)
-- `docs/midnight-assessment/warbands-phase1-list-packet-handoff.md` — Phase 1 + 1.5 **debugging record** + code review (**hacks vs stubs vs assumptions**; playtest complete 2026-06-27)
-- `docs/midnight-assessment/warbands-retail-sniff-2026-06-27.md` — retail sniff `12.0.7.68275` (Capture A: Phase 4 bank; Capture B: Phase 1 transfer wire format)
-- `docs/midnight-assessment/warbands-agent-intro.md` — **paste/read first** for agents starting in-game warbands work
-- `docs/midnight-assessment/dracthyr-forbidden-reach-handoff.md` — side project: Dracthyr intro overview; **§8 evidence/gap labels**
-- `docs/midnight-assessment/dracthyr-phase-1b-handoff.md` — Phase 1b lower War Creche (mostly done; playtest bugs B1–B3)
-- `docs/midnight-assessment/dracthyr-intro-quest-popup-decline-handoff.md` — **R2 done:** Accept/Decline **64864** (`OfferedScriptQuestID` + `ACCEPT_QUEST` grant)
-- `docs/midnight-assessment/dracthyr-b4-azurathel-speak-handoff.md` — B4 Azurathel **181056** speak/turn-in blocker
-- `docs/midnight-assessment/dracthyr-intro-opening-retail-parity-handoff.md` — **retail parity** R1–R3 (R2 accept/decline done; R1/R3 open)
-- `docs/midnight-assessment/dracthyr-intro-quest-accept-history.md` — R2 chronology (superseded experiments; do not implement from)
-- `docs/midnight-assessment/dracthyr-intro-quest-accept-proper-fix-handoff.md` — Hack 1 Track B (done; final architecture in popup-decline handoff)
-- `docs/midnight-assessment/dracthyr-intro-quest-accept-fallback-removal-handoff.md` — **done:** Hack 2 (2s fallback) removed
+- `docs/midnight-assessment/warbands/char-select-campsites-handoff.md` — char-select campsites (**complete** user 2026-06-27; not in-game housing)
+- `docs/midnight-assessment/warbands/warbands-overall-handoff.md` — **warbands overall** (Phases 1 + 1.5 + **2 complete** user 2026-06-27; Phase 3–4 next)
+- `docs/midnight-assessment/warbands/warbands-phase2-account-wide-currency-handoff.md` — Phase 2 account-wide currency **complete** (implementation spec + R1–R3 follow-ups)
+- `docs/midnight-assessment/warbands/warbands-phase2plus-account-wide-earning-handoff.md` — Phase 2+ account-wide earning eligibility (deferred)
+- `docs/midnight-assessment/warbands/warbands-renown-stub-handoff.md` — **Renown stub** (Adventure Guide UI + quest gates; deferred — backend currency done)
+- `docs/midnight-assessment/warbands/warbands-phase3-warband-reputation-handoff.md` — Phase 3 warband reputation (**next** implementation spec)
+- `docs/midnight-assessment/warbands/warbands-phase1-list-packet-handoff.md` — Phase 1 + 1.5 **debugging record** + code review (**hacks vs stubs vs assumptions**; playtest complete 2026-06-27)
+- `docs/midnight-assessment/warbands/warbands-retail-sniff-2026-06-27.md` — retail sniff `12.0.7.68275` (Capture A: Phase 4 bank; Capture B: Phase 1 transfer wire format)
+- `docs/midnight-assessment/warbands/warbands-agent-intro.md` — **paste/read first** for agents starting in-game warbands work
+- `docs/midnight-assessment/dracthyr/dracthyr-forbidden-reach-handoff.md` — side project: Dracthyr intro overview; **§8 evidence/gap labels**
+- `docs/midnight-assessment/dracthyr/dracthyr-phase-1b-handoff.md` — Phase 1b lower War Creche (mostly done; playtest bugs B1–B3)
+- `docs/midnight-assessment/dracthyr/dracthyr-intro-quest-popup-decline-handoff.md` — **R2 done:** Accept/Decline **64864** (`OfferedScriptQuestID` + `ACCEPT_QUEST` grant)
+- `docs/midnight-assessment/dracthyr/dracthyr-b4-azurathel-speak-handoff.md` — B4 Azurathel **181056** speak/turn-in blocker
+- `docs/midnight-assessment/dracthyr/dracthyr-intro-opening-retail-parity-handoff.md` — **retail parity** R1–R3 (R2 accept/decline done; R1/R3 open)
+- `docs/midnight-assessment/dracthyr/dracthyr-intro-quest-accept-history.md` — R2 chronology (superseded experiments; do not implement from)
+- `docs/midnight-assessment/dracthyr/dracthyr-intro-quest-accept-proper-fix-handoff.md` — Hack 1 Track B (done; final architecture in popup-decline handoff)
+- `docs/midnight-assessment/dracthyr/dracthyr-intro-quest-accept-fallback-removal-handoff.md` — **done:** Hack 2 (2s fallback) removed
 - `modules/README.md` — product module layout
 
 Prior-attempt gate/handoff docs are archived under

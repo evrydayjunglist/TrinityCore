@@ -68,5 +68,5 @@ The compile-only stub lives at `modules/mod-playerbots/` (loader, `.playerbots s
 `mod-playerbots.conf.dist`). Opt-in via `-DMODULES=static -DMODULE_MOD_PLAYERBOTS=static`;
 default `MODULES=none` leaves it under **disabled**, not linked.
 
-Gate result: [`docs/midnight-assessment/playerbots-gate-01-compile-result.md`](../docs/midnight-assessment/playerbots-gate-01-compile-result.md).
+Gate result: [`docs/midnight-assessment/playerbots/playerbots-gate-01-compile-result.md`](../docs/midnight-assessment/playerbots/playerbots-gate-01-compile-result.md).
 Guardrails: [`docs/midnight-assessment/module-support-prereq.md`](../docs/midnight-assessment/module-support-prereq.md).

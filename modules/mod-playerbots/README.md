@@ -29,4 +29,4 @@ Loaded via `ConfigMgr::LoadModuleConfigDir("modules")` — separate from `worlds
 
 Bot login/logout, Playerbots database, manager, AI, random bots, LFG/BG, WotLK imports.
 
-Design: `docs/midnight-assessment/playerbots-integration-plan.md`
+Design: `docs/midnight-assessment/playerbots/playerbots-integration-plan.md`
