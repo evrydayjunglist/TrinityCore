@@ -504,13 +504,12 @@ class spell_monk_save_them_all : public AuraScript
 {
     bool Validate(SpellInfo const* spellInfo) override
     {
-        return ValidateSpellInfo({ SPELL_MONK_SAVE_THEM_ALL_HEAL_BONUS })
-            && ValidateSpellEffect({ { spellInfo->Id, EFFECT_2 } });
+        return ValidateSpellInfo({ SPELL_MONK_SAVE_THEM_ALL_HEAL_BONUS });
     }
 
     bool CheckProc(ProcEventInfo const& eventInfo) const
     {
-        return eventInfo.GetActionTarget()->HealthBelowPct(GetEffectInfo(EFFECT_2).CalcValue(eventInfo.GetActor()));
+        return eventInfo.GetActionTarget()->HealthBelowPct(GetEffectInfo(EFFECT_0).CalcValue(eventInfo.GetActor()));
     }
 
     void HandleProc(AuraEffect const* aurEff, ProcEventInfo const& /*eventInfo*/) const
@@ -524,7 +523,7 @@ class spell_monk_save_them_all : public AuraScript
     void Register() override
     {
         DoCheckProc += AuraCheckProcFn(spell_monk_save_them_all::CheckProc);
-        OnEffectProc += AuraEffectProcFn(spell_monk_save_them_all::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+        OnEffectProc += AuraEffectProcFn(spell_monk_save_them_all::HandleProc, EFFECT_0, SPELL_AURA_MOD_HEALING_DONE_PCT_VERSUS_TARGET_HEALTH);
     }
 };
 

@@ -124,7 +124,7 @@ class spell_fixate : public SpellScript
 
     void Register() override
     {
-        OnEffectHitTarget += SpellEffectFn(spell_fixate::HandleScriptEffect, EFFECT_2, SPELL_EFFECT_SCRIPT_EFFECT);
+        OnEffectHitTarget += SpellEffectFn(spell_fixate::HandleScriptEffect, EFFECT_0, SPELL_EFFECT_APPLY_AURA);
     }
 };
 

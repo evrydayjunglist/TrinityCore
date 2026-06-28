@@ -458,30 +458,22 @@ public:
 // 80654       - Stalactite (creates visual shade on ground)
 // 80643/92653 - Stalactite (launches missle to the ground)
 // 80647/92309 - Stalactite (creates stalactite object)
-class spell_stalactite_mod_dest_height : public SpellScriptLoader
+class spell_stalactite_mod_dest_height : public SpellScript
 {
-public:
-    spell_stalactite_mod_dest_height() : SpellScriptLoader("spell_stalactite_mod_dest_height") { }
-
-    class spell_stalactite_mod_dest_height_SpellScript : public SpellScript
+    void ModDestHeight(SpellDestination& dest)
     {
-        void ModDestHeight(SpellDestination& dest)
-        {
-            Unit* caster = GetCaster();
-            Position pos = caster->GetPosition();
-            pos.m_positionZ = caster->GetMap()->GetHeight(caster->GetPhaseShift(), pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), true, 100.0f);
-            dest.Relocate(pos);
-        }
+        Unit* caster = GetCaster();
+        Position pos = caster->GetPosition();
+        pos.m_positionZ = caster->GetMap()->GetHeight(caster->GetPhaseShift(), pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), true, 100.0f);
+        dest.Relocate(pos);
+    }
 
-        void Register() override
-        {
-            OnDestinationTargetSelect += SpellDestinationTargetSelectFn(spell_stalactite_mod_dest_height_SpellScript::ModDestHeight, EFFECT_0, TARGET_DEST_CASTER);
-        }
-    };
-
-    SpellScript* GetSpellScript() const override
+    void Register() override
     {
-        return new spell_stalactite_mod_dest_height_SpellScript();
+        if (m_scriptSpellId == SPELL_STALACTITE_MISSLE || m_scriptSpellId == 92653)
+            OnDestinationTargetSelect += SpellDestinationTargetSelectFn(spell_stalactite_mod_dest_height::ModDestHeight, EFFECT_0, TARGET_DEST_CASTER_RANDOM);
+        else
+            OnDestinationTargetSelect += SpellDestinationTargetSelectFn(spell_stalactite_mod_dest_height::ModDestHeight, EFFECT_0, TARGET_DEST_CASTER);
     }
 };
 
@@ -574,7 +566,7 @@ void AddSC_boss_slabhide()
     new npc_stalactite_trigger();
     new spell_s81035_stalactite();
     new spell_s81028_s80650_stalactite();
-    new spell_stalactite_mod_dest_height();
+    RegisterSpellScript(spell_stalactite_mod_dest_height);
     new spell_s92306_crystal_storm();
     new spell_s92300_crystal_storm();
 }

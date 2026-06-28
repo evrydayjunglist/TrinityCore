@@ -46,7 +46,7 @@ class spell_azerite_gen_aura_calc_from_2nd_effect_triggered_spell : public AuraS
 
     void Register() override
     {
-        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_azerite_gen_aura_calc_from_2nd_effect_triggered_spell::CalculateAmount, EFFECT_0, SPELL_AURA_MOD_RATING);
+        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_azerite_gen_aura_calc_from_2nd_effect_triggered_spell::CalculateAmount, EFFECT_FIRST_FOUND, SPELL_AURA_ANY);
     }
 };
 
@@ -67,7 +67,7 @@ class spell_item_azerite_fortification : public AuraScript
 
     void Register() override
     {
-        DoCheckEffectProc += AuraCheckEffectProcFn(spell_item_azerite_fortification::CheckProc, EFFECT_0, SPELL_AURA_PROC_TRIGGER_SPELL);
+        DoCheckEffectProc += AuraCheckEffectProcFn(spell_item_azerite_fortification::CheckProc, EFFECT_0, SPELL_AURA_DUMMY);
     }
 };
 
