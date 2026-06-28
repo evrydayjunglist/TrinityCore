@@ -103,6 +103,7 @@ After changes (unless user says otherwise): when a module system exists,
 - `docs/midnight-assessment/upstream-core-maintenance-rank2-handoff.md` — Rank 2 guild challenge re-enqueue (**complete** 2026-06-28)
 - `docs/midnight-assessment/upstream-core-maintenance-rank3-rank4-handoff.md` — Rank 3–4 batch spell scripts (**complete** 2026-06-28)
 - `docs/midnight-assessment/upstream-core-maintenance-rank5-handoff.md` — Rank 5 cascading missing spell ids (**complete** 2026-06-28; R5-A playtest + GetAura follow-up)
+- `docs/midnight-assessment/upstream-core-maintenance-rank7-handoff.md` — Rank 7 warband groups CMSG wire parse (**complete** 2026-06-28; C2/C3 owner-validated)
 - `docs/midnight-assessment/upstream-core-maintenance-rank9-handoff.md` — Rank 9 DBC mismatch batch (**complete** 2026-06-28; **138 → 0**; **no follow-ups**; § Phase 3B/3C planning; Warnings 7–9 in parent spec). **Next optional upstream ROI:** rank **10** or **11** — parent spec ROI table.
 - `docs/midnight-assessment/upstream-core-maintenance-rank2-retail-sniff-2026-06-27.md` — Rank 2 retail packet evidence (Captures C/D live retail; not evry realm)
 - `docs/midnight-assessment/module-support-prereq.md` — module guardrails (target design)
