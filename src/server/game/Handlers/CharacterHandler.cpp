@@ -543,7 +543,12 @@ void WorldSession::HandleSetupWarbandGroups(WorldPackets::Character::SetupWarban
         } while (result->NextRow());
     }
 
-    GetWarbandGroupMgr()->ReplaceGroups(setupWarbandGroups.Groups, *GetCollectionMgr(), validCharacterGuids);
+    ReplaceGroupsResult result = GetWarbandGroupMgr()->ReplaceGroups(setupWarbandGroups.Groups, *GetCollectionMgr(), validCharacterGuids);
+    if (result != ReplaceGroupsResult::Ok)
+    {
+        TC_LOG_WARN("network", "HandleSetupWarbandGroups: account {} rejected warband group setup ({})",
+            GetBattlenetAccountId(), GetReplaceGroupsResultName(result));
+    }
 }
 
 void WorldSession::HandleCharUndeleteEnumOpcode(WorldPackets::Character::EnumCharacters& /*enumCharacters*/)

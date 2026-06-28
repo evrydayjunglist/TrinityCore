@@ -30,6 +30,21 @@
 class CollectionMgr;
 class WorldSession;
 
+enum class ReplaceGroupsResult : uint8
+{
+    Ok,
+    TooManyGroups,
+    DuplicateGroupId,
+    TooManyMembers,
+    UnownedWarbandScene,
+    InvalidName,
+    OrderIndexOutOfRange,
+    InvalidMemberGuid,
+    DuplicateMemberGuid,
+};
+
+char const* GetReplaceGroupsResultName(ReplaceGroupsResult result);
+
 class TC_GAME_API WarbandGroupMgr
 {
 public:
@@ -40,7 +55,7 @@ public:
 
     void LoadAccountGroups(PreparedQueryResult groupsResult, PreparedQueryResult membersResult);
     void EnsureDefaultGroup(std::span<ObjectGuid const> accountCharacterGuids);
-    bool ReplaceGroups(std::vector<WorldPackets::Character::SetupWarbandGroup> const& groups, CollectionMgr const& collectionMgr, std::unordered_set<ObjectGuid> const& validCharacterGuids);
+    ReplaceGroupsResult ReplaceGroups(std::vector<WorldPackets::Character::SetupWarbandGroup> const& groups, CollectionMgr const& collectionMgr, std::unordered_set<ObjectGuid> const& validCharacterGuids);
     bool RemoveMember(ObjectGuid guid);
     bool PruneInvalidMembers(std::unordered_set<ObjectGuid> const& validCharacterGuids);
     std::vector<WorldPackets::Character::WarbandGroup> BuildEnumGroups() const;

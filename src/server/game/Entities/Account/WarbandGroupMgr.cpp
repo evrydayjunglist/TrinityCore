@@ -23,6 +23,23 @@
 #include "Log.h"
 #include "WorldSession.h"
 
+char const* GetReplaceGroupsResultName(ReplaceGroupsResult result)
+{
+    switch (result)
+    {
+        case ReplaceGroupsResult::Ok: return "Ok";
+        case ReplaceGroupsResult::TooManyGroups: return "TooManyGroups";
+        case ReplaceGroupsResult::DuplicateGroupId: return "DuplicateGroupId";
+        case ReplaceGroupsResult::TooManyMembers: return "TooManyMembers";
+        case ReplaceGroupsResult::UnownedWarbandScene: return "UnownedWarbandScene";
+        case ReplaceGroupsResult::InvalidName: return "InvalidName";
+        case ReplaceGroupsResult::OrderIndexOutOfRange: return "OrderIndexOutOfRange";
+        case ReplaceGroupsResult::InvalidMemberGuid: return "InvalidMemberGuid";
+        case ReplaceGroupsResult::DuplicateMemberGuid: return "DuplicateMemberGuid";
+        default: return "Unknown";
+    }
+}
+
 WarbandGroupMgr::WarbandGroupMgr(WorldSession* owner) : _owner(owner)
 {
 }
@@ -128,12 +145,12 @@ void WarbandGroupMgr::EnsureDefaultGroup(std::span<ObjectGuid const> accountChar
     SaveToDB();
 }
 
-bool WarbandGroupMgr::ReplaceGroups(std::vector<WorldPackets::Character::SetupWarbandGroup> const& groups, CollectionMgr const& collectionMgr, std::unordered_set<ObjectGuid> const& validCharacterGuids)
+ReplaceGroupsResult WarbandGroupMgr::ReplaceGroups(std::vector<WorldPackets::Character::SetupWarbandGroup> const& groups, CollectionMgr const& collectionMgr, std::unordered_set<ObjectGuid> const& validCharacterGuids)
 {
     if (groups.size() > MaxWarbandGroups)
     {
         TC_LOG_DEBUG("network", "WarbandGroupMgr::ReplaceGroups: account {} sent {} groups (max {})", _owner->GetBattlenetAccountId(), groups.size(), MaxWarbandGroups);
-        return false;
+        return ReplaceGroupsResult::TooManyGroups;
     }
 
     std::unordered_set<uint64> seenGroupIds;
@@ -147,31 +164,31 @@ bool WarbandGroupMgr::ReplaceGroups(std::vector<WorldPackets::Character::SetupWa
         if (!seenGroupIds.insert(packetGroup.GroupID).second)
         {
             TC_LOG_DEBUG("network", "WarbandGroupMgr::ReplaceGroups: account {} duplicate groupId {}", _owner->GetBattlenetAccountId(), packetGroup.GroupID);
-            return false;
+            return ReplaceGroupsResult::DuplicateGroupId;
         }
 
         if (packetGroup.Members.size() > MaxWarbandGroupMembers)
         {
             TC_LOG_DEBUG("network", "WarbandGroupMgr::ReplaceGroups: account {} group {} has {} members (max {})", _owner->GetBattlenetAccountId(), packetGroup.GroupID, packetGroup.Members.size(), MaxWarbandGroupMembers);
-            return false;
+            return ReplaceGroupsResult::TooManyMembers;
         }
 
         if (!collectionMgr.HasWarbandScene(packetGroup.WarbandSceneID))
         {
             TC_LOG_DEBUG("network", "WarbandGroupMgr::ReplaceGroups: account {} group {} uses unowned warband scene {}", _owner->GetBattlenetAccountId(), packetGroup.GroupID, packetGroup.WarbandSceneID);
-            return false;
+            return ReplaceGroupsResult::UnownedWarbandScene;
         }
 
         if (packetGroup.Name.empty() || packetGroup.Name.size() > 255)
         {
             TC_LOG_DEBUG("network", "WarbandGroupMgr::ReplaceGroups: account {} group {} has invalid name length {}", _owner->GetBattlenetAccountId(), packetGroup.GroupID, packetGroup.Name.size());
-            return false;
+            return ReplaceGroupsResult::InvalidName;
         }
 
         if (packetGroup.OrderIndex >= MaxWarbandGroups)
         {
             TC_LOG_DEBUG("network", "WarbandGroupMgr::ReplaceGroups: account {} group {} orderIndex {} out of range", _owner->GetBattlenetAccountId(), packetGroup.GroupID, packetGroup.OrderIndex);
-            return false;
+            return ReplaceGroupsResult::OrderIndexOutOfRange;
         }
 
         StoredGroup& group = newGroups.emplace_back();
@@ -192,13 +209,13 @@ bool WarbandGroupMgr::ReplaceGroups(std::vector<WorldPackets::Character::SetupWa
                 if (!validCharacterGuids.contains(packetMember.Guid))
                 {
                     TC_LOG_DEBUG("network", "WarbandGroupMgr::ReplaceGroups: account {} rejected guid {} for group {}", _owner->GetBattlenetAccountId(), packetMember.Guid.ToString(), packetGroup.GroupID);
-                    return false;
+                    return ReplaceGroupsResult::InvalidMemberGuid;
                 }
 
                 if (!seenMemberGuids.insert(packetMember.Guid).second)
                 {
                     TC_LOG_DEBUG("network", "WarbandGroupMgr::ReplaceGroups: account {} duplicate member guid {} in setup", _owner->GetBattlenetAccountId(), packetMember.Guid.ToString());
-                    return false;
+                    return ReplaceGroupsResult::DuplicateMemberGuid;
                 }
             }
 
@@ -212,7 +229,7 @@ bool WarbandGroupMgr::ReplaceGroups(std::vector<WorldPackets::Character::SetupWa
 
     _groups = std::move(newGroups);
     SaveToDB();
-    return true;
+    return ReplaceGroupsResult::Ok;
 }
 
 bool WarbandGroupMgr::RemoveMember(ObjectGuid guid)

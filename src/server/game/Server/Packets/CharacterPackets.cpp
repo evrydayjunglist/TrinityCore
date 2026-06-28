@@ -16,6 +16,7 @@
  */
 
 #include "CharacterPackets.h"
+#include "ByteBuffer.h"
 #include "ClubUtils.h"
 #include "DB2Stores.h"
 #include "Field.h"
@@ -435,7 +436,7 @@ void SetupWarbandGroups::Read()
 
     uint32 groupCount = header >> 3;
     if (groupCount > WarbandGroupMgr::MaxWarbandGroups)
-        return;
+        throw ByteBufferInvalidValueException("warband group count", std::to_string(groupCount));
 
     Groups.resize(groupCount);
     for (uint32 i = 0; i < groupCount; ++i)
