@@ -385,6 +385,10 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
                 case STATUS_LOGGEDIN:
                     if (!_player)
                     {
+                        // Retail sends CMSG_GUILD_CHALLENGE_UPDATE_REQUEST once before CMSG_PLAYER_LOGIN and does not retry.
+                        if (opcode == CMSG_GUILD_CHALLENGE_UPDATE_REQUEST)
+                            break;
+
                         // skip STATUS_LOGGEDIN opcode unexpected errors if player logout sometime ago - this can be network lag delayed packets
                         //! If player didn't log out a while ago, it means packets are being sent while the server does not recognize
                         //! the client to be in world yet. We will re-add the packets to the bottom of the queue and process them later.
@@ -396,7 +400,7 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
                                 "Player is currently not in world yet.", GetOpcodeNameForLogging(static_cast<OpcodeClient>(packet->GetOpcode())));
                         }
                     }
-                    else if (_player->IsInWorld())
+                    else if (_player->IsInWorld() || opcode == CMSG_GUILD_CHALLENGE_UPDATE_REQUEST)
                     {
                         if(AntiDOS.EvaluateOpcode(*packet, currentTime))
                         {
