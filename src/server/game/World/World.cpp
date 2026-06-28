@@ -3281,6 +3281,7 @@ void World::InitCurrencyResetTime()
 void World::ResetCurrencyWeekCap()
 {
     CharacterDatabase.Execute("UPDATE `character_currency` SET `WeeklyQuantity` = 0");
+    LoginDatabase.Execute("UPDATE `battlenet_account_currency` SET `WeeklyQuantity` = 0");
 
     for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
         if (itr->second->GetPlayer())

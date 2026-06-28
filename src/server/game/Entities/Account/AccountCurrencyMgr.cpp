@@ -21,7 +21,26 @@
 #include "Log.h"
 #include "Player.h"
 #include "WorldSession.h"
+#include "WorldStateMgr.h"
 #include <algorithm>
+
+namespace
+{
+uint32 GetMigrationCurrencyMaxCap(CurrencyTypesEntry const* currency, Player const* capPlayer, uint32 increasedCapQuantity)
+{
+    if (!currency->HasMaxQuantity(false, false))
+        return 0;
+
+    uint32 maxQuantity = currency->MaxQty;
+    if (currency->MaxQtyWorldStateID && capPlayer)
+        maxQuantity = WorldStateMgr::GetValue(currency->MaxQtyWorldStateID, capPlayer->GetMap());
+
+    if (currency->GetFlags().HasFlag(CurrencyTypesFlags::DynamicMaximum))
+        maxQuantity += increasedCapQuantity;
+
+    return maxQuantity;
+}
+}
 
 AccountCurrencyMgr::AccountCurrencyMgr(WorldSession* owner) : _owner(owner)
 {
@@ -114,6 +133,17 @@ void AccountCurrencyMgr::SaveToDB(LoginDatabaseTransaction trans)
     }
 }
 
+bool AccountCurrencyMgr::SaveToDBImmediate()
+{
+    LoginDatabaseTransaction trans = LoginDatabase.BeginTransaction();
+    SaveToDB(trans);
+    if (!trans->GetSize())
+        return true;
+
+    LoginDatabase.DirectCommitTransaction(trans);
+    return true;
+}
+
 PlayerCurrency const* AccountCurrencyMgr::GetCurrency(uint32 currencyId) const
 {
     auto itr = _currencies.find(currencyId);
@@ -142,27 +172,31 @@ PlayerCurrency* AccountCurrencyMgr::GetOrCreateCurrency(uint32 currencyId)
     return &emplaceResult.first->second;
 }
 
-void AccountCurrencyMgr::MergeMigrationCurrency(CurrencyTypesEntry const* currency, PlayerCurrency const& aggregatedFromCharacters, Player const* capPlayer)
+void AccountCurrencyMgr::MergeMigrationCurrency(CurrencyTypesEntry const* currency, PlayerCurrency const& aggregatedFromCharacters, Player const* capPlayer, uint32 authQuantityBeforeMerge)
 {
     if (!currency)
         return;
 
     PlayerCurrency* accountCurrency = GetOrCreateCurrency(currency->ID);
 
-    uint32 mergedQuantity = accountCurrency->Quantity + aggregatedFromCharacters.Quantity;
-    if (capPlayer)
-    {
-        uint32 const maxCap = capPlayer->GetCurrencyMaxQuantity(currency);
-        if (maxCap && mergedQuantity > maxCap)
-            mergedQuantity = maxCap;
-    }
-
-    accountCurrency->Quantity = mergedQuantity;
     accountCurrency->WeeklyQuantity = std::max(accountCurrency->WeeklyQuantity, aggregatedFromCharacters.WeeklyQuantity);
     accountCurrency->TrackedQuantity = std::max(accountCurrency->TrackedQuantity, aggregatedFromCharacters.TrackedQuantity);
     accountCurrency->IncreasedCapQuantity = std::max(accountCurrency->IncreasedCapQuantity, aggregatedFromCharacters.IncreasedCapQuantity);
     accountCurrency->EarnedQuantity = std::max(accountCurrency->EarnedQuantity, aggregatedFromCharacters.EarnedQuantity);
     accountCurrency->Flags = CurrencyDbFlags(std::max(AsUnderlyingType(accountCurrency->Flags), AsUnderlyingType(aggregatedFromCharacters.Flags)));
+
+    uint32 mergedQuantity = accountCurrency->Quantity;
+    if (!(authQuantityBeforeMerge > 0 && aggregatedFromCharacters.Quantity > 0))
+        mergedQuantity += aggregatedFromCharacters.Quantity;
+
+    if (capPlayer)
+    {
+        uint32 const maxCap = GetMigrationCurrencyMaxCap(currency, capPlayer, accountCurrency->IncreasedCapQuantity);
+        if (maxCap && mergedQuantity > maxCap)
+            mergedQuantity = maxCap;
+    }
+
+    accountCurrency->Quantity = mergedQuantity;
 
     if (accountCurrency->state != PLAYERCURRENCY_NEW)
         accountCurrency->state = PLAYERCURRENCY_CHANGED;

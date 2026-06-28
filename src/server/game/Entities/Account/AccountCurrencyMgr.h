@@ -33,12 +33,13 @@ public:
 
     void LoadFromDB(PreparedQueryResult result);
     void SaveToDB(LoginDatabaseTransaction trans);
+    bool SaveToDBImmediate();
 
     PlayerCurrency const* GetCurrency(uint32 currencyId) const;
     PlayerCurrency* GetOrCreateCurrency(uint32 currencyId);
     std::unordered_map<uint32, PlayerCurrency> const& GetCurrencies() const { return _currencies; }
 
-    void MergeMigrationCurrency(CurrencyTypesEntry const* currency, PlayerCurrency const& aggregatedFromCharacters, class Player const* capPlayer);
+    void MergeMigrationCurrency(CurrencyTypesEntry const* currency, PlayerCurrency const& aggregatedFromCharacters, class Player const* capPlayer, uint32 authQuantityBeforeMerge);
 
     bool ModifyCurrency(class Player* owner, CurrencyTypesEntry const* currency, int32& amount, bool ignoreCaps, bool isGainOnRefund, bool isUpdatingVersion);
 

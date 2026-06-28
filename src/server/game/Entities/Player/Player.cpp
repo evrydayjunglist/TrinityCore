@@ -6978,8 +6978,22 @@ void Player::ConsolidateLegacyAccountWideCurrency()
     for (auto const& aggregatePair : aggregated)
     {
         CurrencyTypesEntry const* currency = sCurrencyTypesStore.LookupEntry(aggregatePair.first);
-        accountCurrencyMgr->MergeMigrationCurrency(currency, aggregatePair.second, this);
+        uint32 authQuantityBeforeMerge = 0;
+        if (PlayerCurrency const* existing = accountCurrencyMgr->GetCurrency(aggregatePair.first))
+            authQuantityBeforeMerge = existing->Quantity;
+
+        if (authQuantityBeforeMerge > 0 && aggregatePair.second.Quantity > 0)
+            continue;
+
+        accountCurrencyMgr->MergeMigrationCurrency(currency, aggregatePair.second, this, authQuantityBeforeMerge);
         _currencyStorage.erase(aggregatePair.first);
+    }
+
+    if (!accountCurrencyMgr->SaveToDBImmediate())
+    {
+        TC_LOG_ERROR("entities.player", "Player::ConsolidateLegacyAccountWideCurrency: failed to persist account-wide currency migration for account {}, aborting character_currency cleanup",
+            GetSession()->GetAccountId());
+        return;
     }
 
     for (auto const& row : rowsToDelete)
@@ -7550,6 +7564,35 @@ bool Player::HasCurrency(uint32 id, uint32 amount) const
 
 void Player::SetCurrencyFlagsFromClient(uint32 id, CurrencyDbFlags flags)
 {
+    CurrencyTypesEntry const* currency = sCurrencyTypesStore.LookupEntry(id);
+    if (currency && IsCurrencyAccountWide(currency))
+    {
+        AccountCurrencyMgr* accountCurrencyMgr = GetSession()->GetAccountCurrencyMgr();
+        PlayerCurrency* accountCurrency = accountCurrencyMgr->GetOrCreateCurrency(id);
+
+        CurrencyDbFlags newValue = (flags & CurrencyDbFlags::ClientFlags) | (accountCurrency->Flags & ~CurrencyDbFlags::ClientFlags);
+        if (accountCurrency->Flags == newValue)
+            return;
+
+        accountCurrency->Flags = newValue;
+        if (accountCurrency->state != PLAYERCURRENCY_NEW)
+            accountCurrency->state = PLAYERCURRENCY_CHANGED;
+
+        PlayerCurrenciesMap::iterator itr = _currencyStorage.find(id);
+        if (itr == _currencyStorage.end())
+        {
+            PlayerCurrency overlay = *accountCurrency;
+            overlay.state = PLAYERCURRENCY_UNCHANGED;
+            itr = _currencyStorage.emplace(id, overlay).first;
+        }
+        else
+        {
+            itr->second.Flags = newValue;
+            itr->second.state = PLAYERCURRENCY_UNCHANGED;
+        }
+        return;
+    }
+
     PlayerCurrenciesMap::iterator itr = _currencyStorage.find(id);
     if (itr == _currencyStorage.end())
         return;
