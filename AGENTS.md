@@ -98,14 +98,17 @@ After changes (unless user says otherwise): when a module system exists,
 - `docs/midnight-assessment/fork-journal.md` — infra, upstream merges, repo hygiene chronology
 - `docs/midnight-assessment/successful-local-baseline.md` — build/run/login (confirmed 2026-06-25; re-verify after upstream merges)
 - `docs/midnight-assessment/build-and-run-readiness.md` — build/run gates + module pitfalls
-- `docs/midnight-assessment/upstream-core-maintenance.md` — server log triage; upstream drift + ROI fix backlog; **retail-ready by default** (owner approval for non-retail stubs)
+- `docs/midnight-assessment/upstream-core-maintenance.md` — server log triage; upstream drift + ROI fix backlog; **retail-ready by default** (owner approval for non-retail stubs); **agent validation warnings** (grep ≠ gameplay, `GetAura`, port **8085**)
 - `docs/midnight-assessment/upstream-core-maintenance-rank1-handoff.md` — Rank 1 startup quick wins (**complete**)
 - `docs/midnight-assessment/upstream-core-maintenance-rank2-handoff.md` — Rank 2 guild challenge re-enqueue (**complete** 2026-06-28)
 - `docs/midnight-assessment/upstream-core-maintenance-rank3-rank4-handoff.md` — Rank 3–4 batch spell scripts (**complete** 2026-06-28)
+- `docs/midnight-assessment/upstream-core-maintenance-rank5-handoff.md` — Rank 5 cascading missing spell ids (**complete** 2026-06-28; R5-A playtest + GetAura follow-up)
+- `docs/midnight-assessment/upstream-core-maintenance-rank9-handoff.md` — Rank 9 DBC mismatch batch (**complete** 2026-06-28; **138 → 0**; **no follow-ups**; § Phase 3B/3C planning; Warnings 7–9 in parent spec). **Next optional upstream ROI:** rank **10** or **11** — parent spec ROI table.
 - `docs/midnight-assessment/upstream-core-maintenance-rank2-retail-sniff-2026-06-27.md` — Rank 2 retail packet evidence (Captures C/D live retail; not evry realm)
 - `docs/midnight-assessment/module-support-prereq.md` — module guardrails (target design)
 - `docs/midnight-assessment/playerbots/playerbots-integration-plan.md` — Playerbots constraints and phases
 - `scripts/build-trinitycore-master.ps1` — canonical local build script (auto-detects evry paths)
+- `scripts/validate-rank5-deaths-embrace.ps1` — Rank 5 R5-A guard (code + log grep + SpellEffect layout)
 - `doc/` — upstream TrinityCore how-tos (`HowToScript.txt`, `UnixInstall.txt`, …)
 - `docs/midnight-assessment/reference-trees-and-standards.md` — reference tree paths + AC/module standards
 - `docs/midnight-assessment/sql-update-conventions.md` — SQL update naming + upstream sync
