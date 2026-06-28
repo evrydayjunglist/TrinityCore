@@ -90,6 +90,7 @@ After changes (unless user says otherwise): when a module system exists,
 - `docs/midnight-assessment/fork-journal.md` — infra, upstream merges, repo hygiene chronology
 - `docs/midnight-assessment/successful-local-baseline.md` — build/run/login (confirmed 2026-06-25; re-verify after upstream merges)
 - `docs/midnight-assessment/build-and-run-readiness.md` — build/run gates + module pitfalls
+- `docs/midnight-assessment/upstream-core-maintenance.md` — server log triage; upstream drift + ROI fix backlog (`scripts/parse-server-log-inventory.py`)
 - `docs/midnight-assessment/module-support-prereq.md` — module guardrails (target design)
 - `docs/midnight-assessment/playerbots/playerbots-integration-plan.md` — Playerbots constraints and phases
 - `scripts/build-trinitycore-master.ps1` — canonical local build script (auto-detects evry paths)
