@@ -25,6 +25,11 @@ Three tracks coexist — **follow the user's current task.** Full detail:
 
 Default path for all tracks: human Battle.net login on `MODULES=none`.
 
+**Fix quality (fork mottos):** **Non-hacky by default** and **We don't break things**
+— retail/sniff/DB2 evidence, minimal portable diffs, baseline protected. Full bar:
+[`project-focus.md` § Fork mottos](docs/midnight-assessment/project-focus.md#fork-mottos).
+Scoped tasks: [`agent-task-handoff-template.md`](docs/midnight-assessment/agent-task-handoff-template.md).
+
 ## Reference vs implementation
 
 | Path | Role | Modify? | Build? |
@@ -81,6 +86,9 @@ After changes (unless user says otherwise): when a module system exists,
 `MODULES=none` must build; human login must still work per
 `docs/midnight-assessment/successful-local-baseline.md`.
 
+**Local paths (this checkout):** [`successful-local-baseline.md`](docs/midnight-assessment/successful-local-baseline.md) § Local machine paths.
+**Live retail sniff:** [`retail-packet-sniff-workflow.md`](docs/midnight-assessment/retail-packet-sniff-workflow.md) + `scripts/retail-sniff-capture.ps1`.
+
 ## Key docs
 
 - `docs/midnight-assessment/project-focus.md` — **canonical fork steering** (work tracks, routing)
@@ -90,15 +98,20 @@ After changes (unless user says otherwise): when a module system exists,
 - `docs/midnight-assessment/fork-journal.md` — infra, upstream merges, repo hygiene chronology
 - `docs/midnight-assessment/successful-local-baseline.md` — build/run/login (confirmed 2026-06-25; re-verify after upstream merges)
 - `docs/midnight-assessment/build-and-run-readiness.md` — build/run gates + module pitfalls
-- `docs/midnight-assessment/upstream-core-maintenance.md` — server log triage; upstream drift + ROI fix backlog (`scripts/parse-server-log-inventory.py`)
-- `docs/midnight-assessment/upstream-core-maintenance-rank1-handoff.md` — Rank 1 startup quick wins (agent handoff)
+- `docs/midnight-assessment/upstream-core-maintenance.md` — server log triage; upstream drift + ROI fix backlog; **retail-ready by default** (owner approval for non-retail stubs)
+- `docs/midnight-assessment/upstream-core-maintenance-rank1-handoff.md` — Rank 1 startup quick wins (**complete**)
+- `docs/midnight-assessment/upstream-core-maintenance-rank2-handoff.md` — Rank 2 guild challenge re-enqueue (**complete** 2026-06-28)
+- `docs/midnight-assessment/upstream-core-maintenance-rank3-rank4-handoff.md` — Rank 3–4 batch spell scripts (**complete** 2026-06-28)
+- `docs/midnight-assessment/upstream-core-maintenance-rank2-retail-sniff-2026-06-27.md` — Rank 2 retail packet evidence (Captures C/D live retail; not evry realm)
 - `docs/midnight-assessment/module-support-prereq.md` — module guardrails (target design)
 - `docs/midnight-assessment/playerbots/playerbots-integration-plan.md` — Playerbots constraints and phases
 - `scripts/build-trinitycore-master.ps1` — canonical local build script (auto-detects evry paths)
 - `doc/` — upstream TrinityCore how-tos (`HowToScript.txt`, `UnixInstall.txt`, …)
 - `docs/midnight-assessment/reference-trees-and-standards.md` — reference tree paths + AC/module standards
 - `docs/midnight-assessment/sql-update-conventions.md` — SQL update naming + upstream sync
-- `docs/midnight-assessment/retail-data-first-checklist.md` — **before hardcoding client ids:** grep DB2, map packet fields, self-review (warband placements case study)
+- `docs/midnight-assessment/retail-data-first-checklist.md` — **before hardcoding client ids:** grep DB2, map packet fields, self-review
+- `docs/midnight-assessment/retail-packet-sniff-workflow.md` — **live retail** Ymir + WowPacketParser agent/owner loop
+- `docs/midnight-assessment/agent-task-handoff-template.md` — **paste/read first** for scoped agent tasks (rules, sworn acknowledgment, task brief, closeout)
 - `docs/midnight-assessment/warbands/char-select-campsites-handoff.md` — char-select campsites (**complete** user 2026-06-27; not in-game housing)
 - `docs/midnight-assessment/warbands/warbands-overall-handoff.md` — **warbands overall** (Phases 1 + 1.5 + **2 complete** user 2026-06-27; Phase 3–4 next)
 - `docs/midnight-assessment/warbands/warbands-phase2-account-wide-currency-handoff.md` — Phase 2 account-wide currency **complete** (implementation spec + R1–R3 follow-ups)
