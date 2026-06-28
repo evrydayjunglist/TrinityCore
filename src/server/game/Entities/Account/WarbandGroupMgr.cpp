@@ -215,6 +215,57 @@ bool WarbandGroupMgr::ReplaceGroups(std::vector<WorldPackets::Character::SetupWa
     return true;
 }
 
+bool WarbandGroupMgr::RemoveMember(ObjectGuid guid)
+{
+    if (!guid)
+        return false;
+
+    bool removed = false;
+    for (StoredGroup& group : _groups)
+    {
+        auto memberItr = group.Members.begin();
+        while (memberItr != group.Members.end())
+        {
+            if (memberItr->Type == 0 && memberItr->Guid == guid)
+            {
+                memberItr = group.Members.erase(memberItr);
+                removed = true;
+            }
+            else
+                ++memberItr;
+        }
+    }
+
+    if (removed)
+        SaveToDB();
+
+    return removed;
+}
+
+bool WarbandGroupMgr::PruneInvalidMembers(std::unordered_set<ObjectGuid> const& validCharacterGuids)
+{
+    bool changed = false;
+    for (StoredGroup& group : _groups)
+    {
+        auto memberItr = group.Members.begin();
+        while (memberItr != group.Members.end())
+        {
+            if (memberItr->Type == 0 && !memberItr->Guid.IsEmpty() && !validCharacterGuids.contains(memberItr->Guid))
+            {
+                memberItr = group.Members.erase(memberItr);
+                changed = true;
+            }
+            else
+                ++memberItr;
+        }
+    }
+
+    if (changed)
+        SaveToDB();
+
+    return changed;
+}
+
 std::vector<WorldPackets::Character::WarbandGroup> WarbandGroupMgr::BuildEnumGroups() const
 {
     std::vector<WorldPackets::Character::WarbandGroup> result;
@@ -270,7 +321,7 @@ void WarbandGroupMgr::SaveToDB()
 
         for (StoredMember const& member : group.Members)
         {
-            if (member.Type == 0 && !member.Guid)
+            if (member.Type == 0 && member.Guid.IsEmpty())
                 continue;
 
             stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_BNET_WARBAND_GROUP_MEMBER);

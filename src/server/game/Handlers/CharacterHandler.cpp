@@ -490,11 +490,19 @@ void WorldSession::HandleCharEnum(CharacterDatabaseQueryHolder const& holder)
 
     std::vector<ObjectGuid> accountCharacterGuids;
     accountCharacterGuids.reserve(charEnum.Characters.size());
+    std::unordered_set<ObjectGuid> validCharacterGuids;
+    validCharacterGuids.reserve(charEnum.Characters.size());
     for (WorldPackets::Character::EnumCharactersResult::CharacterInfo const& charInfo : charEnum.Characters)
+    {
         accountCharacterGuids.push_back(charInfo.Basic.Guid);
+        validCharacterGuids.insert(charInfo.Basic.Guid);
+    }
 
     if (!charEnum.IsDeletedCharacters)
+    {
+        _warbandGroupMgr->PruneInvalidMembers(validCharacterGuids);
         _warbandGroupMgr->EnsureDefaultGroup(accountCharacterGuids);
+    }
 
     charEnum.WarbandGroups = _warbandGroupMgr->BuildEnumGroups();
 
@@ -1111,6 +1119,8 @@ void WorldSession::HandleCharDeleteOpcode(WorldPackets::Character::CharDelete& c
 
     sCalendarMgr->RemoveAllPlayerEventsAndInvites(charDelete.Guid);
     Player::DeleteFromDB(charDelete.Guid, accountId);
+
+    _warbandGroupMgr->RemoveMember(charDelete.Guid);
 
     SendCharDelete(CHAR_DELETE_SUCCESS);
 }
