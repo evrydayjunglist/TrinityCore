@@ -484,6 +484,36 @@ LOCK TABLES `battlenet_account_transmog_outfits` WRITE;
 UNLOCK TABLES;
 
 --
+-- Table structure for table `battlenet_account_currency`
+--
+
+DROP TABLE IF EXISTS `battlenet_account_currency`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `battlenet_account_currency` (
+  `battlenetAccountId` int unsigned NOT NULL,
+  `Currency` smallint unsigned NOT NULL,
+  `Quantity` int unsigned NOT NULL,
+  `WeeklyQuantity` int unsigned NOT NULL DEFAULT '0',
+  `TrackedQuantity` int unsigned NOT NULL DEFAULT '0',
+  `IncreasedCapQuantity` int unsigned NOT NULL DEFAULT '0',
+  `EarnedQuantity` int unsigned NOT NULL DEFAULT '0',
+  `Flags` tinyint unsigned NOT NULL DEFAULT '0',
+  PRIMARY KEY (`battlenetAccountId`,`Currency`),
+  CONSTRAINT `fk_battlenet_account_currency__accountId` FOREIGN KEY (`battlenetAccountId`) REFERENCES `battlenet_accounts` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Account-wide currencies (CurrencyTypesFlags::AccountWide)';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `battlenet_account_currency`
+--
+
+LOCK TABLES `battlenet_account_currency` WRITE;
+/*!40000 ALTER TABLE `battlenet_account_currency` DISABLE KEYS */;
+/*!40000 ALTER TABLE `battlenet_account_currency` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `battlenet_account_warband_scenes`
 --
 
