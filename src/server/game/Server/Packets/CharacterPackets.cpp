@@ -22,6 +22,7 @@
 #include "ObjectMgr.h"
 #include "PacketOperators.h"
 #include "Player.h"
+#include "WarbandGroupMgr.h"
 #include "World.h"
 
 namespace UF
@@ -426,9 +427,22 @@ ByteBuffer& operator>>(ByteBuffer& data, SetupWarbandGroup& warbandGroup)
 
 void SetupWarbandGroups::Read()
 {
-    _worldPacket >> Size<uint32>(Groups);
-    for (SetupWarbandGroup& group : Groups)
-        _worldPacket >> group;
+    // Retail CMSG (12.0.7.68275): byte0 = groupCount << 3 (sniff: 0x08=1, 0x10=2, 0x18=3, 0x20=4); then concatenated groups.
+    // Do not use Size<uint32> at offset 0 (mis-reads as 264). Do not read until EOF — SizedString FlushBits()
+    // appends during read and inflates size(), causing a spurious extra group parse on multi-camp payloads.
+    uint8 header;
+    _worldPacket >> header;
+
+    uint32 groupCount = header >> 3;
+    if (groupCount > WarbandGroupMgr::MaxWarbandGroups)
+        return;
+
+    Groups.resize(groupCount);
+    for (uint32 i = 0; i < groupCount; ++i)
+    {
+        _worldPacket.ResetBitPos();
+        _worldPacket >> Groups[i];
+    }
 }
 
 EnumCharactersResult::CharacterInfo::CharacterInfo(Field const* fields) : Basic(fields)
