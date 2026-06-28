@@ -95,7 +95,12 @@ After changes (unless user says otherwise): when a module system exists,
 - `doc/` — upstream TrinityCore how-tos (`HowToScript.txt`, `UnixInstall.txt`, …)
 - `docs/midnight-assessment/reference-trees-and-standards.md` — reference tree paths + AC/module standards
 - `docs/midnight-assessment/sql-update-conventions.md` — SQL update naming + upstream sync
+- `docs/midnight-assessment/retail-data-first-checklist.md` — **before hardcoding client ids:** grep DB2, map packet fields, self-review (warband placements case study)
 - `docs/midnight-assessment/char-select-campsites-handoff.md` — char-select campsites (**complete** user 2026-06-27; not in-game housing)
+- `docs/midnight-assessment/warbands-overall-handoff.md` — **warbands overall** (Phase 1 + **1.5 complete** user 2026-06-27; Phases 2–4)
+- `docs/midnight-assessment/warbands-phase1-list-packet-handoff.md` — Phase 1 + 1.5 **debugging record** + code review (**hacks vs stubs vs assumptions**; playtest complete 2026-06-27)
+- `docs/midnight-assessment/warbands-retail-sniff-2026-06-27.md` — retail sniff `12.0.7.68275` (Capture A: Phase 4 bank; Capture B: Phase 1 transfer wire format)
+- `docs/midnight-assessment/warbands-agent-intro.md` — **paste/read first** for agents starting in-game warbands work
 - `docs/midnight-assessment/dracthyr-forbidden-reach-handoff.md` — side project: Dracthyr intro overview; **§8 evidence/gap labels**
 - `docs/midnight-assessment/dracthyr-phase-1b-handoff.md` — Phase 1b lower War Creche (mostly done; playtest bugs B1–B3)
 - `docs/midnight-assessment/dracthyr-intro-quest-popup-decline-handoff.md` — **R2 done:** Accept/Decline **64864** (`OfferedScriptQuestID` + `ACCEPT_QUEST` grant)
