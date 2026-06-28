@@ -88,7 +88,7 @@ After changes (unless user says otherwise): when a module system exists,
 - `docs/new-agent-intro.md` — complete agent introduction
 - `docs/midnight-assessment/current-state.md` — canonical living status
 - `docs/midnight-assessment/fork-journal.md` — infra, upstream merges, repo hygiene chronology
-- `docs/midnight-assessment/successful-local-baseline.md` — build/run/login (to be verified)
+- `docs/midnight-assessment/successful-local-baseline.md` — build/run/login (confirmed 2026-06-25; re-verify after upstream merges)
 - `docs/midnight-assessment/build-and-run-readiness.md` — build/run gates + module pitfalls
 - `docs/midnight-assessment/module-support-prereq.md` — module guardrails (target design)
 - `docs/midnight-assessment/playerbots-integration-plan.md` — Playerbots constraints and phases
