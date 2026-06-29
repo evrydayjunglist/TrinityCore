@@ -9,6 +9,16 @@ for fork steering; retail-parity work usually lives in `src/server/scripts/` and
 
 Full reference standards: [`docs/midnight-assessment/reference-trees-and-standards.md`](../docs/midnight-assessment/reference-trees-and-standards.md)
 
+**Reference trees (read-only, under `BfaCore-Reforged/` when present on disk):**
+
+| Path | Skim for |
+|------|----------|
+| `azerothcore-wotlk-master/` | AC-likeness |
+| `azerothcore-wotlk-Playerbot/` | AC + Playerbot branch |
+| `mod-playerbots-master/` | mod-playerbots north star |
+
+Primary-track motto: [`project-focus.md` § mod-playerbots north star](../docs/midnight-assessment/project-focus.md#mod-playerbots-north-star-primary-track).
+
 **Platform note:** The git path is lowercase **`modules/`** (matches CMake
 `add_subdirectory(modules)` and AzerothCore convention). Previously tracked as
 `Modules/` on Windows-only case-insensitive checkouts; renamed for Linux parity.
@@ -64,7 +74,7 @@ modules/mod-playerbots/conf/mod-playerbots.conf.dist
 
 ## Playerbots (Gate 1 complete)
 
-The compile-only stub lives at `modules/mod-playerbots/` (loader, `.playerbots status`,
+The compile-only stub lives at `modules/mod-playerbots/` (loader, `.playerbot status`,
 `mod-playerbots.conf.dist`). Opt-in via `-DMODULES=static -DMODULE_MOD_PLAYERBOTS=static`;
 default `MODULES=none` leaves it under **disabled**, not linked.
 
