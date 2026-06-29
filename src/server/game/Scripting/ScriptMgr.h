@@ -791,6 +791,9 @@ class TC_GAME_API PlayerScript : public ScriptObject
 
         // Called when a player completes a movie
         virtual void OnMovieComplete(Player* player, uint32 movieId);
+
+        // Called at the end of Player::Update (after teleport handling).
+        virtual void OnPlayerAfterUpdate(Player* player, uint32 diff);
 };
 
 class TC_GAME_API AccountScript : public ScriptObject
@@ -1245,6 +1248,7 @@ class TC_GAME_API ScriptMgr
         void OnQuestStatusChange(Player* player, uint32 questId);
         void OnPlayerRepop(Player* player);
         void OnMovieComplete(Player* player, uint32 movieId);
+        void OnPlayerAfterUpdate(Player* player, uint32 diff);
         void OnPlayerChoiceResponse(WorldObject* object, Player* player, PlayerChoice const* choice, PlayerChoiceResponse const* response, uint16 clientIdentifier);
 
     public: /* AccountScript */

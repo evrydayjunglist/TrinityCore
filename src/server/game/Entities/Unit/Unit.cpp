@@ -10181,6 +10181,21 @@ void Unit::PushAI(UnitAI* newAI)
 
 void Unit::SetAI(UnitAI* newAI)
 {
+    // Playerbots (mod-playerbots): bot players use PlayerbotsMgr + OnPlayerAfterUpdate,
+    // not TC charmed-player UnitAI. See docs/midnight-assessment/playerbots/playerbots-ac-contract-handoff.md
+    if (Player* player = ToPlayer())
+    {
+        if (WorldSession* session = player->GetSession())
+        {
+            if (session->IsBotSession())
+            {
+                TC_LOG_ERROR("entities.player", "Unit::SetAI: refused for bot session player '{}' ({}) — use PlayerbotsMgr / GET_PLAYERBOT_AI, not UnitAI",
+                    player->GetName(), player->GetGUID().ToString());
+                return;
+            }
+        }
+    }
+
     PushAI(newAI);
     RefreshAI();
 }

@@ -1122,6 +1122,13 @@ void Player::Update(uint32 p_time)
         SetTeleportState(TeleportState::NotTeleporting); // skip state check inside TeleportTo
         TeleportTo(m_teleport_dest, m_teleport_options, m_teleportSpellId);
     }
+
+    sScriptMgr->OnPlayerAfterUpdate(this, p_time);
+}
+
+bool Player::IsBot() const
+{
+    return GetSession() && GetSession()->IsBotSession();
 }
 
 void Player::Heartbeat()
