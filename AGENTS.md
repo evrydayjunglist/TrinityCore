@@ -110,6 +110,7 @@ After changes (unless user says otherwise): when a module system exists,
 - `docs/midnight-assessment/successful-local-baseline.md` — build/run/login (confirmed 2026-06-25; re-verify after upstream merges)
 - `docs/midnight-assessment/build-and-run-readiness.md` — build/run gates + module pitfalls
 - `docs/midnight-assessment/upstream-core-maintenance/upstream-core-maintenance.md` — server log triage; upstream drift + ROI fix backlog; **retail-ready by default** (owner approval for non-retail stubs); **agent validation warnings** (grep ≠ gameplay, `GetAura`, port **8085**)
+- `docs/midnight-assessment/upstream-core-maintenance/upstream-core-maintenance-talent-reset-popup-handoff.md` — ad-hoc playtest fix: spurious talent reset popup on login/level-up (**complete** build 2026-06-28; owner playtest pending)
 - `docs/midnight-assessment/upstream-db-maintenance.md` — **DBErrors.log** triage (world SQL drift); **delete log before fresh capture** (appends by default); ROI rank **1 partial** (batch closed), ranks **2–12** open; parser `parse-dberrors-log-inventory.py`
 - `docs/midnight-assessment/upstream-db-maintenance-rank1-handoff.md` — DB Rank 1 creature faction (**partial — batch closed**; ~60k tail **NYI**)
 - `docs/midnight-assessment/upstream-core-maintenance/upstream-core-maintenance-rank1-handoff.md` — Rank 1 startup quick wins (**complete**)
