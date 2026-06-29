@@ -15,13 +15,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-void AddPlayerbotsCommandscripts();
-void AddSC_mod_playerbots_player_script();
-void AddSC_mod_playerbots_world_script();
+#include "Action.h"
+#include "BotPlayerbotAI.h"
+#include "PlayerbotAIBase.h"
+#include "Player.h"
 
-void Addmod_playerbotsScripts()
+Player* Action::GetBot() const
 {
-    AddPlayerbotsCommandscripts();
-    AddSC_mod_playerbots_player_script();
-    AddSC_mod_playerbots_world_script();
+    return _botAI ? _botAI->GetBot() : nullptr;
 }

@@ -15,13 +15,35 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-void AddPlayerbotsCommandscripts();
-void AddSC_mod_playerbots_player_script();
-void AddSC_mod_playerbots_world_script();
+#include "ScriptMgr.h"
+#include "PlayerbotsConfig.h"
+#include "RandomPlayerbotMgr.h"
 
-void Addmod_playerbotsScripts()
+class mod_playerbots_world_script : public WorldScript
 {
-    AddPlayerbotsCommandscripts();
-    AddSC_mod_playerbots_player_script();
-    AddSC_mod_playerbots_world_script();
+public:
+    mod_playerbots_world_script() : WorldScript("mod_playerbots_world_script") { }
+
+    void OnStartup() override
+    {
+        if (Playerbots::IsEnabled())
+            sRandomPlayerbotMgr->Init();
+    }
+
+    void OnUpdate(uint32 diff) override
+    {
+        if (Playerbots::IsEnabled())
+            sRandomPlayerbotMgr->Update(diff);
+    }
+
+    void OnShutdown() override
+    {
+        if (Playerbots::IsEnabled())
+            sRandomPlayerbotMgr->Shutdown();
+    }
+};
+
+void AddSC_mod_playerbots_world_script()
+{
+    new mod_playerbots_world_script();
 }

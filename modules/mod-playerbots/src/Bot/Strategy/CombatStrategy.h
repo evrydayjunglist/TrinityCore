@@ -15,13 +15,22 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-void AddPlayerbotsCommandscripts();
-void AddSC_mod_playerbots_player_script();
-void AddSC_mod_playerbots_world_script();
+#ifndef TRINITY_PLAYERBOT_COMBAT_STRATEGY_H
+#define TRINITY_PLAYERBOT_COMBAT_STRATEGY_H
 
-void Addmod_playerbotsScripts()
+#include "Strategy.h"
+
+class BotPlayerbotAI;
+
+// AC reference: mod-playerbots-master/src/Ai/Base/Strategy/CombatStrategy.h (minimal Gate 8)
+class CombatStrategy : public Strategy
 {
-    AddPlayerbotsCommandscripts();
-    AddSC_mod_playerbots_player_script();
-    AddSC_mod_playerbots_world_script();
-}
+public:
+    explicit CombatStrategy(BotPlayerbotAI* botAI) : Strategy(botAI) { }
+
+    std::string GetName() override { return "attack"; }
+    uint32 GetType() const override { return STRATEGY_TYPE_COMBAT; }
+    std::vector<NextAction> GetDefaultActions() override;
+};
+
+#endif

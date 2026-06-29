@@ -15,13 +15,28 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-void AddPlayerbotsCommandscripts();
-void AddSC_mod_playerbots_player_script();
-void AddSC_mod_playerbots_world_script();
+#include "AiObjectContext.h"
 
-void Addmod_playerbotsScripts()
+AiObjectContext::AiObjectContext(BotPlayerbotAI* botAI) : PlayerbotAIAware(botAI) { }
+
+void AiObjectContext::RegisterStrategy(std::string const& name, std::unique_ptr<Strategy> strategy)
 {
-    AddPlayerbotsCommandscripts();
-    AddSC_mod_playerbots_player_script();
-    AddSC_mod_playerbots_world_script();
+    _strategies[name] = std::move(strategy);
+}
+
+Strategy* AiObjectContext::GetStrategy(std::string const& name)
+{
+    auto itr = _strategies.find(name);
+    return itr != _strategies.end() ? itr->second.get() : nullptr;
+}
+
+void AiObjectContext::RegisterAction(std::string const& name, std::unique_ptr<Action> action)
+{
+    _actions[name] = std::move(action);
+}
+
+Action* AiObjectContext::GetAction(std::string const& name)
+{
+    auto itr = _actions.find(name);
+    return itr != _actions.end() ? itr->second.get() : nullptr;
 }

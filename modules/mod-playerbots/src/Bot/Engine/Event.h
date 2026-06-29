@@ -15,13 +15,22 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-void AddPlayerbotsCommandscripts();
-void AddSC_mod_playerbots_player_script();
-void AddSC_mod_playerbots_world_script();
+#ifndef TRINITY_PLAYERBOT_EVENT_H
+#define TRINITY_PLAYERBOT_EVENT_H
 
-void Addmod_playerbotsScripts()
+#include <string>
+
+// Minimal Event stub for Gate 6 engine tick path.
+class Event
 {
-    AddPlayerbotsCommandscripts();
-    AddSC_mod_playerbots_player_script();
-    AddSC_mod_playerbots_world_script();
-}
+public:
+    Event() = default;
+    explicit Event(std::string source) : _source(std::move(source)) { }
+
+    std::string const& GetSource() const { return _source; }
+
+private:
+    std::string _source;
+};
+
+#endif

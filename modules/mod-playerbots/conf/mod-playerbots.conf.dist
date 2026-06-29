@@ -1,10 +1,87 @@
 ###############################################################################
-# Playerbots module (Gate 1 compile-only stub)
+# Playerbots module
 #
 # Copied to bin/.../modules/mod-playerbots.conf.dist at build time.
 # Override with modules/mod-playerbots.conf beside worldserver.exe (not overwritten).
 #
-# See modules/mod-playerbots/README.md and modules/README.md
+# Contract: docs/midnight-assessment/playerbots/playerbots-ac-contract-handoff.md
+# See modules/mod-playerbots/README.md
 ###############################################################################
 
+[mod-playerbots]
+
+#
+# Master switch. When 0, module commands are harmless no-ops / disabled messages.
+#
 Playerbots.Enable = 0
+
+#
+# Reserved game account ids for bot characters — TC adaptation (not AC account linking).
+#
+# Rules (locked contract):
+#   - Bot characters must live on accounts in this policy only.
+#   - Never use reserved ids for human Battle.net login.
+#   - One active socketless session per reserved account (Gate 3–4).
+#   - Set explicit Ids OR inclusive MinId/MaxId — Ids takes precedence when non-empty.
+#   - Empty / zero range = policy disabled until configured (.playerbot login rejected).
+#
+Playerbots.ReservedAccount.Ids =
+Playerbots.ReservedAccount.MinId = 0
+Playerbots.ReservedAccount.MaxId = 0
+
+#
+# Maximum concurrent socketless bot sessions (Gate 5+). Global cap across GM + master-alt bots.
+#
+Playerbots.MaxActiveBots = 1
+
+#
+# Master-alt control (Gate 7). AC analogues: allowAccountBots, maxAddedBots.
+#
+# AllowAccountBots — human can .playerbot bot add alts on the same auth.account.
+# MaxAddedBots — per-master cap (in addition to MaxActiveBots global cap).
+#
+Playerbots.AllowAccountBots = 1
+Playerbots.MaxAddedBots = 1
+
+#
+# Module logging verbosity (0 = off, 1+ = verbose).
+#
+Playerbots.LogLevel = 0
+
+#
+# Engine tick delays (Gate 6). AC analogues: reactDelay, globalCoolDown in PlayerbotAIConfig.h.
+#
+Playerbots.ReactDelay = 100
+Playerbots.GlobalCooldown = 500
+
+#
+# Follow distance for master-alt bots (Gate 8). AC analogue: formation max distance.
+#
+Playerbots.FollowDistance = 3.0
+
+#
+# Playerbots database (Gate 9) — AC-shaped dedicated DB (Option A core hook + module SQL).
+# Requires MODULE_MOD_PLAYERBOTS=static build with WITH_PLAYERBOTS.
+#
+# PlayerbotsDatabaseInfo = "127.0.0.1;3306;trinity;trinity;tc_playerbots"
+PlayerbotsDatabaseInfo =
+PlayerbotsDatabase.WorkerThreads = 1
+PlayerbotsDatabase.SynchThreads = 1
+Playerbots.Updates.EnableDatabases = 0
+
+#
+# Random bot population shell (Gate 9) — defaults off (opt-in).
+#
+Playerbots.MinRandomBots = 0
+Playerbots.MaxRandomBots = 0
+Playerbots.RandomBotAutologin = 0
+Playerbots.DisabledWithoutRealPlayer = 1
+#
+# Comma lists: reserved account ids and matching character names (same order).
+# Gate 9 interim: ONE online random bot per account (pair by index).
+# AC north-star goal: multiple chars on same rndbot account — Gate 11+ session model
+# (see docs/midnight-assessment/playerbots/playerbots-future-gates-roadmap.md).
+# Example: account 3 + char Three; account 4 + char Threethree (not both on account 3).
+#
+Playerbots.RandomBotAccounts =
+Playerbots.RandomBotCharacterNames =

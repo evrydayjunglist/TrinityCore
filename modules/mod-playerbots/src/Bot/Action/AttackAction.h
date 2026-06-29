@@ -15,13 +15,25 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-void AddPlayerbotsCommandscripts();
-void AddSC_mod_playerbots_player_script();
-void AddSC_mod_playerbots_world_script();
+#ifndef TRINITY_PLAYERBOT_ATTACK_ACTION_H
+#define TRINITY_PLAYERBOT_ATTACK_ACTION_H
 
-void Addmod_playerbotsScripts()
+#include "Action.h"
+
+class BotPlayerbotAI;
+class Player;
+class Unit;
+
+// AC reference: mod-playerbots-master/src/Ai/Base/Actions/AttackAction.h (minimal Gate 8)
+bool HasAttackableMasterTarget(BotPlayerbotAI* botAI, Player* bot);
+
+class AttackMyTargetAction : public Action
 {
-    AddPlayerbotsCommandscripts();
-    AddSC_mod_playerbots_player_script();
-    AddSC_mod_playerbots_world_script();
-}
+public:
+    AttackMyTargetAction(BotPlayerbotAI* botAI) : Action(botAI, "attack my target") { }
+
+    bool Execute(Event event) override;
+    bool IsUseful() override;
+};
+
+#endif

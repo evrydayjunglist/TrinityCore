@@ -15,13 +15,20 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-void AddPlayerbotsCommandscripts();
-void AddSC_mod_playerbots_player_script();
-void AddSC_mod_playerbots_world_script();
+#ifndef TRINITY_PLAYERBOT_AI_FACTORY_H
+#define TRINITY_PLAYERBOT_AI_FACTORY_H
 
-void Addmod_playerbotsScripts()
+#include <memory>
+
+class AiObjectContext;
+class BotPlayerbotAI;
+class Player;
+
+// AC reference: mod-playerbots-master/src/Bot/Factory/AiFactory.h (Midnight adapt)
+class AiFactory
 {
-    AddPlayerbotsCommandscripts();
-    AddSC_mod_playerbots_player_script();
-    AddSC_mod_playerbots_world_script();
-}
+public:
+    static std::unique_ptr<AiObjectContext> CreateContext(BotPlayerbotAI* botAI, Player* player);
+};
+
+#endif

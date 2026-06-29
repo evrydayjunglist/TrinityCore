@@ -15,13 +15,19 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-void AddPlayerbotsCommandscripts();
-void AddSC_mod_playerbots_player_script();
-void AddSC_mod_playerbots_world_script();
+#ifndef TRINITY_PLAYERBOT_AI_AWARE_H
+#define TRINITY_PLAYERBOT_AI_AWARE_H
 
-void Addmod_playerbotsScripts()
+class BotPlayerbotAI;
+
+// AC reference: mod-playerbots-master/src/Bot/Engine/PlayerbotAIAware.h
+class PlayerbotAIAware
 {
-    AddPlayerbotsCommandscripts();
-    AddSC_mod_playerbots_player_script();
-    AddSC_mod_playerbots_world_script();
-}
+public:
+    explicit PlayerbotAIAware(BotPlayerbotAI* botAI) : _botAI(botAI) { }
+
+protected:
+    BotPlayerbotAI* _botAI;
+};
+
+#endif

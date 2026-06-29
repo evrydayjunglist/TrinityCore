@@ -15,13 +15,13 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-void AddPlayerbotsCommandscripts();
-void AddSC_mod_playerbots_player_script();
-void AddSC_mod_playerbots_world_script();
+#ifndef TRINITY_MODULE_PLAYERBOTS_H
+#define TRINITY_MODULE_PLAYERBOTS_H
 
-void Addmod_playerbotsScripts()
-{
-    AddPlayerbotsCommandscripts();
-    AddSC_mod_playerbots_player_script();
-    AddSC_mod_playerbots_world_script();
-}
+#include "PlayerbotsMgr.h"
+
+// AC reference: Script/Playerbots.h
+#define GET_PLAYERBOT_AI(player) sPlayerbotsMgr->GetPlayerbotAI(player)
+#define GET_PLAYERBOT_MGR(player) sPlayerbotsMgr->GetPlayerbotMgr(player)
+
+#endif

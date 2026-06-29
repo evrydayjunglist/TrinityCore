@@ -15,13 +15,26 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-void AddPlayerbotsCommandscripts();
-void AddSC_mod_playerbots_player_script();
-void AddSC_mod_playerbots_world_script();
+#ifndef TRINITY_PLAYERBOTS_DATABASE_MGR_H
+#define TRINITY_PLAYERBOTS_DATABASE_MGR_H
 
-void Addmod_playerbotsScripts()
+#include "Define.h"
+#include <string>
+
+class PlayerbotsDatabaseMgr
 {
-    AddPlayerbotsCommandscripts();
-    AddSC_mod_playerbots_player_script();
-    AddSC_mod_playerbots_world_script();
-}
+public:
+    static PlayerbotsDatabaseMgr* instance();
+
+    bool IsConfigured() const;
+    bool IsConnected() const;
+    bool CheckVersion(uint32* versionOut = nullptr) const;
+    std::string GetStatusSummary() const;
+
+private:
+    PlayerbotsDatabaseMgr() = default;
+};
+
+#define sPlayerbotsDatabaseMgr PlayerbotsDatabaseMgr::instance()
+
+#endif

@@ -15,13 +15,34 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-void AddPlayerbotsCommandscripts();
-void AddSC_mod_playerbots_player_script();
-void AddSC_mod_playerbots_world_script();
+#ifndef TRINITY_PLAYERBOT_AI_BASE_H
+#define TRINITY_PLAYERBOT_AI_BASE_H
 
-void Addmod_playerbotsScripts()
+#include "Define.h"
+
+class Player;
+
+// Minimal AC-shaped tick shell (Gate 5). AC reference: Bot/Engine/PlayerbotAIBase.h
+class PlayerbotAIBase
 {
-    AddPlayerbotsCommandscripts();
-    AddSC_mod_playerbots_player_script();
-    AddSC_mod_playerbots_world_script();
-}
+public:
+    explicit PlayerbotAIBase(Player* bot);
+
+    bool CanUpdateAI() const;
+    void UpdateAI(uint32 diff);
+
+    Player* GetBot() const { return _bot; }
+
+protected:
+    virtual void UpdateAIInternal(uint32 /*diff*/) { }
+
+    void SetNextCheckDelay(uint32 delay);
+
+private:
+    Player* _bot;
+    uint32 _nextAICheckDelay = 0;
+
+    static constexpr uint32 MIN_AI_UPDATE_DELAY_MS = 100;
+};
+
+#endif

@@ -15,13 +15,38 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-void AddPlayerbotsCommandscripts();
-void AddSC_mod_playerbots_player_script();
-void AddSC_mod_playerbots_world_script();
+#include "PlayerbotAIBase.h"
+#include "PlayerbotsConfig.h"
+#include "Player.h"
+#include <algorithm>
 
-void Addmod_playerbotsScripts()
+PlayerbotAIBase::PlayerbotAIBase(Player* bot) : _bot(bot)
 {
-    AddPlayerbotsCommandscripts();
-    AddSC_mod_playerbots_player_script();
-    AddSC_mod_playerbots_world_script();
+}
+
+bool PlayerbotAIBase::CanUpdateAI() const
+{
+    return _nextAICheckDelay == 0;
+}
+
+void PlayerbotAIBase::UpdateAI(uint32 diff)
+{
+    if (_nextAICheckDelay > diff)
+    {
+        _nextAICheckDelay -= diff;
+        return;
+    }
+
+    _nextAICheckDelay = 0;
+
+    if (!CanUpdateAI())
+        return;
+
+    UpdateAIInternal(diff);
+    SetNextCheckDelay(std::max(Playerbots::GetReactDelay(), MIN_AI_UPDATE_DELAY_MS));
+}
+
+void PlayerbotAIBase::SetNextCheckDelay(uint32 delay)
+{
+    _nextAICheckDelay = delay;
 }

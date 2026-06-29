@@ -15,13 +15,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-void AddPlayerbotsCommandscripts();
-void AddSC_mod_playerbots_player_script();
-void AddSC_mod_playerbots_world_script();
+#include "FollowMasterStrategy.h"
 
-void Addmod_playerbotsScripts()
+std::vector<NextAction> FollowMasterStrategy::GetDefaultActions()
 {
-    AddPlayerbotsCommandscripts();
-    AddSC_mod_playerbots_player_script();
-    AddSC_mod_playerbots_world_script();
+    return { NextAction("follow", 1.0f) };
 }
