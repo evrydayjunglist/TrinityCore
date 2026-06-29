@@ -574,7 +574,10 @@ class TC_GAME_API World
         static std::atomic<uint32> m_worldLoopCounter;
 
         WorldSession* FindSession(uint32 id) const;
+        WorldSession* FindBotSession(uint32 accountId) const;
         void AddSession(WorldSession* s);
+        void AddBotSession(WorldSession* s);
+        void RemoveBotSession(uint32 accountId);
         void AddInstanceSocket(std::weak_ptr<WorldSocket> sock, uint64 connectToKey);
         void SendAutoBroadcast();
         bool RemoveSession(uint32 id);
@@ -838,6 +841,7 @@ class TC_GAME_API World
         time_t blackmarket_timer;
 
         SessionMap m_sessions;
+        SessionMap m_botSessionsByAccount;
         std::unordered_multimap<ObjectGuid, WorldSession*> m_sessionsByBnetGuid;
         typedef std::unordered_map<uint32, time_t> DisconnectMap;
         DisconnectMap m_disconnects;

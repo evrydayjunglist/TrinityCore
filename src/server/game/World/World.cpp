@@ -185,6 +185,12 @@ World::~World()
         m_sessions.erase(m_sessions.begin());
     }
 
+    while (!m_botSessionsByAccount.empty())
+    {
+        delete m_botSessionsByAccount.begin()->second;
+        m_botSessionsByAccount.erase(m_botSessionsByAccount.begin());
+    }
+
     CliCommandHolder* command = nullptr;
     while (cliCmdQueue.next(command))
         delete command;
@@ -330,6 +336,44 @@ WorldSession* World::FindSession(uint32 id) const
         return itr->second;                                 // also can return nullptr for kicked session
     else
         return nullptr;
+}
+
+WorldSession* World::FindBotSession(uint32 accountId) const
+{
+    SessionMap::const_iterator itr = m_botSessionsByAccount.find(accountId);
+    return itr != m_botSessionsByAccount.end() ? itr->second : nullptr;
+}
+
+void World::AddBotSession(WorldSession* s)
+{
+    ASSERT(s && s->IsBotSession());
+
+    SessionMap::const_iterator existing = m_sessions.find(s->GetAccountId());
+    if (existing != m_sessions.end() && existing->second && !existing->second->IsBotSession())
+    {
+        if (m_botSessionsByAccount.contains(s->GetAccountId()))
+        {
+            s->KickPlayer("World::AddBotSession duplicate bot session on account with human");
+            delete s;
+            return;
+        }
+
+        m_botSessionsByAccount[s->GetAccountId()] = s;
+        s->InitializeSession();
+        return;
+    }
+
+    AddSession(s);
+}
+
+void World::RemoveBotSession(uint32 accountId)
+{
+    SessionMap::iterator itr = m_botSessionsByAccount.find(accountId);
+    if (itr == m_botSessionsByAccount.end())
+        return;
+
+    delete itr->second;
+    m_botSessionsByAccount.erase(itr);
 }
 
 /// Remove a given session
@@ -2975,6 +3019,21 @@ void World::UpdateSessions(uint32 diff)
             RemoveQueuedPlayer(pSession);
             m_sessions.erase(itr);
             Trinity::Containers::MultimapErasePair(m_sessionsByBnetGuid, pSession->GetBattlenetAccountGUID(), pSession);
+            delete pSession;
+        }
+    }
+
+    for (SessionMap::iterator itr = m_botSessionsByAccount.begin(), next; itr != m_botSessionsByAccount.end(); itr = next)
+    {
+        next = itr;
+        ++next;
+
+        WorldSession* pSession = itr->second;
+        WorldSessionFilter updater(pSession);
+
+        if (!pSession->Update(diff, updater))
+        {
+            m_botSessionsByAccount.erase(itr);
             delete pSession;
         }
     }

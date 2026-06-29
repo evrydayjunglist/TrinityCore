@@ -1180,6 +1180,41 @@ void WorldSession::HandleContinuePlayerLogin()
     });
 }
 
+void WorldSession::LoginBotCharacter(ObjectGuid characterGuid)
+{
+    if (PlayerLoading() || GetPlayer())
+    {
+        TC_LOG_ERROR("network", "LoginBotCharacter: session already loading or has player, AccountId = {}", GetAccountId());
+        return;
+    }
+
+    if (sCharacterCache->GetCharacterAccountIdByGuid(characterGuid) != GetAccountId())
+    {
+        TC_LOG_ERROR("network", "LoginBotCharacter: character {} does not belong to account {}", characterGuid.ToString(), GetAccountId());
+        return;
+    }
+
+    m_playerLoading = characterGuid;
+
+    TC_LOG_DEBUG("network", "LoginBotCharacter: character {} on account {}", characterGuid.ToString(), GetAccountId());
+
+    std::shared_ptr<LoginQueryHolder> holder = std::make_shared<LoginQueryHolder>(GetAccountId(), m_playerLoading);
+    if (!holder->Initialize())
+    {
+        m_playerLoading.Clear();
+        return;
+    }
+
+    // Skip SendConnectToInstance / SMSG_RESUME_COMMS / CMSG_QUEUED_MESSAGES_END; synthesize time sync for transport flags.
+    RegisterTimeSync(SPECIAL_RESUME_COMMS_TIME_SYNC_COUNTER);
+    HandleTimeSync(SPECIAL_RESUME_COMMS_TIME_SYNC_COUNTER, GameTime::GetGameTimeMS(), std::chrono::steady_clock::now());
+
+    AddQueryHolderCallback(CharacterDatabase.DelayQueryHolder(holder)).AfterComplete([this](SQLQueryHolderBase const& holder)
+    {
+        HandlePlayerLogin(static_cast<LoginQueryHolder const&>(holder));
+    });
+}
+
 void WorldSession::AbortLogin(WorldPackets::Character::LoginFailureReason reason)
 {
     if (!PlayerLoading() || GetPlayer())
@@ -1209,6 +1244,12 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
     if (!pCurrChar->LoadFromDB(playerGuid, holder))
     {
         SetPlayer(nullptr);
+        if (IsBotSession())
+        {
+            delete pCurrChar;
+            m_playerLoading.Clear();
+            return;
+        }
         KickPlayer("WorldSession::HandlePlayerLogin Player::LoadFromDB failed"); // disconnect client, player no set to session and it will not deleted or saved at kick
         delete pCurrChar;                                   // delete it manually
         m_playerLoading.Clear();

@@ -205,6 +205,7 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     _RBACData(nullptr),
     expireTime(60000), // 1 min after socket loss, session is deleted
     forceExit(false),
+    m_isBotSession(false),
     _timeSyncClockDeltaQueue(std::make_unique<boost::circular_buffer<std::pair<int64, uint32>>>(6)),
     _timeSyncClockDelta(0),
     _pendingTimeSyncRequests(),
@@ -224,6 +225,30 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     }
 
     _instanceConnectKey.Raw = UI64LIT(0);
+}
+
+WorldSession* WorldSession::CreateForBot(uint32 accountId, std::string accountName, AccountTypes sec, uint8 expansion)
+{
+    uint32 clientBuild = 68275;
+    if (std::shared_ptr<Realm const> realm = sRealmList->GetCurrentRealm())
+        clientBuild = realm->Build;
+
+    ClientBuild::VariantId const buildVariant =
+    {
+        .Platform = ClientBuild::Platform::Win_x64,
+        .Arch = ClientBuild::Arch::x64,
+        .Type = ClientBuild::Type::Retail
+    };
+
+    WorldSession* session = new WorldSession(accountId, std::move(accountName), 0, std::string(),
+        nullptr, sec, expansion, 0, std::string("Bot"), Minutes(0),
+        clientBuild, buildVariant, LOCALE_enUS, 0, false);
+
+    session->m_isBotSession = true;
+    session->m_Address = "bot";
+    session->LoadPermissions();
+
+    return session;
 }
 
 /// WorldSession destructor
@@ -288,6 +313,13 @@ std::string WorldSession::GetPlayerInfo() const
 /// Send a packet to the client
 void WorldSession::SendPacket(WorldPacket const* packet, bool forced /*= false*/)
 {
+    if (IsBotSession())
+    {
+        TC_LOG_DEBUG("network", "Skipping {} for bot session {}",
+            GetOpcodeNameForLogging(static_cast<OpcodeServer>(packet->GetOpcode())), GetPlayerInfo());
+        return;
+    }
+
     if (!opcodeTable.IsValid(static_cast<OpcodeServer>(packet->GetOpcode())))
     {
         char const* specialName = packet->GetOpcode() == UNKNOWN_OPCODE ? "UNKNOWN_OPCODE" : "INVALID_OPCODE";
@@ -428,7 +460,7 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
     ///- Before we process anything:
     /// If necessary, kick the player because the client didn't send anything for too long
     /// (or they've been idling in character select)
-    if (IsConnectionIdle() && !HasPermission(rbac::RBAC_PERM_IGNORE_IDLE_CONNECTION))
+    if (!IsBotSession() && IsConnectionIdle() && !HasPermission(rbac::RBAC_PERM_IGNORE_IDLE_CONNECTION))
         m_Socket[CONNECTION_TYPE_REALM]->CloseSocket();
 
     ///- Retrieve packets from the receive queue and call the appropriate handlers
@@ -637,7 +669,11 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
         }
 
         if (!m_Socket[CONNECTION_TYPE_REALM])
-            return false;                                       //Will remove this session from the world session map
+        {
+            // Keep socketless bot sessions alive while loading or in-world; evict after logout.
+            if (!IsBotSession() || (!GetPlayer() && !PlayerLoading()))
+                return false;                                   // Will remove this session from the world session map
+        }
     }
 
     return true;

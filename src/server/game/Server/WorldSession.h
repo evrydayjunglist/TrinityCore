@@ -1009,6 +1009,10 @@ class TC_GAME_API WorldSession
             uint32 build, ClientBuild::VariantId clientBuildVariant, LocaleConstant locale, uint32 recruiter, bool isARecruiter);
         ~WorldSession();
 
+        static WorldSession* CreateForBot(uint32 accountId, std::string accountName, AccountTypes sec, uint8 expansion);
+        bool IsBotSession() const { return m_isBotSession; }
+        void LoginBotCharacter(ObjectGuid characterGuid);
+
         bool PlayerLoading() const { return !m_playerLoading.IsEmpty(); }
         bool PlayerLogout() const { return m_playerLogout; }
         bool PlayerLogoutWithSave() const { return m_playerLogout && m_playerSave; }
@@ -2086,6 +2090,7 @@ class TC_GAME_API WorldSession
         rbac::RBACData* _RBACData;
         uint32 expireTime;
         bool forceExit;
+        bool m_isBotSession;
 
         std::unique_ptr<boost::circular_buffer<std::pair<int64, uint32>>> _timeSyncClockDeltaQueue; // first member: clockDelta. Second member: latency of the packet exchange that was used to compute that clockDelta.
         int64 _timeSyncClockDelta;
