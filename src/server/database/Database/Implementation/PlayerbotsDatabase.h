@@ -15,12 +15,31 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "DatabaseEnv.h"
-
-DatabaseWorkerPool<WorldDatabaseConnection> WorldDatabase;
-DatabaseWorkerPool<CharacterDatabaseConnection> CharacterDatabase;
-DatabaseWorkerPool<LoginDatabaseConnection> LoginDatabase;
-DatabaseWorkerPool<HotfixDatabaseConnection> HotfixDatabase;
 #ifdef WITH_PLAYERBOTS
-DatabaseWorkerPool<PlayerbotsDatabaseConnection> PlayerbotsDatabase;
+
+#ifndef TRINITYCORE_PLAYERBOTS_DATABASE_H
+#define TRINITYCORE_PLAYERBOTS_DATABASE_H
+
+#include "MySQLConnection.h"
+
+enum PlayerbotsDatabaseStatements : uint32
+{
+    PLAYERBOTS_SEL_DB_VERSION,
+
+    MAX_PLAYERBOTSDATABASE_STATEMENTS
+};
+
+class TC_DATABASE_API PlayerbotsDatabaseConnection : public MySQLConnection
+{
+public:
+    typedef PlayerbotsDatabaseStatements Statements;
+
+    PlayerbotsDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags);
+    ~PlayerbotsDatabaseConnection();
+
+    void DoPrepareStatements() override;
+};
+
+#endif
+
 #endif

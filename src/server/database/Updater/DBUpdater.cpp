@@ -182,11 +182,51 @@ BaseLocation DBUpdater<HotfixDatabaseConnection>::GetBaseLocationType()
     return LOCATION_DOWNLOAD;
 }
 
+#ifdef WITH_PLAYERBOTS
+// Playerbots Database (mod-playerbots Gate 9+)
+template<>
+std::string DBUpdater<PlayerbotsDatabaseConnection>::GetConfigEntry()
+{
+    return "Playerbots.Updates.EnableDatabases";
+}
+
+template<>
+std::string DBUpdater<PlayerbotsDatabaseConnection>::GetTableName()
+{
+    return "Playerbots";
+}
+
+template<>
+std::string DBUpdater<PlayerbotsDatabaseConnection>::GetBaseFile()
+{
+    return BuiltInConfig::GetSourceDirectory() +
+        "/modules/mod-playerbots/data/sql/playerbots/base/playerbots_gate9_base.sql";
+}
+
+template<>
+std::string DBUpdater<PlayerbotsDatabaseConnection>::GetUpdateSourceDirectory()
+{
+    return BuiltInConfig::GetSourceDirectory() + "/modules/mod-playerbots";
+}
+
+template<>
+bool DBUpdater<PlayerbotsDatabaseConnection>::IsEnabled(uint32 const /*updateMask*/)
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.Updates.EnableDatabases", false);
+}
+#endif
+
 // All
 template<class T>
 BaseLocation DBUpdater<T>::GetBaseLocationType()
 {
     return LOCATION_REPOSITORY;
+}
+
+template<class T>
+std::string DBUpdater<T>::GetUpdateSourceDirectory()
+{
+    return BuiltInConfig::GetSourceDirectory();
 }
 
 template<class T>
@@ -242,7 +282,7 @@ bool DBUpdater<T>::Update(DatabaseWorkerPool<T>& pool)
 
     TC_LOG_INFO("sql.updates", "Updating {} database...", DBUpdater<T>::GetTableName());
 
-    Path const sourceDirectory(BuiltInConfig::GetSourceDirectory());
+    Path const sourceDirectory(DBUpdater<T>::GetUpdateSourceDirectory());
 
     if (!is_directory(sourceDirectory))
     {
@@ -451,3 +491,6 @@ template class TC_DATABASE_API DBUpdater<LoginDatabaseConnection>;
 template class TC_DATABASE_API DBUpdater<WorldDatabaseConnection>;
 template class TC_DATABASE_API DBUpdater<CharacterDatabaseConnection>;
 template class TC_DATABASE_API DBUpdater<HotfixDatabaseConnection>;
+#ifdef WITH_PLAYERBOTS
+template class TC_DATABASE_API DBUpdater<PlayerbotsDatabaseConnection>;
+#endif

@@ -73,6 +73,8 @@ public:
 
     static BaseLocation GetBaseLocationType();
 
+    static std::string GetUpdateSourceDirectory();
+
     static bool Create(DatabaseWorkerPool<T>& pool);
 
     static bool Update(DatabaseWorkerPool<T>& pool);

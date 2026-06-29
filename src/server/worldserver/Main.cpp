@@ -224,7 +224,8 @@ int main(int argc, char** argv)
 
     std::vector<std::string> loadedModuleConfigFiles;
     std::vector<std::string> moduleConfigErrors;
-    bool moduleConfigLoadSuccess = sConfigMgr->LoadModuleConfigDir("modules", true, loadedModuleConfigFiles, moduleConfigErrors);
+    fs::path moduleConfigDir = fs::absolute(configFile).parent_path() / "modules";
+    bool moduleConfigLoadSuccess = sConfigMgr->LoadModuleConfigDir(moduleConfigDir.generic_string(), true, loadedModuleConfigFiles, moduleConfigErrors);
     for (std::string const& loadedModuleConfigFile : loadedModuleConfigFiles)
         printf("Loaded module config file %s\n", loadedModuleConfigFile.c_str());
 
@@ -674,6 +675,14 @@ bool StartDB()
         .AddDatabase(WorldDatabase, "World")
         .AddDatabase(HotfixDatabase, "Hotfix");
 
+#ifdef WITH_PLAYERBOTS
+    if (sConfigMgr->GetBoolDefault("Playerbots.Updates.EnableDatabases", false) &&
+        !sConfigMgr->GetStringDefault("PlayerbotsDatabaseInfo", "").empty())
+    {
+        loader.AddDatabase(PlayerbotsDatabase, "Playerbots");
+    }
+#endif
+
     if (!loader.Load())
         return false;
 
@@ -688,6 +697,9 @@ bool StartDB()
 
 void StopDB()
 {
+#ifdef WITH_PLAYERBOTS
+    PlayerbotsDatabase.Close();
+#endif
     HotfixDatabase.Close();
     WorldDatabase.Close();
     CharacterDatabase.Close();

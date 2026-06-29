@@ -15,12 +15,24 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "DatabaseEnv.h"
-
-DatabaseWorkerPool<WorldDatabaseConnection> WorldDatabase;
-DatabaseWorkerPool<CharacterDatabaseConnection> CharacterDatabase;
-DatabaseWorkerPool<LoginDatabaseConnection> LoginDatabase;
-DatabaseWorkerPool<HotfixDatabaseConnection> HotfixDatabase;
 #ifdef WITH_PLAYERBOTS
-DatabaseWorkerPool<PlayerbotsDatabaseConnection> PlayerbotsDatabase;
+
+#include "PlayerbotsDatabase.h"
+#include "MySQLPreparedStatement.h"
+
+void PlayerbotsDatabaseConnection::DoPrepareStatements()
+{
+    if (!m_reconnecting)
+        m_stmts.resize(MAX_PLAYERBOTSDATABASE_STATEMENTS);
+
+    PrepareStatement(PLAYERBOTS_SEL_DB_VERSION, "SELECT version FROM playerbots_db_version LIMIT 1", CONNECTION_SYNCH);
+}
+
+PlayerbotsDatabaseConnection::PlayerbotsDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags)
+    : MySQLConnection(connInfo, connectionFlags)
+{
+}
+
+PlayerbotsDatabaseConnection::~PlayerbotsDatabaseConnection() = default;
+
 #endif

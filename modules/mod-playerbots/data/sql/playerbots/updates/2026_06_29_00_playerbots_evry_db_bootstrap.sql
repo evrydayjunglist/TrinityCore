@@ -1,0 +1,1 @@
+-- Gate 9 placeholder update (schema lives in base bootstrap for empty DB populate)
