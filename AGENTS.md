@@ -33,6 +33,9 @@ only for genuine future feature work —
 Full bar: [`project-focus.md` § Fork mottos](docs/midnight-assessment/project-focus.md#fork-mottos).
 Scoped tasks: [`agent-task-handoff-template.md`](docs/midnight-assessment/agent-task-handoff-template.md).
 
+**Git commits (fork):** agents **do not** run `git commit` unless the owner explicitly
+asks. Finish validation + closeout first; owner reviews and commits when ready.
+
 **SQL (fork):** new tables/data → **`sql/updates/{world,auth,characters,hotfixes}/master/`**
 only — **do not patch `sql/base/dev/`** unless the owner explicitly requests a full
 base refresh. Existing dev DBs apply changes via **`worldserver -u`**. See
@@ -107,6 +110,8 @@ After changes (unless user says otherwise): when a module system exists,
 - `docs/midnight-assessment/successful-local-baseline.md` — build/run/login (confirmed 2026-06-25; re-verify after upstream merges)
 - `docs/midnight-assessment/build-and-run-readiness.md` — build/run gates + module pitfalls
 - `docs/midnight-assessment/upstream-core-maintenance/upstream-core-maintenance.md` — server log triage; upstream drift + ROI fix backlog; **retail-ready by default** (owner approval for non-retail stubs); **agent validation warnings** (grep ≠ gameplay, `GetAura`, port **8085**)
+- `docs/midnight-assessment/upstream-db-maintenance.md` — **DBErrors.log** triage (world SQL drift); **delete log before fresh capture** (appends by default); ROI rank **1 partial** (batch closed), ranks **2–12** open; parser `parse-dberrors-log-inventory.py`
+- `docs/midnight-assessment/upstream-db-maintenance-rank1-handoff.md` — DB Rank 1 creature faction (**partial — batch closed**; ~60k tail **NYI**)
 - `docs/midnight-assessment/upstream-core-maintenance/upstream-core-maintenance-rank1-handoff.md` — Rank 1 startup quick wins (**complete**)
 - `docs/midnight-assessment/upstream-core-maintenance/upstream-core-maintenance-rank2-handoff.md` — Rank 2 guild challenge re-enqueue (**complete** 2026-06-28)
 - `docs/midnight-assessment/upstream-core-maintenance/upstream-core-maintenance-rank2b-handoff.md` — Rank 2b garrison / splash / empower re-enqueue (**complete** 2026-06-28)
