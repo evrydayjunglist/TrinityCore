@@ -2298,24 +2298,15 @@ bool Player::IsMaxLevel() const
 void Player::InitTalentForLevel()
 {
     uint8 level = GetLevel();
-    // talents base at level diff (talents = level - 9 but some can be used already)
     if (level < MIN_SPECIALIZATION_LEVEL)
         ResetTalentSpecialization();
 
     int32 talentTiers = DB2Manager::GetNumTalentsAtLevel(level, Classes(GetClass()));
-    if (level < 15)
-    {
-        // Remove all talent points
-        ResetTalents(true);
-    }
-    else
-    {
-        if (!GetSession()->HasPermission(rbac::RBAC_PERM_SKIP_CHECK_MORE_TALENTS_THAN_ALLOWED))
-            for (int32 t = talentTiers; t < MAX_TALENT_TIERS; ++t)
-                for (uint32 c = 0; c < MAX_TALENT_COLUMNS; ++c)
-                    for (TalentEntry const* talent : sDB2Manager.GetTalentsByPosition(GetClass(), t, c))
-                        RemoveTalent(talent);
-    }
+    if (!GetSession()->HasPermission(rbac::RBAC_PERM_SKIP_CHECK_MORE_TALENTS_THAN_ALLOWED))
+        for (int32 t = talentTiers; t < MAX_TALENT_TIERS; ++t)
+            for (uint32 c = 0; c < MAX_TALENT_COLUMNS; ++c)
+                for (TalentEntry const* talent : sDB2Manager.GetTalentsByPosition(GetClass(), t, c))
+                    RemoveTalent(talent);
 
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::MaxTalentTiers), talentTiers);
 
@@ -3466,6 +3457,7 @@ bool Player::ResetTalents(bool involuntarily /*= false*/)
 
     RemovePet(nullptr, PET_SAVE_NOT_IN_SLOT, true);
 
+    bool removedAny = false;
     for (uint32 talentId = 0; talentId < sTalentStore.GetNumRows(); ++talentId)
     {
         TalentEntry const* talentInfo = sTalentStore.LookupEntry(talentId);
@@ -3482,6 +3474,9 @@ bool Player::ResetTalents(bool involuntarily /*= false*/)
         if (talentInfo->SpellID == 0)
             continue;
 
+        if (HasTalent(talentInfo->ID, GetActiveTalentGroup()))
+            removedAny = true;
+
         RemoveTalent(talentInfo);
     }
 
@@ -3490,7 +3485,7 @@ bool Player::ResetTalents(bool involuntarily /*= false*/)
     _SaveSpells(trans);
     CharacterDatabase.CommitTransaction(trans);
 
-    if (involuntarily)
+    if (involuntarily && removedAny)
         SendDirectMessage(WorldPackets::Talent::TalentsInvoluntarilyReset(false).Write());
 
     return true;
