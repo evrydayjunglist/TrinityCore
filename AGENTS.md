@@ -48,7 +48,9 @@ base refresh. Existing dev DBs apply changes via **`worldserver -u`**. See
 
 ## Reference vs implementation
 
-**`BfaCore-Reforged/` hosts read-only reference trees** (gitignored, on disk when cloned).
+> **AGENT ALERT:** `BfaCore-Reforged/` is **gitignored** — workspace search often finds **nothing** even when trees **exist on disk**. Do **not** conclude they are missing or default to GitHub. Run `Test-Path` / `Get-ChildItem` on the full paths below, then Read with absolute paths. Details: [`docs/midnight-assessment/reference-trees-on-disk-alert.md`](docs/midnight-assessment/reference-trees-on-disk-alert.md).
+
+**`BfaCore-Reforged/` hosts read-only reference trees** (gitignored, **on disk** on the owner's machine).
 Use them for AC-likeness and mod-playerbots-likeness — **never edit, build, link, or commit.**
 
 | Path | Role | Modify? | Build? |
@@ -154,6 +156,7 @@ After changes (unless user says otherwise): when a module system exists,
 - `scripts/validate-rank5-deaths-embrace.ps1` — Rank 5 R5-A guard (code + log grep + SpellEffect layout)
 - `doc/` — upstream TrinityCore how-tos (`HowToScript.txt`, `UnixInstall.txt`, …)
 - `docs/midnight-assessment/reference-trees-and-standards.md` — reference tree paths + AC/module standards
+- `docs/midnight-assessment/reference-trees-on-disk-alert.md` — **gitignored trees are on disk** — verify before claiming missing
 - `docs/midnight-assessment/sql-update-conventions.md` — SQL update naming + upstream sync
 - `docs/midnight-assessment/retail-data-first-checklist.md` — **before hardcoding client ids:** grep DB2, map packet fields, self-review
 - `docs/midnight-assessment/retail-packet-sniff-workflow.md` — **live retail** Ymir + WowPacketParser agent/owner loop
