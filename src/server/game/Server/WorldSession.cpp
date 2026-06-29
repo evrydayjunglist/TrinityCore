@@ -60,6 +60,68 @@ namespace {
 
 std::string const DefaultPlayerName = "<none>";
 
+bool CanProcessStatusLoggedInBeforeInWorld(OpcodeClient opcode)
+{
+    switch (opcode)
+    {
+        case CMSG_GUILD_CHALLENGE_UPDATE_REQUEST:
+        case CMSG_GET_GARRISON_INFO:
+        case CMSG_REQUEST_LATEST_SPLASH_SCREEN:
+        case CMSG_SET_EMPOWER_MIN_HOLD_STAGE_PERCENT:
+        case CMSG_GET_LAST_CATALOG_FETCH:
+        case CMSG_QUICK_JOIN_AUTO_ACCEPT_REQUESTS:
+        case CMSG_SET_EXCLUDED_CHAT_CENSOR_SOURCES:
+        case CMSG_GET_ACCOUNT_CHARACTER_LIST:
+        case CMSG_GET_RAF_ACCOUNT_INFO:
+        case CMSG_GET_REMAINING_GAME_TIME:
+        case CMSG_REQUEST_STORE_FRONT_INFO_UPDATE:
+        case CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO:
+        case CMSG_OPEN_TRADESKILL_NPC:
+        case CMSG_OVERRIDE_SCREEN_FLASH:
+        case CMSG_REQUEST_MYTHIC_PLUS_SEASON_DATA:
+        case CMSG_REQUEST_WEEKLY_REWARDS:
+        // Rank 8 post-login load batch (Capture E / M)
+        case CMSG_GET_LANDING_PAGE_SHIPMENTS:
+        case CMSG_REQUEST_SCHEDULED_PVP_INFO:
+        case CMSG_LFG_LIST_GET_STATUS:
+        case CMSG_REQUEST_LFG_LIST_BLACKLIST:
+        case CMSG_PERKS_PROGRAM_STATUS_REQUEST:
+        case CMSG_REQUEST_INSTANCE_ENCOUNTER_EVENT_SYNC:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool ShouldEarlyCallHandlerLoggedInBeforeInWorld(OpcodeClient opcode)
+{
+    switch (opcode)
+    {
+        // R2e-C2: post-login load batch — retail sends SMSG ~670 ms after CMSG (Capture M)
+        case CMSG_HOUSING_SVCS_GET_PLAYER_HOUSES_INFO:
+        case CMSG_REQUEST_MYTHIC_PLUS_SEASON_DATA:
+        case CMSG_REQUEST_WEEKLY_REWARDS:
+        // R2d-C2: char-select account-UI batch — retail sends SMSG before CMSG_PLAYER_LOGIN (Capture K)
+        case CMSG_GET_ACCOUNT_CHARACTER_LIST:
+        case CMSG_GET_RAF_ACCOUNT_INFO:
+        case CMSG_GET_REMAINING_GAME_TIME:
+        case CMSG_REQUEST_STORE_FRONT_INFO_UPDATE:
+        case CMSG_SET_EXCLUDED_CHAT_CENSOR_SOURCES:
+        // Rank 8 post-login load batch — retail sends SMSG with load batch (Capture E)
+        case CMSG_GET_LANDING_PAGE_SHIPMENTS:
+        case CMSG_REQUEST_SCHEDULED_PVP_INFO:
+        case CMSG_LFG_LIST_GET_STATUS:
+        case CMSG_REQUEST_LFG_LIST_BLACKLIST:
+        case CMSG_PERKS_PROGRAM_STATUS_REQUEST:
+            return true;
+        // Consume-only at login when no active encounter sequence (Capture E F2-6)
+        case CMSG_REQUEST_INSTANCE_ENCOUNTER_EVENT_SYNC:
+            return true;
+        default:
+            return false;
+    }
+}
+
 } // namespace
 
 bool MapSessionFilter::Process(WorldPacket* packet)
@@ -257,6 +319,14 @@ void WorldSession::SendPacket(WorldPacket const* packet, bool forced /*= false*/
 
     if (!m_Socket[conIdx])
     {
+        // Instance socket is opened after SMSG_CONNECT_TO during login; char select uses realm only (retail-like).
+        if (conIdx == CONNECTION_TYPE_INSTANCE)
+        {
+            TC_LOG_DEBUG("network", "Skipping {} on instance socket before connection is ready for {}",
+                GetOpcodeNameForLogging(static_cast<OpcodeServer>(packet->GetOpcode())), GetPlayerInfo());
+            return;
+        }
+
         TC_LOG_ERROR("network.opcode", "Prevented sending of {} to non existent socket {} to {}", GetOpcodeNameForLogging(static_cast<OpcodeServer>(packet->GetOpcode())), uint32(conIdx), GetPlayerInfo());
         return;
     }
@@ -385,9 +455,21 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
                 case STATUS_LOGGEDIN:
                     if (!_player)
                     {
-                        // Retail sends CMSG_GUILD_CHALLENGE_UPDATE_REQUEST once before CMSG_PLAYER_LOGIN and does not retry.
-                        if (opcode == CMSG_GUILD_CHALLENGE_UPDATE_REQUEST)
+                        // Retail sends these once during login; TC must not re-enqueue until _player exists (Rank 2 / 2b retail sniffs).
+                        if (CanProcessStatusLoggedInBeforeInWorld(opcode))
+                        {
+                            if (ShouldEarlyCallHandlerLoggedInBeforeInWorld(opcode))
+                            {
+                                if (AntiDOS.EvaluateOpcode(*packet, currentTime))
+                                {
+                                    sScriptMgr->OnPacketReceive(this, *packet);
+                                    opHandle->Call(this, *packet);
+                                }
+                                else
+                                    processedPackets = MAX_PROCESSED_PACKETS_IN_SAME_WORLDSESSION_UPDATE;
+                            }
                             break;
+                        }
 
                         // skip STATUS_LOGGEDIN opcode unexpected errors if player logout sometime ago - this can be network lag delayed packets
                         //! If player didn't log out a while ago, it means packets are being sent while the server does not recognize
@@ -400,7 +482,7 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
                                 "Player is currently not in world yet.", GetOpcodeNameForLogging(static_cast<OpcodeClient>(packet->GetOpcode())));
                         }
                     }
-                    else if (_player->IsInWorld() || opcode == CMSG_GUILD_CHALLENGE_UPDATE_REQUEST)
+                    else if (_player->IsInWorld() || CanProcessStatusLoggedInBeforeInWorld(opcode))
                     {
                         if(AntiDOS.EvaluateOpcode(*packet, currentTime))
                         {
