@@ -1,4 +1,4 @@
-# mod-playerbots (Gates 1–7)
+# mod-playerbots (Gates 1–9)
 
 Playerbots module for this TrinityCore fork. **Disabled by default.**
 
@@ -7,7 +7,9 @@ TC-native implementation.*
 [`project-focus.md`](../../docs/midnight-assessment/project-focus.md#mod-playerbots-north-star-primary-track)
 
 **North star detail:** Stepping stones toward **AC mod-playerbots** architecture
-(`D:\WOWEmulation\Emulators\Source\TrinityCore-evry\BfaCore-Reforged\mod-playerbots-master\`, read-only) — see
+(read-only on disk under `BfaCore-Reforged/mod-playerbots-master/` — **gitignored**;
+use `Test-Path` + Read on absolute paths, not workspace search alone —
+[`reference-trees-on-disk-alert.md`](../../docs/midnight-assessment/reference-trees-on-disk-alert.md)) — see
 `docs/midnight-assessment/playerbots/playerbots-integration-plan.md` § AC north star
 and `playerbots-future-gates-roadmap.md`.
 
@@ -21,6 +23,7 @@ modules/mod-playerbots/src/
     mod_playerbots_loader.cpp
     PlayerbotCommandScript.cpp    # .playerbot commands
     mod_playerbots_player_script.cpp
+    mod_playerbots_world_script.cpp # Gate 9 world tick
   Bot/
     Engine/                         # Gate 6 Engine skeleton
       Engine.h/.cpp
@@ -30,12 +33,23 @@ modules/mod-playerbots/src/
       Action.h, Trigger.h, Strategy.h, Event.h
       PlayerbotAIBase.h/.cpp
     Strategy/
-      PassiveStrategy.h/.cpp        # Gate 6 passive only
-    BotPlayerbotAI.h/.cpp           # Gate 5–6 bot AI
+      PassiveStrategy.h/.cpp        # Gate 6 passive (GM bots without master)
+      FollowMasterStrategy.h/.cpp   # Gate 8 follow
+      CombatStrategy.h/.cpp         # Gate 8 attack
+    Action/
+      FollowAction.h/.cpp           # Gate 8 MoveFollow
+      AttackAction.h/.cpp           # Gate 8 attack my target
+    BotPlayerbotAI.h/.cpp           # Gate 5–8 bot AI
   Mgr/
-    BotSessionMgr.h/.cpp            # TC socketless sessions (Gates 3–4, 7)
+    BotSessionMgr.h/.cpp            # TC socketless sessions (Gates 3–4, 7, 9 scheduler)
     PlayerbotMgr.h/.cpp             # Per-human master-alt control (Gate 7)
     PlayerbotsMgr.h/.cpp            # AI registry (Gate 5) + mgr map (Gate 7)
+    RandomPlayerbotMgr.h/.cpp       # Random bot scheduler (Gate 9)
+  Db/
+    PlayerbotsDatabaseMgr.h/.cpp    # Playerbots DB version check (Gate 9)
+  data/sql/playerbots/              # Module-local SQL (Gate 9)
+    base/playerbots_gate9_base.sql
+    updates/
   Playerbots.h                      # GET_PLAYERBOT_AI / GET_PLAYERBOT_MGR macros
   PlayerbotsConfig.h                # AC analogue: PlayerbotAIConfig.h at src root
   conf/mod-playerbots.conf.dist
@@ -62,7 +76,18 @@ Loaded via `ConfigMgr::LoadModuleConfigDir("modules")` — separate from `worlds
 
 Key options: `Playerbots.Enable`, `Playerbots.ReservedAccount.Ids` (or MinId/MaxId),
 `Playerbots.MaxActiveBots`, `Playerbots.AllowAccountBots`, `Playerbots.MaxAddedBots`,
-`Playerbots.ReactDelay`, `Playerbots.GlobalCooldown`, `Playerbots.LogLevel`.
+`Playerbots.ReactDelay`, `Playerbots.GlobalCooldown`, `Playerbots.FollowDistance`, `Playerbots.LogLevel`.
+
+**Gate 9 — Playerbots database + random bots:**
+
+- `PlayerbotsDatabaseInfo` — MySQL connection string (e.g. `127.0.0.1;3306;trinity;trinity;tc_playerbots`)
+- `Playerbots.Updates.EnableDatabases` — `0` default; set `1` to run module SQL updater on startup
+- `PlayerbotsDatabase.WorkerThreads` / `PlayerbotsDatabase.SynchThreads`
+- `Playerbots.MinRandomBots` / `Playerbots.MaxRandomBots` — default `0` (feature off when `MaxRandomBots=0`)
+- `Playerbots.RandomBotAutologin` — scheduler autologin when `1`
+- `Playerbots.DisabledWithoutRealPlayer` — default `1`; no random bots when no humans online
+- `Playerbots.RandomBotAccounts` — comma-separated reserved account ids (**one online random bot per account** in Gate 9; AC multi-char-per-account is Gate 11+)
+- `Playerbots.RandomBotCharacterNames` — comma-separated character names (same order as accounts; one name per account slot)
 
 ## AC contract (do not violate)
 
@@ -83,7 +108,7 @@ Top-level command is **`.playerbot`** (singular).
 | Subcommand | AC analogue | This fork |
 |------------|-------------|-----------|
 | `bot` | Master-alt control (`PlayerbotMgr`) | `.playerbot bot add/remove/list/logout` (Gate 7) |
-| `rndbot` | Random bot GM ops | NYI stub (Gate 9) |
+| `rndbot` | Random bot GM ops | `.playerbot rndbot status/start/stop` (Gate 9) |
 | `account setKey/link/linkedAccounts/unlink` | Account linking | NYI stubs |
 | `login` / `logout` | — | **TC extension** — GM socketless bots on reserved accounts |
 | `status` | — | **TC extension** — enabled, count/max, policy, active bot names |
@@ -111,9 +136,9 @@ Closeout: [`playerbots-gate-05-inert-ai-shell-handoff.md`](../../docs/midnight-a
 ## Gate 6 (Engine + passive strategy)
 
 - `Engine::DoNextAction` runs on `BotPlayerbotAI::UpdateAIInternal` (AC-shaped tick)
-- `AiObjectContext` stub registers **passive** strategy only
+- `AiObjectContext` registers strategies and actions
 - `AiFactory` reads class/spec from Midnight `Player` / DB2
-- `ResetStrategies()` on bot AI construct — `+passive` only; **no movement**
+- `ResetStrategies()` — GM bots without master get `+passive` only
 - Config: `Playerbots.ReactDelay`, `Playerbots.GlobalCooldown`
 - `Playerbots.LogLevel >= 1` — throttled engine debug (`playerbots` filter)
 
@@ -129,6 +154,39 @@ Closeout: [`playerbots-gate-06-engine-skeleton-handoff.md`](../../docs/midnight-
 
 Closeout: [`playerbots-gate-07-master-alt-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-gate-07-master-alt-handoff.md) — **complete** (agent 2026-06-29; owner playtest pending).
 
-## Gate 8 (next)
+## Gate 8 (movement + combat MVP)
 
-Movement + combat MVP — [`playerbots-future-gates-roadmap.md`](../../docs/midnight-assessment/playerbots/playerbots-future-gates-roadmap.md) § Gate 8.
+- Master-alt bots: `follow` + `attack` strategies via `ResetStrategies()` after `SetMaster`
+- `FollowAction` → `MotionMaster::MoveFollow(master, FollowDistance)` when out of range
+- `AttackMyTargetAction` → attacks `master->GetTarget()` via `Unit::Attack` (melee auto-attack)
+- Single-engine relevance routing (`attack` 10.0 > `follow` 1.0); no dual `BotState` yet
+- GM `.playerbot login` bots without master stay **passive**
+- Config: `Playerbots.FollowDistance` (default 3.0)
+
+Closeout: [`playerbots-gate-08-movement-combat-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-gate-08-movement-combat-handoff.md) — **complete** (agent 2026-06-29; owner playtest pending).
+
+## Gate 9 (Playerbots database + random bot bootstrap)
+
+- **Option A** core hook: `PlayerbotsDatabase` pool when built with `-DMODULE_MOD_PLAYERBOTS=static` (`WITH_PLAYERBOTS`)
+- Module SQL under `data/sql/playerbots/` — version table + optional account key/link tables
+- `PlayerbotsDatabaseMgr` — connection/version check from module
+- `RandomPlayerbotMgr` — world-tick scheduler (5s); logs in reserved-account bots via `BotSessionMgr::LoginReservedCharacter`
+- Random bots: **passive** AI (no master); `DisabledWithoutRealPlayer` stops scheduler when last human logs out
+- **Roster (Gate 9 interim):** one online random bot per reserved account — pair `RandomBotAccounts` with `RandomBotCharacterNames` by index (e.g. account 3 → `Three`, account 4 → `Threethree`)
+- **North-star goal (AC parity, Gate 11+):** multiple random-bot characters on the **same** account in-world together — see [`playerbots-future-gates-roadmap.md`](../../docs/midnight-assessment/playerbots/playerbots-future-gates-roadmap.md) § *AC random bot session model*
+- `.playerbot rndbot status|start|stop` — GM ops surface
+- `.playerbot account setKey/link` — remain NYI (schema exists empty)
+
+**Owner setup:**
+
+1. `CREATE DATABASE tc_playerbots;`
+2. Set `PlayerbotsDatabaseInfo` + `Playerbots.Updates.EnableDatabases = 1` in `modules/mod-playerbots.conf`
+3. `worldserver -u` or restart with updates enabled
+4. For autologin smoke test: `MaxRandomBots = 1`, `RandomBotAutologin = 1`, roster on **account 3+** (not Robot's account 2)
+5. Raise `MaxActiveBots` if testing GM Robot + random bot together
+
+Closeout: [`playerbots-gate-09-db-random-bootstrap-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-gate-09-db-random-bootstrap-handoff.md) — **complete** (agent + owner playtest 2026-06-29).
+
+## Gate 10 (next)
+
+World RPG slice (single-zone wander/grind) — [`playerbots-future-gates-roadmap.md`](../../docs/midnight-assessment/playerbots/playerbots-future-gates-roadmap.md) § Gate 10.
