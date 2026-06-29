@@ -20,13 +20,18 @@ Three tracks coexist — **follow the user's current task.** Full detail:
 | Track | One line |
 |-------|----------|
 | **Upstream sync** | Stay current with TC `master` |
-| **Primary** | AC-like `modules/` + native gated `mod-playerbots` (Phase 2 next) |
+| **Primary** | AC-like `modules/` + native gated `mod-playerbots` (Gate 5 complete; Gate 6 next) |
 | **Alternate** | Retail-parity content (Dracthyr intro today) |
 
 Default path for all tracks: human Battle.net login on `MODULES=none`.
 
-**Fix quality (fork mottos):** **Non-hacky by default** and **We don't break things**
-— retail/sniff/DB2 evidence, minimal portable diffs, baseline protected. **NYI**
+**Fix quality (fork mottos):** **Non-hacky by default**, **We don't break things**, and
+**AC-minded, TC-safe** — retail/sniff/DB2 evidence, minimal portable diffs, baseline
+protected; AC-like module discipline on native TrinityCore. On the **primary track**
+(`modules/`, `modules/mod-playerbots/`, Playerbots gates), also **mod-playerbots north star** —
+*AC-shaped stepping stones; TC-native implementation.* See
+[`project-focus.md` § mod-playerbots north star](docs/midnight-assessment/project-focus.md#mod-playerbots-north-star-primary-track).
+**NYI**
 only for genuine future feature work —
 [`project-focus.md` § NYI vocabulary](docs/midnight-assessment/project-focus.md#nyi-vocabulary--the-only-defer-reason)
 (**finish now unless NYI**).
@@ -43,16 +48,24 @@ base refresh. Existing dev DBs apply changes via **`worldserver -u`**. See
 
 ## Reference vs implementation
 
+**`BfaCore-Reforged/` hosts read-only reference trees** (gitignored, on disk when cloned).
+Use them for AC-likeness and mod-playerbots-likeness — **never edit, build, link, or commit.**
+
 | Path | Role | Modify? | Build? |
 |------|------|---------|--------|
-| `modules/mod-playerbots/` | **Target** native Playerbots module (when built) | Yes, when tasked | Yes, once `MODULES` exists |
-| `src/`, `cmake/`, `sql/updates/` | **Core (real)** | Yes, when tasked | Yes |
-| `docs/midnight-assessment/` | Living assessment, gates, baseline | Yes, when tasked | N/A |
-| `scripts/` | Build/helper scripts for this fork | Yes, when tasked | N/A |
-| `BfaCore-Reforged/` | BfA fork — process, gates, **hosts reference trees** | **No** | **No** |
-| `BfaCore-Reforged/mod-playerbots-master/` | Upstream AC mod-playerbots (WotLK) | **No** | **No** |
-| `BfaCore-Reforged/azerothcore-wotlk-master/` | AC WotLK core reference | **No** | **No** |
-| `BfaCore-Reforged/azerothcore-wotlk-Playerbot/` | AC WotLK Playerbot branch | **No** | **No** |
+| `BfaCore-Reforged/azerothcore-wotlk-master/` | AC WotLK core — modules, CMake, loader | **No** | **No** |
+| `BfaCore-Reforged/azerothcore-wotlk-Playerbot/` | AC WotLK core + Playerbot branch | **No** | **No** |
+| `BfaCore-Reforged/mod-playerbots-master/` | Upstream mod-playerbots (WotLK) — **north star** | **No** | **No** |
+| `BfaCore-Reforged/` (root) | BfA fork process/gates reference | **No** | **No** |
+
+**Implementation (this fork — edit when tasked):**
+
+| Path | Role | Modify? | Build? |
+|------|------|---------|--------|
+| `modules/mod-playerbots/` | Native Playerbots module | Yes | Yes (opt-in) |
+| `src/`, `cmake/`, `sql/updates/` | TrinityCore core | Yes | Yes |
+| `docs/midnight-assessment/` | Living assessment, gates | Yes | N/A |
+| `scripts/` | Build/helper scripts | Yes | N/A |
 
 Canonical reference paths: `docs/midnight-assessment/reference-trees-and-standards.md`
 
@@ -73,8 +86,12 @@ Reference trees: `.gitignore`d, do not commit, do not link or bulk-paste.
 
 **Primary (special interest):**
 
-- **AzerothCore-like:** modular, config-driven, small gates, baseline protected
-- **mod-playerbots-like:** real player bots/sessions — **no** WotLK wholesale import
+- **AzerothCore-like:** modular, config-driven, small gates, baseline protected; **core
+  changes OK** for Playerbots when non-hacky and aligned —
+  [`playerbots-integration-plan.md` § Core changes standard](docs/midnight-assessment/playerbots/playerbots-integration-plan.md#core-changes-src--development-standard)
+- **mod-playerbots-like:** real player bots/sessions — **no** WotLK wholesale import;
+  **mod-playerbots north star** on this track — *AC-shaped stepping stones; TC-native implementation.*
+  See [`project-focus.md` § mod-playerbots north star](docs/midnight-assessment/project-focus.md#mod-playerbots-north-star-primary-track)
 
 **Alternate (retail parity):**
 
@@ -131,7 +148,7 @@ After changes (unless user says otherwise): when a module system exists,
 - `docs/midnight-assessment/upstream-core-maintenance/upstream-core-maintenance-rank9-handoff.md` — Rank 9 DBC mismatch batch (**complete** 2026-06-28; **138 → 0**; **no follow-ups**; § Phase 3B/3C planning; Warnings 7–9 in parent spec). **Next optional upstream ROI:** rank **10** or **11** — parent spec ROI table.
 - `docs/midnight-assessment/upstream-core-maintenance/upstream-core-maintenance-rank2-retail-sniff-2026-06-27.md` — Rank 2 retail packet evidence (Captures C/D live retail; not evry realm)
 - `docs/midnight-assessment/module-support-prereq.md` — module guardrails (target design)
-- `docs/midnight-assessment/playerbots/playerbots-integration-plan.md` — Playerbots constraints and phases
+- `docs/midnight-assessment/playerbots/playerbots-integration-plan.md` — Playerbots constraints, phases, § **AC north star**
 - `scripts/build-trinitycore-master.ps1` — canonical local build script (auto-detects evry paths)
 - `scripts/README.md` — fork helper script inventory (build, log triage, validators, sniff)
 - `scripts/validate-rank5-deaths-embrace.ps1` — Rank 5 R5-A guard (code + log grep + SpellEffect layout)
