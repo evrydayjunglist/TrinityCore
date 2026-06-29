@@ -43,7 +43,9 @@ void GetRafAccountInfo::Read()
 
 void RequestInstanceEncounterEventSync::Read()
 {
-    _worldPacket >> EncounterGuid >> SequenceIndex;
+    // Capture E F2-6: consume-only at login (no SMSG when idle). Wire is 9 bytes on 68275;
+    // field layout deferred until encounter sync gameplay — consume full payload retail-like.
+    _worldPacket.rfinish();
 }
 
 void QuickJoinAutoAcceptRequests::Read()
