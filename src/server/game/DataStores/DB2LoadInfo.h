@@ -1780,6 +1780,22 @@ struct DifficultyLoadInfo
     static constexpr DB2LoadInfo Instance{ Fields, 15, &DifficultyMeta::Instance, HOTFIX_SEL_DIFFICULTY };
 };
 
+struct DisplaySeasonLoadInfo
+{
+    static constexpr DB2FieldMeta Fields[7] =
+    {
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Season" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_9_2_0_41827_001" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "ExpansionID" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "Field_10_0_2_45779_004" },
+        { .IsSigned = true, .Type = FT_INT, .Name = "DelvesSeasonID" },
+    };
+
+    static constexpr DB2LoadInfo Instance{ Fields, 7, &DisplaySeasonMeta::Instance, HOTFIX_SEL_DISPLAY_SEASON };
+};
+
 struct DungeonEncounterLoadInfo
 {
     static constexpr DB2FieldMeta Fields[11] =

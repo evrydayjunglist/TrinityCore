@@ -99,6 +99,7 @@ TC_GAME_API extern DB2Storage<CurrencyTypesEntry>                   sCurrencyTyp
 TC_GAME_API extern DB2Storage<CurveEntry>                           sCurveStore;
 TC_GAME_API extern DB2Storage<DestructibleModelDataEntry>           sDestructibleModelDataStore;
 TC_GAME_API extern DB2Storage<DifficultyEntry>                      sDifficultyStore;
+TC_GAME_API extern DB2Storage<DisplaySeasonEntry>                   sDisplaySeasonStore;
 TC_GAME_API extern DB2Storage<DungeonEncounterEntry>                sDungeonEncounterStore;
 TC_GAME_API extern DB2Storage<DurabilityCostsEntry>                 sDurabilityCostsStore;
 TC_GAME_API extern DB2Storage<DurabilityQualityEntry>               sDurabilityQualityStore;

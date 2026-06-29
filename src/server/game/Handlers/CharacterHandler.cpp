@@ -53,6 +53,7 @@
 #include "Pet.h"
 #include "Player.h"
 #include "PlayerDump.h"
+#include "PvpSeasonHelper.h"
 #include "QueryHolder.h"
 #include "QueryPackets.h"
 #include "RealmList.h"
@@ -1251,11 +1252,7 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
     // Send PVPSeason
     {
         WorldPackets::Battleground::SeasonInfo seasonInfo;
-        seasonInfo.PreviousArenaSeason = sWorld->getIntConfig(CONFIG_ARENA_SEASON_ID) - sWorld->getBoolConfig(CONFIG_ARENA_SEASON_IN_PROGRESS);
-
-        if (sWorld->getBoolConfig(CONFIG_ARENA_SEASON_IN_PROGRESS))
-            seasonInfo.CurrentArenaSeason = sWorld->getIntConfig(CONFIG_ARENA_SEASON_ID);
-
+        PvpSeasonHelper::FillSeasonInfo(seasonInfo);
         SendPacket(seasonInfo.Write());
     }
 

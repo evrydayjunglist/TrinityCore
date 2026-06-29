@@ -80,6 +80,7 @@
 #include "OutdoorPvPMgr.h"
 #include "PetitionMgr.h"
 #include "Player.h"
+#include "PvpSeasonHelper.h"
 #include "PlayerDump.h"
 #include "PoolMgr.h"
 #include "QuestMgr.h"
@@ -826,6 +827,10 @@ void World::LoadConfigSettings(bool reload)
         { .Name = "Arena.RatingDiscardTimer"sv, .DefaultValue = 10 * MINUTE * IN_MILLISECONDS, .Index = CONFIG_ARENA_RATING_DISCARD_TIMER },
         { .Name = "Arena.RatedUpdateTimer"sv, .DefaultValue = 5 * IN_MILLISECONDS, .Index = CONFIG_ARENA_RATED_UPDATE_TIMER },
         { .Name = "Arena.ArenaSeason.ID"sv, .DefaultValue = 32, .Index = CONFIG_ARENA_SEASON_ID },
+        { .Name = "Arena.PvpSeason.PacketID"sv, .DefaultValue = 39, .Index = CONFIG_PVP_SEASON_PACKET_ID },
+        { .Name = "Arena.RatedSeason.CurrentMilestone"sv, .DefaultValue = 41, .Index = CONFIG_RATED_SEASON_CURRENT_MILESTONE },
+        { .Name = "Arena.RatedSeason.PreviousMilestone"sv, .DefaultValue = 40, .Index = CONFIG_RATED_SEASON_PREVIOUS_MILESTONE },
+        { .Name = "Arena.DisplaySeason.ID"sv, .DefaultValue = 34, .Index = CONFIG_DISPLAY_SEASON_ID },
         { .Name = "Arena.ArenaStartRating"sv, .DefaultValue = 0, .Index = CONFIG_ARENA_START_RATING },
         { .Name = "Arena.ArenaStartPersonalRating"sv, .DefaultValue = 1000, .Index = CONFIG_ARENA_START_PERSONAL_RATING },
         { .Name = "Arena.ArenaStartMatchmakerRating"sv, .DefaultValue = 1500, .Index = CONFIG_ARENA_START_MATCHMAKER_RATING },
@@ -1226,8 +1231,8 @@ void World::LoadConfigSettings(bool reload)
         m_timers[WUPDATE_AUTOBROADCAST].Reset();
         m_timers[WUPDATE_WHO_LIST].SetInterval(m_int_configs[CONFIG_WHO_LIST_UPDATE_INTERVAL] * IN_MILLISECONDS);
         m_timers[WUPDATE_WHO_LIST].Reset();
-        WorldStateMgr::SetValue(WS_CURRENT_PVP_SEASON_ID, getBoolConfig(CONFIG_ARENA_SEASON_IN_PROGRESS) ? getIntConfig(CONFIG_ARENA_SEASON_ID) : 0, false, nullptr);
-        WorldStateMgr::SetValue(WS_PREVIOUS_PVP_SEASON_ID, getIntConfig(CONFIG_ARENA_SEASON_ID) - getBoolConfig(CONFIG_ARENA_SEASON_IN_PROGRESS), false, nullptr);
+        WorldStateMgr::SetValue(WS_CURRENT_PVP_SEASON_ID, getBoolConfig(CONFIG_ARENA_SEASON_IN_PROGRESS) ? PvpSeasonHelper::GetActivePvpSeasonId() : 0, false, nullptr);
+        WorldStateMgr::SetValue(WS_PREVIOUS_PVP_SEASON_ID, PvpSeasonHelper::GetPreviousPvpSeasonId(), false, nullptr);
 
         // call ScriptMgr if we're reloading the configuration
         sScriptMgr->OnConfigLoad(reload);
@@ -1322,6 +1327,7 @@ bool World::SetInitialWorldSettings()
     sDB2Manager.LoadHotfixOptionalData(m_availableDbcLocaleMask);
     TC_LOG_INFO("server.loading", "Indexing loaded data stores...");
     sDB2Manager.IndexLoadedStores();
+    PvpSeasonHelper::Validate();
     ///- Load M2 fly by cameras
     LoadM2Cameras(m_dataPath);
     ///- Load GameTables
@@ -1850,8 +1856,8 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading Persistend World Variables...");
     LoadPersistentWorldVariables();
 
-    WorldStateMgr::SetValue(WS_CURRENT_PVP_SEASON_ID, getBoolConfig(CONFIG_ARENA_SEASON_IN_PROGRESS) ? getIntConfig(CONFIG_ARENA_SEASON_ID) : 0, false, nullptr);
-    WorldStateMgr::SetValue(WS_PREVIOUS_PVP_SEASON_ID, getIntConfig(CONFIG_ARENA_SEASON_ID) - getBoolConfig(CONFIG_ARENA_SEASON_IN_PROGRESS), false, nullptr);
+    WorldStateMgr::SetValue(WS_CURRENT_PVP_SEASON_ID, getBoolConfig(CONFIG_ARENA_SEASON_IN_PROGRESS) ? PvpSeasonHelper::GetActivePvpSeasonId() : 0, false, nullptr);
+    WorldStateMgr::SetValue(WS_PREVIOUS_PVP_SEASON_ID, PvpSeasonHelper::GetPreviousPvpSeasonId(), false, nullptr);
 
     sObjectMgr->LoadPhases();
 

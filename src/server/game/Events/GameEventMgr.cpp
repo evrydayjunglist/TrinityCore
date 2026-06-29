@@ -987,6 +987,13 @@ uint32 GameEventMgr::StartSystem()                           // return the next 
 void GameEventMgr::StartArenaSeason()
 {
     uint8 season = sWorld->getIntConfig(CONFIG_ARENA_SEASON_ID);
+
+    if (!sPvpSeasonStore.LookupEntry(season))
+    {
+        TC_LOG_ERROR("gameevent", "ArenaSeason ({}) is not a valid PvpSeason.db2 ID.", season);
+        return;
+    }
+
     QueryResult result = WorldDatabase.PQuery("SELECT eventEntry FROM game_event_arena_seasons WHERE season = '{}'", season);
 
     if (!result)

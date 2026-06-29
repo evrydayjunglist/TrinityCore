@@ -617,6 +617,12 @@ void HotfixDatabaseConnection::DoPrepareStatements()
     PrepareStatement(HOTFIX_SEL_DURABILITY_QUALITY, "SELECT ID, Data FROM durability_quality WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
     PREPARE_MAX_ID_STMT(HOTFIX_SEL_DURABILITY_QUALITY, "SELECT MAX(ID) + 1 FROM durability_quality", CONNECTION_SYNCH);
 
+    // DisplaySeason.db2
+    PrepareStatement(HOTFIX_SEL_DISPLAY_SEASON, "SELECT Name, ID, Season, Field_9_2_0_41827_001, ExpansionID, Field_10_0_2_45779_004, DelvesSeasonID"
+        " FROM display_season WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);
+    PREPARE_MAX_ID_STMT(HOTFIX_SEL_DISPLAY_SEASON, "SELECT MAX(ID) + 1 FROM display_season", CONNECTION_SYNCH);
+    PREPARE_LOCALE_STMT(HOTFIX_SEL_DISPLAY_SEASON, "SELECT ID, Name_lang FROM display_season_locale WHERE (`VerifiedBuild` > 0) = ? AND locale = ?", CONNECTION_SYNCH);
+
     // Emotes.db2
     PrepareStatement(HOTFIX_SEL_EMOTES, "SELECT ID, EmoteSlashCommand, AnimID, EmoteFlags, EmoteSpecProc, EmoteSpecProcParam, EventSoundID, "
         "SpellVisualKitID, ClassMask, RaceMask1, RaceMask2 FROM emotes WHERE (`VerifiedBuild` > 0) = ?", CONNECTION_SYNCH);

@@ -3056,10 +3056,44 @@ Arena.QueueAnnouncer.Enable = 0
 
 #
 #    Arena.ArenaSeason.ID
-#        Description: Current arena season id shown in clients.
+#        Description: PvpSeason.db2 ID used for game_event_arena_seasons lookup (StartArenaSeason).
+#                     Distinct from Arena.PvpSeason.PacketID sent in SMSG_SEASON_INFO (Capture Q: 39).
 #        Default:     32
 
 Arena.ArenaSeason.ID = 32
+
+#
+#    Arena.PvpSeason.PacketID
+#        Description: Active PvpSeason.db2 ID sent as SMSG_SEASON_INFO.PvpSeasonID and world states.
+#                     Retail Capture Q (12.0.7.68275): 39 — not the same as Arena.ArenaSeason.ID.
+#        Default:     39
+#
+Arena.PvpSeason.PacketID = 39
+
+#
+#    Arena.RatedSeason.CurrentMilestone
+#        Description: SMSG_SEASON_INFO CurrentArenaSeason (PvpSeason MilestoneSeason, not row ID).
+#                     Retail Capture Q: 41 (PvpSeason row 13 / MythicPlusSeason row 56).
+#        Default:     41
+#
+Arena.RatedSeason.CurrentMilestone = 41
+
+#
+#    Arena.RatedSeason.PreviousMilestone
+#        Description: SMSG_SEASON_INFO PreviousArenaSeason when season is in progress.
+#                     Retail Capture Q: 40 (PvpSeason row 12 / MythicPlusSeason row 57).
+#        Default:     40
+#
+Arena.RatedSeason.PreviousMilestone = 40
+
+#
+#    Arena.DisplaySeason.ID
+#        Description: SMSG_SEASON_INFO MythicPlusDisplaySeasonID (DisplaySeason.db2 ID on retail).
+#                     Validated against DisplaySeason.db2 at startup; config selects the row id.
+#                     Retail Capture Q: 34 (Midnight Season 1 on wago DisplaySeason 68275).
+#        Default:     34
+#
+Arena.DisplaySeason.ID = 34
 
 #
 #    Arena.ArenaSeason.InProgress

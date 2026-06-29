@@ -40,6 +40,7 @@
 #include "ObjectMgr.h"
 #include "PhasingHandler.h"
 #include "Player.h"
+#include "PvpSeasonHelper.h"
 #include "QuestMgr.h"
 #include "RBAC.h"
 #include "RealmList.h"
@@ -2404,7 +2405,7 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
                 return false;
             break;
         case ModifierTreeType::PvpSeason: // 125
-            if (sWorld->getIntConfig(CONFIG_ARENA_SEASON_ID) != reqValue)
+            if (PvpSeasonHelper::GetActivePvpSeasonId() != reqValue)
                 return false;
             break;
         case ModifierTreeType::GarrisonTierEqualOrGreaterThan: // 126

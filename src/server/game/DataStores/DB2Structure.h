@@ -1580,6 +1580,17 @@ struct DifficultyEntry
     int32 Unknown1105;
 };
 
+struct DisplaySeasonEntry
+{
+    LocalizedString Name;
+    uint32 ID;
+    int32 Season;
+    int32 Field_9_2_0_41827_001;
+    int32 ExpansionID;
+    int32 Field_10_0_2_45779_004;
+    int32 DelvesSeasonID;
+};
+
 struct DungeonEncounterEntry
 {
     LocalizedString Name;

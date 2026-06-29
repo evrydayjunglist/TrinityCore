@@ -132,6 +132,7 @@ DB2Storage<CurveEntry>                          sCurveStore("Curve.db2", &CurveL
 DB2Storage<CurvePointEntry>                     sCurvePointStore("CurvePoint.db2", &CurvePointLoadInfo::Instance);
 DB2Storage<DestructibleModelDataEntry>          sDestructibleModelDataStore("DestructibleModelData.db2", &DestructibleModelDataLoadInfo::Instance);
 DB2Storage<DifficultyEntry>                     sDifficultyStore("Difficulty.db2", &DifficultyLoadInfo::Instance);
+DB2Storage<DisplaySeasonEntry>                sDisplaySeasonStore("DisplaySeason.db2", &DisplaySeasonLoadInfo::Instance);
 DB2Storage<DungeonEncounterEntry>               sDungeonEncounterStore("DungeonEncounter.db2", &DungeonEncounterLoadInfo::Instance);
 DB2Storage<DurabilityCostsEntry>                sDurabilityCostsStore("DurabilityCosts.db2", &DurabilityCostsLoadInfo::Instance);
 DB2Storage<DurabilityQualityEntry>              sDurabilityQualityStore("DurabilityQuality.db2", &DurabilityQualityLoadInfo::Instance);
@@ -766,6 +767,7 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sCurvePointStore);
     LOAD_DB2(sDestructibleModelDataStore);
     LOAD_DB2(sDifficultyStore);
+    LOAD_DB2(sDisplaySeasonStore);
     LOAD_DB2(sDungeonEncounterStore);
     LOAD_DB2(sDurabilityCostsStore);
     LOAD_DB2(sDurabilityQualityStore);
