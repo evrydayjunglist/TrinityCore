@@ -5,7 +5,7 @@ DELETE FROM `battleground_template` WHERE `ID` = 11;
 -- R1-A: Arena.ArenaSeason.ID defaults to 32 (World.cpp / worldserver.conf.dist); world DB had seasons through 11 only.
 -- Retail note: startup stub for GameEventMgr::StartArenaSeason() world-DB lookup only — NOT verified against
 -- PvpSeason.db2 for client 12.0.7.68275. Client SeasonInfo still comes from config. See handoff
--- docs/midnight-assessment/upstream-core-maintenance-rank1-handoff.md#retail-alignment before upstream PR.
+-- docs/midnight-assessment/upstream-core-maintenance/upstream-core-maintenance-rank1-handoff.md#retail-alignment before upstream PR.
 SET @EENTRY := 96;
 
 DELETE FROM `game_event` WHERE `eventEntry` = @EENTRY;
