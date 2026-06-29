@@ -26,9 +26,17 @@ Three tracks coexist — **follow the user's current task.** Full detail:
 Default path for all tracks: human Battle.net login on `MODULES=none`.
 
 **Fix quality (fork mottos):** **Non-hacky by default** and **We don't break things**
-— retail/sniff/DB2 evidence, minimal portable diffs, baseline protected. Full bar:
-[`project-focus.md` § Fork mottos](docs/midnight-assessment/project-focus.md#fork-mottos).
+— retail/sniff/DB2 evidence, minimal portable diffs, baseline protected. **NYI**
+only for genuine future feature work —
+[`project-focus.md` § NYI vocabulary](docs/midnight-assessment/project-focus.md#nyi-vocabulary--the-only-defer-reason)
+(**finish now unless NYI**).
+Full bar: [`project-focus.md` § Fork mottos](docs/midnight-assessment/project-focus.md#fork-mottos).
 Scoped tasks: [`agent-task-handoff-template.md`](docs/midnight-assessment/agent-task-handoff-template.md).
+
+**SQL (fork):** new tables/data → **`sql/updates/{world,auth,characters,hotfixes}/master/`**
+only — **do not patch `sql/base/dev/`** unless the owner explicitly requests a full
+base refresh. Existing dev DBs apply changes via **`worldserver -u`**. See
+[`sql-update-conventions.md`](docs/midnight-assessment/sql-update-conventions.md).
 
 ## Reference vs implementation
 
@@ -101,11 +109,18 @@ After changes (unless user says otherwise): when a module system exists,
 - `docs/midnight-assessment/upstream-core-maintenance.md` — server log triage; upstream drift + ROI fix backlog; **retail-ready by default** (owner approval for non-retail stubs); **agent validation warnings** (grep ≠ gameplay, `GetAura`, port **8085**)
 - `docs/midnight-assessment/upstream-core-maintenance-rank1-handoff.md` — Rank 1 startup quick wins (**complete**)
 - `docs/midnight-assessment/upstream-core-maintenance-rank2-handoff.md` — Rank 2 guild challenge re-enqueue (**complete** 2026-06-28)
+- `docs/midnight-assessment/upstream-core-maintenance-rank2b-handoff.md` — Rank 2b garrison / splash / empower re-enqueue (**complete** 2026-06-28)
+- `docs/midnight-assessment/upstream-core-maintenance-rank2c-handoff.md` — Rank 2c catalog / quick-join re-enqueue (**complete** 2026-06-28; Capture J validated)
+- `docs/midnight-assessment/upstream-core-maintenance-rank2d-handoff.md` — Rank 2d account-UI login re-enqueue batch (**complete** 2026-06-28; Capture L validated)
+- `docs/midnight-assessment/upstream-core-maintenance-r1a-r2c2-retail-parity-handoff.md` — **R1-A** `PvpSeason.db2` + **R2e/R2d C2** SMSG timing (**complete** 2026-06-28; Capture O/P validated)
+- `docs/midnight-assessment/upstream-core-maintenance-r1a-tierc-handoff.md` — **R1-A Tier C** `SMSG_SEASON_INFO` + DB2 season (**complete** 2026-06-28; owner login pass)
+- `docs/midnight-assessment/upstream-core-maintenance-r1a-tierc-f1-displayseason-gaps-handoff.md` — **R1-A Tier C F1** DisplaySeason store + gap fields **117** / **1069** (**complete** 2026-06-28)
+- `docs/midnight-assessment/upstream-core-maintenance-rank2e-handoff.md` — Rank 2e login re-enqueue tail (**complete** 2026-06-28; Capture N validated)
 - `docs/midnight-assessment/upstream-core-maintenance-rank3-rank4-handoff.md` — Rank 3–4 batch spell scripts (**complete** 2026-06-28)
 - `docs/midnight-assessment/upstream-core-maintenance-rank5-handoff.md` — Rank 5 cascading missing spell ids (**complete** 2026-06-28; R5-A playtest + GetAura follow-up)
 - `docs/midnight-assessment/upstream-core-maintenance-rank7-handoff.md` — Rank 7 warband groups CMSG wire parse (**complete** 2026-06-28; C2/C3 owner-validated)
 - `docs/midnight-assessment/upstream-core-maintenance-rank8-handoff.md` — Rank 8 unhandled opcode stubs (**complete** 2026-06-28; **19/19** wired; owner-validated **25 → 0**)
-- `docs/midnight-assessment/upstream-core-maintenance-rank8-f2-f5-sniff-upstream-handoff.md` — **R8-F2** stub SMSG sniff (**complete** 2026-06-28) + **R8-F5** upstream TC PR (**deferred** — no upstream PRs)
+- `docs/midnight-assessment/upstream-core-maintenance-rank8-f2-f5-sniff-upstream-handoff.md` — **R8-F2** stub SMSG sniff (**complete** 2026-06-28)
 - `docs/midnight-assessment/housing/housing-r8-f4-get-player-houses-info-handoff.md` — **R8-F4** housing login stub (**complete** 2026-06-28; owner R8-F4 pass)
 - `docs/midnight-assessment/upstream-core-maintenance-rank9-handoff.md` — Rank 9 DBC mismatch batch (**complete** 2026-06-28; **138 → 0**; **no follow-ups**; § Phase 3B/3C planning; Warnings 7–9 in parent spec). **Next optional upstream ROI:** rank **10** or **11** — parent spec ROI table.
 - `docs/midnight-assessment/upstream-core-maintenance-rank2-retail-sniff-2026-06-27.md` — Rank 2 retail packet evidence (Captures C/D live retail; not evry realm)
