@@ -39,6 +39,12 @@ cmake-build-*/*
 /scripts/
 
 # Local playtest scratch, sniff dumps, and server logs — not product artifacts.
-/temp/
+/temp/*
+!/temp/db2/
+!/temp/db2/README.md
+# Fork DB2 tooling — clone + build outputs (source under tools/EvryDb2Export/ is tracked)
+/tools/WoWDBDefs/
+/tools/**/bin/
+/tools/**/obj/
 # Local packet captures at repo root (prefer temp/ for sniff work)
 /*.pkt
