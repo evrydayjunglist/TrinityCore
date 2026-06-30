@@ -5305,6 +5305,23 @@ void SpellMgr::LoadSpellInfoCorrections()
             spellInfo->MaxAffectedTargets = 1;
     }
 
+    // Fel Rush air dash (197923): dead trigger 197707 only; restore retail E8/E10 (evry momentum fix)
+    ApplySpellFix({ 197923 }, [](SpellInfo* spellInfo)
+    {
+        ApplySpellEffectFix(spellInfo, EFFECT_6, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->TriggerSpell = 0;
+        });
+        ApplySpellEffectFix(spellInfo, EFFECT_8, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->TriggerSpell = 199737;
+        });
+        ApplySpellEffectFix(spellInfo, EFFECT_10, [](SpellEffectInfo* spellEffectInfo)
+        {
+            spellEffectInfo->TriggerSpell = 346123;
+        });
+    });
+
     DB2HotfixGenerator summonProperties(sSummonPropertiesStore);
     summonProperties.ApplyHotfix(121, [](SummonPropertiesEntry* properties)
     {

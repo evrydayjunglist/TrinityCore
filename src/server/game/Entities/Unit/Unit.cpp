@@ -3545,6 +3545,26 @@ void Unit::_ApplyAura(AuraApplication* aurApp, uint32 effMask)
 {
     Aura* aura = aurApp->GetBase();
 
+    struct DashSpeedUpdateDeferGuard
+    {
+        Unit* UnitPtr;
+        bool Active;
+
+        DashSpeedUpdateDeferGuard(Unit* unit, bool active) : UnitPtr(unit), Active(active)
+        {
+            if (Active)
+                UnitPtr->BeginDeferDashMovementSpeedUpdates();
+        }
+
+        ~DashSpeedUpdateDeferGuard()
+        {
+            if (Active)
+                UnitPtr->EndDeferDashMovementSpeedUpdates();
+        }
+    };
+
+    DashSpeedUpdateDeferGuard deferGuard(this, GetTypeId() == TYPEID_PLAYER && aura->GetSpellInfo()->IsDashMovementBundle());
+
     _RemoveNoStackAurasDueToAura(aura, false);
 
     if (aurApp->GetRemoveMode())
@@ -3647,6 +3667,26 @@ void Unit::_UnapplyAura(AuraApplicationMap::iterator& i, AuraRemoveMode removeMo
 
     aurApp->_Remove();
     aura->_UnapplyForTarget(this, caster, aurApp);
+
+    struct DashSpeedUpdateDeferGuard
+    {
+        Unit* UnitPtr;
+        bool Active;
+
+        DashSpeedUpdateDeferGuard(Unit* unit, bool active) : UnitPtr(unit), Active(active)
+        {
+            if (Active)
+                UnitPtr->BeginDeferDashMovementSpeedUpdates();
+        }
+
+        ~DashSpeedUpdateDeferGuard()
+        {
+            if (Active)
+                UnitPtr->EndDeferDashMovementSpeedUpdates();
+        }
+    };
+
+    DashSpeedUpdateDeferGuard deferGuard(this, GetTypeId() == TYPEID_PLAYER && aura->GetSpellInfo()->IsDashMovementBundle());
 
     // remove effects of the spell - needs to be done after removing aura from lists
     for (AuraEffect const* aurEff : aura->GetAuraEffects())
@@ -8925,6 +8965,29 @@ void Unit::UpdateSpeed(UnitMoveType mtype)
             speed = min_speed;
     }
 
+    // SPELL_AURA_MOD_SPEED_NO_CONTROL — dash profiles differ (retail sniffs 2026-06-29):
+    // Fel Rush: aura 191 = 66 yd/s force floor (Capture FR-A). Monk Roll: ~27 yd/s from aura 305; aura 191 = 35 is cap-only (Capture MR-A lvl 80).
+    if (GetMaxPositiveAuraModifier(SPELL_AURA_MOD_SPEED_NO_CONTROL))
+    {
+        if (mtype == MOVE_RUN || mtype == MOVE_RUN_BACK || mtype == MOVE_WALK)
+        {
+            if (float normalization = GetMaxPositiveAuraModifier(SPELL_AURA_USE_NORMAL_MOVEMENT_SPEED))
+            {
+                float constexpr felRushNormalizationYardsPerSec = 60.0f;
+                if (normalization >= felRushNormalizationYardsPerSec)
+                {
+                    float baseSpeed = IsControlledByPlayer() ? playerBaseMoveSpeed[mtype] : baseMoveSpeed[mtype];
+                    if (baseSpeed > 0.0f)
+                    {
+                        float forcedRate = normalization / baseSpeed;
+                        if (speed < forcedRate)
+                            speed = forcedRate;
+                    }
+                }
+            }
+        }
+    }
+
     SetSpeedRate(mtype, speed);
 }
 
@@ -13444,6 +13507,93 @@ bool Unit::SetDisableGravity(bool disable, bool updateAnimTier /*= true*/)
     }
 
     return true;
+}
+
+void Unit::BeginDeferDashMovementSpeedUpdates()
+{
+    ++_deferDashMovementSpeedUpdates;
+    _dashMovementSpeedUpdatesFinalized = false;
+}
+
+void Unit::EndDeferDashMovementSpeedUpdates()
+{
+    ASSERT(_deferDashMovementSpeedUpdates > 0);
+    --_deferDashMovementSpeedUpdates;
+
+    if (_deferDashMovementSpeedUpdates == 0)
+    {
+        if (!_dashMovementSpeedUpdatesFinalized)
+        {
+            UpdateSpeed(MOVE_RUN);
+            UpdateSpeed(MOVE_RUN_BACK);
+            UpdateSpeed(MOVE_WALK);
+            UpdateSpeed(MOVE_SWIM);
+            UpdateSpeed(MOVE_FLIGHT);
+        }
+
+        RestoreDeferredDashGravity();
+        _dashMovementSpeedUpdatesFinalized = false;
+    }
+}
+
+void Unit::PrepareDashMovementState()
+{
+    // Retail GRAVITY_DISABLE_ACK: Forward + DisableGravity, FallData without horizontal carry (HasFallDirection false).
+    m_movementInfo.jump.sinAngle = 0.0f;
+    m_movementInfo.jump.cosAngle = 0.0f;
+    m_movementInfo.jump.xyspeed = 0.0f;
+    RemoveUnitMovementFlag(MOVEMENTFLAG_FALLING | MOVEMENTFLAG_FALLING_FAR);
+    AddUnitMovementFlag(MOVEMENTFLAG_FORWARD);
+}
+
+void Unit::FinalizeDashMovementSpeedUpdates()
+{
+    if (_dashMovementSpeedUpdatesFinalized)
+        return;
+
+    _dashMovementSpeedUpdatesFinalized = true;
+
+    PrepareDashMovementState();
+
+    UpdateSpeed(MOVE_RUN);
+    UpdateSpeed(MOVE_RUN_BACK);
+    UpdateSpeed(MOVE_WALK);
+    UpdateSpeed(MOVE_SWIM);
+    UpdateSpeed(MOVE_FLIGHT);
+}
+
+void Unit::CleanupDashMovementAfterAuraEnd()
+{
+    m_movementInfo.jump.Reset();
+    RemoveUnitMovementFlag(MOVEMENTFLAG_FALLING | MOVEMENTFLAG_FALLING_FAR);
+
+    if (Player* playerMover = GetPlayerMovingMe())
+    {
+        WorldPackets::Movement::MoveUpdate moveUpdate;
+        moveUpdate.Status = &m_movementInfo;
+        SendMessageToSet(moveUpdate.Write(), playerMover);
+    }
+}
+
+void Unit::DeferDashGravityRestore()
+{
+    _deferDashGravityRestore = true;
+}
+
+void Unit::RestoreDeferredDashGravity()
+{
+    if (!_deferDashGravityRestore)
+        return;
+
+    _deferDashGravityRestore = false;
+
+    if (HasAuraType(SPELL_AURA_MOD_ROOT_DISABLE_GRAVITY)
+        || HasAuraType(SPELL_AURA_MOD_STUN_DISABLE_GRAVITY)
+        || HasAuraType(SPELL_AURA_DISABLE_GRAVITY)
+        || (IsCreature() && ToCreature()->IsFloating()))
+        return;
+
+    SetDisableGravity(false);
 }
 
 bool Unit::SetFall(bool enable)

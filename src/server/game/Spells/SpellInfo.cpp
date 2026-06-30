@@ -1567,6 +1567,16 @@ bool SpellInfo::HasAura(AuraType aura) const
     return false;
 }
 
+bool SpellInfo::IsDashMovementBundle() const
+{
+    // DB2 audit @ build 67808 (2026-06-29): 22 spells share HasAura(373)&&HasAura(488) on
+    // DifficultyID=0, including Evoker Hover (357302/32/77/79), Void Dash (276779), Crane Rush
+    // (436855), etc. FinalizeDashMovementSpeedUpdates + PrepareDashMovementState are Fel Rush
+    // air-specific and must not fire on other abilities. Allowlist to confirmed Fel Rush air bundles.
+    return Id == 197923  // Fel Rush air bundle
+        || Id == 389659; // Fel Rush air bundle (variant)
+}
+
 bool SpellInfo::HasAreaAuraEffect() const
 {
     for (SpellEffectInfo const& effect : GetEffects())
