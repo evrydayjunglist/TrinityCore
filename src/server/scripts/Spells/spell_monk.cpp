@@ -447,17 +447,29 @@ class spell_monk_roll : public SpellScript
         return SPELL_CAST_OK;
     }
 
-    void HandleDummy(SpellEffIndex /*effIndex*/)
+    void CastRollChildren()
     {
-        GetCaster()->CastSpell(GetCaster(), GetCaster()->HasUnitMovementFlag(MOVEMENTFLAG_BACKWARD) ? SPELL_MONK_ROLL_BACKWARD : SPELL_MONK_ROLL_FORWARD,
-            TRIGGERED_IGNORE_CAST_IN_PROGRESS);
-        GetCaster()->CastSpell(GetCaster(), SPELL_MONK_NO_FEATHER_FALL, true);
+        Unit* caster = GetCaster();
+        uint32 rollSpell = caster->HasUnitMovementFlag(MOVEMENTFLAG_BACKWARD) ? SPELL_MONK_ROLL_BACKWARD : SPELL_MONK_ROLL_FORWARD;
+
+        // 109132 starts Roll CD/GCD before AfterCast; CastSpell(107427) fails with SPELL_FAILED_NOT_READY (91)
+        // on the wire (tc-64864_parsed.txt) even with TRIGGERED_FULL_MASK. Apply dash bundles directly.
+        if (!caster->AddAura(rollSpell, caster))
+            TC_LOG_ERROR("spells", "spell_monk_roll: failed to apply dash aura {}", rollSpell);
+
+        if (!caster->AddAura(SPELL_MONK_NO_FEATHER_FALL, caster))
+            TC_LOG_ERROR("spells", "spell_monk_roll: failed to apply aura {}", SPELL_MONK_NO_FEATHER_FALL);
+    }
+
+    void HandleAfterCast()
+    {
+        CastRollChildren();
     }
 
     void Register() override
     {
         OnCheckCast += SpellCheckCastFn(spell_monk_roll::CheckCast);
-        OnEffectHitTarget += SpellEffectFn(spell_monk_roll::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+        AfterCast += SpellCastFn(spell_monk_roll::HandleAfterCast);
     }
 };
 
@@ -465,11 +477,6 @@ class spell_monk_roll : public SpellScript
 // 109131 - Roll (backward)
 class spell_monk_roll_aura : public AuraScript
 {
-    void CalcMovementAmount(AuraEffect const* /*aurEff*/, SpellEffectValue& amount, bool& /*canBeRecalculated*/)
-    {
-        amount += 100.0;
-    }
-
     void CalcImmunityAmount(AuraEffect const* /*aurEff*/, SpellEffectValue& amount, bool& /*canBeRecalculated*/)
     {
         amount -= 100.0;
@@ -487,9 +494,6 @@ class spell_monk_roll_aura : public AuraScript
 
     void Register() override
     {
-        // Values need manual correction
-        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_monk_roll_aura::CalcMovementAmount, EFFECT_0, SPELL_AURA_MOD_SPEED_NO_CONTROL);
-        DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_monk_roll_aura::CalcMovementAmount, EFFECT_2, SPELL_AURA_MOD_MINIMUM_SPEED);
         DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_monk_roll_aura::CalcImmunityAmount, EFFECT_5, SPELL_AURA_MECHANIC_IMMUNITY);
         DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_monk_roll_aura::CalcImmunityAmount, EFFECT_6, SPELL_AURA_MECHANIC_IMMUNITY);
 
