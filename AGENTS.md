@@ -4,6 +4,17 @@
 
 **Fork steering (canonical):** [`docs/midnight-assessment/project-focus.md`](docs/midnight-assessment/project-focus.md)
 
+## Local DB credentials (agents — use for all MySQL queries)
+
+| Account | User | Password | DB names |
+|---------|------|----------|----------|
+| Root / admin | `root` | `123slam` | `world` `auth` `characters` `hotfixes` |
+| App user | `trinity` | `trinity` | runtime only (worldserver/bnetserver) |
+
+MySQL CLI: `D:/WOWEmulation/Emulators/Builds/TrinityCore-evry/bin/RelWithDebInfo/mysql/bin/mysql.exe`
+
+Full details + query template: [`successful-local-baseline.md` § DB credentials](docs/midnight-assessment/successful-local-baseline.md#db-credentials-local-machine--agents-use-these-for-queries)
+
 ## What this repository is
 
 **TrinityCore `master` fork** (Midnight era): tracks upstream TC `master` while adding
@@ -159,8 +170,12 @@ After changes (unless user says otherwise): when a module system exists,
 - `docs/midnight-assessment/reference-trees-on-disk-alert.md` — **gitignored trees are on disk** — verify before claiming missing
 - `docs/midnight-assessment/sql-update-conventions.md` — SQL update naming + upstream sync
 - `docs/midnight-assessment/retail-data-first-checklist.md` — **before hardcoding client ids:** grep DB2, map packet fields, self-review
+- `docs/midnight-assessment/db2-export-agent-instructions.md` — **agents:** EvryDb2Export / wago DB2 evidence before spell scripting
+- `docs/midnight-assessment/db2-export-workflow.md` — DB2 CSV export workflow (owner + agents)
+- `tools/README.md` — local WoWDBDefs + EvryDb2Export (DBCD) setup
 - `docs/midnight-assessment/retail-packet-sniff-workflow.md` — **live retail** Ymir + WowPacketParser agent/owner loop
 - `docs/midnight-assessment/agent-task-handoff-template.md` — **paste/read first** for scoped agent tasks (rules, sworn acknowledgment, task brief, closeout)
+- **Cursor skills (gitignored — on disk locally, workspace search may find nothing):** `D:\WOWEmulation\Emulators\Source\TrinityCore-evry\.cursor\skills\trinitycore-db2-export\SKILL.md` (DB2 export); `…\trinitycore-retail-sniff\SKILL.md` (live retail sniff); `…\trinitycore-gm-commands\SKILL.md` (GM playtest). `Test-Path` + Read with absolute path before claiming missing.
 - `docs/midnight-assessment/warbands/char-select-campsites-handoff.md` — char-select campsites (**complete** user 2026-06-27; not in-game housing)
 - `docs/midnight-assessment/warbands/warbands-overall-handoff.md` — **warbands overall** (Phases 1 + 1.5 + **2 complete** user 2026-06-27; Phase 3–4 next)
 - `docs/midnight-assessment/warbands/warbands-phase2-account-wide-currency-handoff.md` — Phase 2 account-wide currency **complete** (implementation spec + R1–R3 follow-ups)
@@ -170,6 +185,11 @@ After changes (unless user says otherwise): when a module system exists,
 - `docs/midnight-assessment/warbands/warbands-phase1-list-packet-handoff.md` — Phase 1 + 1.5 **debugging record** + code review (**hacks vs stubs vs assumptions**; playtest complete 2026-06-27)
 - `docs/midnight-assessment/warbands/warbands-retail-sniff-2026-06-27.md` — retail sniff `12.0.7.68275` (Capture A: Phase 4 bank; Capture B: Phase 1 transfer wire format)
 - `docs/midnight-assessment/warbands/warbands-agent-intro.md` — **paste/read first** for agents starting in-game warbands work
+- `docs/midnight-assessment/fel-rush-handoff.md` — Fel Rush DH movement (scripts, path damage **192611** — **RESOLVED** 2026-06-29)
+- `docs/midnight-assessment/fel-rush-aura-373-mod-speed-no-control-handoff.md` — aura **373** core handler + Monk/Fel dash profiles
+- `docs/midnight-assessment/fel-rush-dash-movement-sync-handoff.md` — **offshoot:** airborne **197923** dash movement sync (**Tier 2 complete** 2026-06-29; RCA §14)
+- `docs/midnight-assessment/fel-rush-dash-movement-tier3-polish-handoff.md` — **Tier 3 polish** (complete) + §14 path-damage closeout
+- `docs/midnight-assessment/fel-rush-path-damage-rca.md` — **path damage 192611 RCA** (cast-order vs dash-bundle casting lockout; **resolved / fixed** 2026-06-29; air spot-check deferred by owner)
 - `docs/midnight-assessment/dracthyr/dracthyr-forbidden-reach-handoff.md` — side project: Dracthyr intro overview; **§8 evidence/gap labels**
 - `docs/midnight-assessment/dracthyr/dracthyr-phase-1b-handoff.md` — Phase 1b lower War Creche (mostly done; playtest bugs B1–B3)
 - `docs/midnight-assessment/dracthyr/dracthyr-intro-quest-popup-decline-handoff.md` — **R2 done:** Accept/Decline **64864** (`OfferedScriptQuestID` + `ACCEPT_QUEST` grant)
@@ -178,7 +198,7 @@ After changes (unless user says otherwise): when a module system exists,
 - `docs/midnight-assessment/dracthyr/dracthyr-intro-quest-accept-history.md` — R2 chronology (superseded experiments; do not implement from)
 - `docs/midnight-assessment/dracthyr/dracthyr-intro-quest-accept-proper-fix-handoff.md` — Hack 1 Track B (done; final architecture in popup-decline handoff)
 - `docs/midnight-assessment/dracthyr/dracthyr-intro-quest-accept-fallback-removal-handoff.md` — **done:** Hack 2 (2s fallback) removed
-- `modules/README.md` — product module layout
+- `docs/midnight-assessment/ascension-inspired-aspirations.md` — **aspirational only** — Ascension-inspired dream features (not a work track)
 
 Prior-attempt gate/handoff docs are archived under
 `docs/midnight-assessment/archive/pre-restart/` — not current state.
