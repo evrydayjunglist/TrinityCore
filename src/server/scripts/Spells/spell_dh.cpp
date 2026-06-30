@@ -23,8 +23,10 @@
 
 #include "AreaTrigger.h"
 #include "AreaTriggerAI.h"
+#include "CellImpl.h"
 #include "Containers.h"
 #include "DB2Stores.h"
+#include "GridNotifiersImpl.h"
 #include "PathGenerator.h"
 #include "Player.h"
 #include "ScriptMgr.h"
@@ -33,6 +35,7 @@
 #include "SpellAuras.h"
 #include "SpellHistory.h"
 #include "SpellMgr.h"
+#include "MovementPackets.h"
 #include "SpellScript.h"
 #include "TaskScheduler.h"
 #include <numeric>
@@ -113,10 +116,12 @@ enum DemonHunterSpells
     SPELL_DH_FEL_DEVASTATION_HEAL                  = 212106,
     SPELL_DH_FEL_FLAME_FORTIFICATION_TALENT        = 389705,
     SPELL_DH_FEL_FLAME_FORTIFICATION_MOD_DAMAGE    = 393009,
-    SPELL_DH_FEL_RUSH                              = 195072,
+    SPELL_DH_FEL_RUSH                              = 344865,
     SPELL_DH_FEL_RUSH_DMG                          = 192611,
     SPELL_DH_FEL_RUSH_GROUND                       = 197922,
     SPELL_DH_FEL_RUSH_WATER_AIR                    = 197923,
+    SPELL_DH_FEL_RUSH_ANIM                         = 199737,
+    SPELL_DH_FEL_RUSH_END                          = 346123,
     SPELL_DH_FELBLADE                              = 232893,
     SPELL_DH_FELBLADE_CHARGE                       = 213241,
     SPELL_DH_FELBLADE_COOLDOWN_RESET_PROC_HAVOC    = 236167,
@@ -1342,6 +1347,224 @@ class spell_dh_fel_flame_fortification : public AuraScript
     {
         AfterEffectApply += AuraEffectApplyFn(spell_dh_fel_flame_fortification::OnApply, EFFECT_0, SPELL_AURA_PERIODIC_TRIGGER_SPELL, AURA_EFFECT_HANDLE_REAL);
         AfterEffectRemove += AuraEffectRemoveFn(spell_dh_fel_flame_fortification::OnRemove, EFFECT_0, SPELL_AURA_PERIODIC_TRIGGER_SPELL, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
+// 195072 - Fel Rush (triggered by 344865)
+class spell_dh_fel_rush : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DH_FEL_RUSH_GROUND, SPELL_DH_FEL_RUSH_WATER_AIR, SPELL_DH_FEL_RUSH_DMG });
+    }
+
+    SpellCastResult CheckCast()
+    {
+        if (GetCaster()->HasUnitState(UNIT_STATE_ROOT))
+            return SPELL_FAILED_ROOTED;
+
+        return SPELL_CAST_OK;
+    }
+
+    void CastFelRushDamage()
+    {
+        Unit* caster = GetCaster();
+        float dashDistance = GetEffectInfo(EFFECT_0).CalcValue(caster);
+        if (dashDistance <= 0.0f)
+            dashDistance = 25.0f;
+
+        Position destPos = caster->GetFirstCollisionPosition(dashDistance, 0.0f);
+
+        SpellCastTargets targets;
+        targets.SetDst(destPos);
+
+        caster->CastSpell(CastSpellTargetArg(std::move(targets)), SPELL_DH_FEL_RUSH_DMG, CastSpellExtraArgsInit{
+            .TriggerFlags = TRIGGERED_FULL_MASK,
+            .TriggeringSpell = GetSpell()
+        });
+    }
+
+    void PrepareFelRushDash(Unit* caster)
+    {
+        // Retail: glide CD 131347 250 ms; dash movement state owned by core dash bundle hook (197923 aura 373+488).
+        caster->RemoveAurasDueToSpell(SPELL_DH_GLIDE);
+        caster->RemoveAurasDueToSpell(SPELL_DH_GLIDE_DURATION);
+        caster->m_movementInfo.inertia.reset();
+        caster->m_movementInfo.advFlying.reset();
+
+        if (Player* player = caster->ToPlayer())
+        {
+            player->GetSpellHistory()->StartCooldown(sSpellMgr->AssertSpellInfo(SPELL_DH_GLIDE, GetCastDifficulty()), 0, nullptr, false, 250ms);
+            player->UpdateSpeed(MOVE_FLIGHT);
+        }
+    }
+
+    void HandleDashGround(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        if (!caster->IsFalling() || caster->IsInWater())
+        {
+            // The dash bundle (197922) applies SPELL_AURA_DISABLE_CASTING_EXCEPT_ABILITIES,
+            // which blocks the path-damage cast (192611 -> SPELL_FAILED_CANT_DO_THAT_RIGHT_NOW).
+            // Issue the damage from the unrestricted pre-dash position first.
+            CastFelRushDamage();
+            PrepareFelRushDash(caster);
+            caster->CastSpell(caster, SPELL_DH_FEL_RUSH_GROUND, CastSpellExtraArgsInit{
+                .TriggerFlags = TRIGGERED_FULL_MASK,
+                .TriggeringSpell = GetSpell()
+            });
+        }
+    }
+
+    void HandleDashAir(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        if (caster->IsFalling() && !caster->IsInWater())
+        {
+            // The dash bundle (197923) applies SPELL_AURA_DISABLE_CASTING_EXCEPT_ABILITIES,
+            // which blocks the path-damage cast (192611 -> SPELL_FAILED_CANT_DO_THAT_RIGHT_NOW).
+            // Issue the damage from the unrestricted pre-dash position first.
+            CastFelRushDamage();
+            PrepareFelRushDash(caster);
+
+            caster->CastSpell(caster, SPELL_DH_FEL_RUSH_WATER_AIR, CastSpellExtraArgsInit{
+                .TriggerFlags = TRIGGERED_FULL_MASK,
+                .TriggeringSpell = GetSpell()
+            });
+        }
+    }
+
+    void Register() override
+    {
+        OnCheckCast += SpellCheckCastFn(spell_dh_fel_rush::CheckCast);
+        OnEffectHitTarget += SpellEffectFn(spell_dh_fel_rush::HandleDashGround, EFFECT_0, SPELL_EFFECT_DUMMY);
+        OnEffectHitTarget += SpellEffectFn(spell_dh_fel_rush::HandleDashAir, EFFECT_1, SPELL_EFFECT_DUMMY);
+    }
+};
+
+// 197922 - Fel Rush (ground)
+// 197922 / 197923 - Fel Rush (ground / air dash bundle)
+class spell_dh_fel_rush_aura : public AuraScript
+{
+    // CalcNormalSpeedAmount removed: DB2 rows 290854 (197922 E4) and 290863 (197923 E4)
+    // already carry EffectAura=191 EffectBasePointsF=66 @ build 67808. Script override
+    // was redundant; TC reads DB2 base points directly for SPELL_AURA_USE_NORMAL_MOVEMENT_SPEED.
+
+    void CalcImmunityAmount(AuraEffect const* /*aurEff*/, SpellEffectValue& amount, bool& /*canBeRecalculated*/)
+    {
+        amount -= 100.0f;
+    }
+
+    void ChangeRunBackSpeed(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        if (GetTarget()->IsDeferringDashMovementSpeedUpdates())
+            return;
+
+        GetTarget()->SetSpeed(MOVE_RUN_BACK, GetTarget()->GetSpeed(MOVE_RUN));
+    }
+
+    void RestoreRunBackSpeed(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        if (GetTarget()->IsDeferringDashMovementSpeedUpdates())
+            return;
+
+        GetTarget()->UpdateSpeed(MOVE_RUN_BACK);
+    }
+
+    void Register() override
+    {
+        AfterEffectApply += AuraEffectApplyFn(spell_dh_fel_rush_aura::ChangeRunBackSpeed, EFFECT_4, SPELL_AURA_USE_NORMAL_MOVEMENT_SPEED, AURA_EFFECT_HANDLE_REAL);
+        AfterEffectRemove += AuraEffectApplyFn(spell_dh_fel_rush_aura::RestoreRunBackSpeed, EFFECT_4, SPELL_AURA_USE_NORMAL_MOVEMENT_SPEED, AURA_EFFECT_HANDLE_REAL);
+
+        if (m_scriptSpellId == SPELL_DH_FEL_RUSH_GROUND)
+            DoEffectCalcAmount += AuraEffectCalcAmountFn(spell_dh_fel_rush_aura::CalcImmunityAmount, EFFECT_5, SPELL_AURA_MECHANIC_IMMUNITY);
+    }
+};
+
+// 346123 - Fel Rush (end / momentum snap at dash expiry)
+class spell_dh_fel_rush_end : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_DH_FEL_RUSH_END });
+    }
+
+    static void SetDest(SpellScript const& spellScript, SpellDestination& dest)
+    {
+        // Retail sniff FR-A build 68275 pkt 5289: 346123 DstLocation = server's last-known
+        // caster position at aura expire (~107 ms after dash start, i.e. the position
+        // from the first CMSG_MOVE_HEARTBEAT the server received during the 250 ms dash).
+        // TARGET_DEST_CASTER without script overrides resolves incorrectly (CAST_FAILED
+        // reason 32) in TC; dest.Relocate(*caster) replicates the retail server behaviour.
+        // No GetFirstCollisionPosition needed — DstLocation IS the caster's server position.
+        if (Unit* caster = spellScript.GetCaster())
+            dest.Relocate(*caster);
+    }
+
+    void Register() override
+    {
+        OnDestinationTargetSelect += SpellDestinationTargetSelectFn(spell_dh_fel_rush_end::SetDest, EFFECT_0, TARGET_DEST_CASTER);
+    }
+};
+
+// 192611 - Fel Rush (damage)
+class spell_dh_fel_rush_damage : public SpellScript
+{
+    void FilterTargets(std::list<WorldObject*>& unitList)
+    {
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
+        Position src = caster->GetPosition();
+        Position dest = src;
+
+        if (WorldLocation const* spellDest = GetExplTargetDest())
+            dest = spellDest->GetPosition();
+        else if (GetSpell()->m_targets.HasDst())
+            dest = *GetSpell()->m_targets.GetDstPos();
+        else
+            dest = caster->GetFirstCollisionPosition(25.0f, 0.0f);
+
+        float const maxDist = src.GetExactDist2d(dest);
+
+        if (maxDist < 1.0f)
+        {
+            unitList.clear();
+            return;
+        }
+
+        float lineWidth = GetSpellInfo()->Width;
+        if (lineWidth <= 0.0f)
+            lineWidth = caster->GetCombatReach();
+        float const lineWidthConst = lineWidth;
+        Position linePos = src;
+        linePos.SetOrientation(src.GetAbsoluteAngle(dest));
+
+        std::list<Unit*> units;
+        Trinity::AnyUnfriendlyUnitInObjectRangeCheck check(caster, caster, maxDist + 10.0f);
+        Trinity::UnitListSearcher<Trinity::AnyUnfriendlyUnitInObjectRangeCheck> searcher(caster, units, check);
+        Cell::VisitAllObjects(caster, searcher, maxDist + 10.0f);
+
+        unitList.clear();
+        for (Unit* unit : units)
+        {
+            if (!unit->IsAlive() || !caster->IsValidAttackTarget(unit))
+                continue;
+
+            if (!linePos.HasInLine(unit, unit->GetCombatReach(), lineWidthConst))
+                continue;
+
+            if (src.GetExactDist2d(unit) > maxDist + unit->GetCombatReach())
+                continue;
+
+            unitList.push_back(unit);
+        }
+    }
+
+    void Register() override
+    {
+        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_dh_fel_rush_damage::FilterTargets, EFFECT_0, TARGET_UNIT_LINE_CASTER_TO_DEST_ENEMY);
     }
 };
 
@@ -2828,6 +3051,10 @@ void AddSC_demon_hunter_spell_scripts()
     RegisterSpellScript(spell_dh_feast_of_souls);
     RegisterSpellScript(spell_dh_fel_devastation);
     RegisterSpellScript(spell_dh_fel_flame_fortification);
+    RegisterSpellScript(spell_dh_fel_rush);
+    RegisterSpellScript(spell_dh_fel_rush_aura);
+    RegisterSpellScript(spell_dh_fel_rush_end);
+    RegisterSpellScript(spell_dh_fel_rush_damage);
     RegisterSpellScript(spell_dh_felblade);
     RegisterSpellScript(spell_dh_felblade_charge);
     RegisterSpellScript(spell_dh_felblade_cooldown_reset_proc);
