@@ -36,9 +36,19 @@ Three tracks coexist — **follow the user's current task.** Full detail:
 
 Default path for all tracks: human Battle.net login on `MODULES=none`.
 
-**Fix quality (fork mottos):** **Non-hacky by default**, **We don't break things**, and
-**AC-minded, TC-safe** — retail/sniff/DB2 evidence, minimal portable diffs, baseline
-protected; AC-like module discipline on native TrinityCore. On the **primary track**
+**Checkout policy (2026-06-30):** exactly **one project** may be checked out at a
+time — the owner is one person and works one project at a time. Before starting
+substantive work (code/SQL/doc edits), read and update
+[`track-checkout-board.md`](docs/midnight-assessment/track-checkout-board.md); check
+it back in before starting a different project. This supersedes any older "multiple
+retail-parity projects in parallel" language elsewhere in the docs.
+
+**Fix quality (fork mottos):** **Non-hacky by default**, **We don't break things**,
+**See something, log something** (notice something broken/hacky/off-goal while doing other
+work? document it, don't drive-by fix it), **AC-minded, TC-safe**, and **choose least hacky,
+most retail-like** (decision tie-breaker when options compete) — retail/sniff/DB2 evidence,
+minimal portable diffs, baseline protected; AC-like module discipline on native TrinityCore.
+On the **primary track**
 (`modules/`, `modules/mod-playerbots/`, Playerbots gates), also **mod-playerbots north star** —
 *AC-shaped stepping stones; TC-native implementation.* See
 [`project-focus.md` § mod-playerbots north star](docs/midnight-assessment/project-focus.md#mod-playerbots-north-star-primary-track).
@@ -136,6 +146,8 @@ After changes (unless user says otherwise): when a module system exists,
 - `docs/README.md` — fork vs upstream `doc/` (singular)
 - `docs/new-agent-intro.md` — complete agent introduction
 - `docs/midnight-assessment/current-state.md` — canonical living status
+- `docs/midnight-assessment/track-checkout-board.md` — **check before starting work** — which single project is checked out right now
+- `docs/midnight-assessment/agent-prompt-templates.md` — **owner-facing** — copy/paste prompt starters for opening an agent chat, by task type
 - `docs/midnight-assessment/fork-journal.md` — infra, upstream merges, repo hygiene chronology
 - `docs/midnight-assessment/successful-local-baseline.md` — build/run/login (confirmed 2026-06-25; re-verify after upstream merges)
 - `docs/midnight-assessment/build-and-run-readiness.md` — build/run gates + module pitfalls
@@ -175,7 +187,8 @@ After changes (unless user says otherwise): when a module system exists,
 - `tools/README.md` — local WoWDBDefs + EvryDb2Export (DBCD) setup
 - `docs/midnight-assessment/retail-packet-sniff-workflow.md` — **live retail** Ymir + WowPacketParser agent/owner loop
 - `docs/midnight-assessment/agent-task-handoff-template.md` — **paste/read first** for scoped agent tasks (rules, sworn acknowledgment, task brief, closeout)
-- **Cursor skills (gitignored — on disk locally, workspace search may find nothing):** `D:\WOWEmulation\Emulators\Source\TrinityCore-evry\.cursor\skills\trinitycore-db2-export\SKILL.md` (DB2 export); `…\trinitycore-retail-sniff\SKILL.md` (live retail sniff); `…\trinitycore-gm-commands\SKILL.md` (GM playtest). `Test-Path` + Read with absolute path before claiming missing.
+- **Cursor skills (gitignored — on disk locally, workspace search may find nothing):** under `D:\WOWEmulation\Emulators\Source\TrinityCore-evry\.cursor\skills\` — `trinitycore-db2-export` (DB2 export), `trinitycore-retail-sniff` (live retail sniff), `trinitycore-gm-commands` (GM playtest), `trinitycore-agent-task-handoff` (scoped task ritual + NYI labels), `trinitycore-retail-data-first` (pre-hardcoding checklist), `trinitycore-track-switch` (checkout/pause/resume — see `track-checkout-board.md`). `Test-Path` + Read with absolute path before claiming missing.
+- **Cursor rules (gitignored, always/glob-scoped — not visible in a normal doc index):** under `.cursor\rules\` — see each `.mdc` frontmatter for scope; `track-checkout-required.mdc` (always-on, checkout board) and `owner-reports-are-ground-truth.mdc` / `reference-trees-gitignored.mdc` (always-on) are the highest-value ones to know exist.
 - `docs/midnight-assessment/warbands/char-select-campsites-handoff.md` — char-select campsites (**complete** user 2026-06-27; not in-game housing)
 - `docs/midnight-assessment/warbands/warbands-overall-handoff.md` — **warbands overall** (Phases 1 + 1.5 + **2 complete** user 2026-06-27; Phase 3–4 next)
 - `docs/midnight-assessment/warbands/warbands-phase2-account-wide-currency-handoff.md` — Phase 2 account-wide currency **complete** (implementation spec + R1–R3 follow-ups)
@@ -185,11 +198,13 @@ After changes (unless user says otherwise): when a module system exists,
 - `docs/midnight-assessment/warbands/warbands-phase1-list-packet-handoff.md` — Phase 1 + 1.5 **debugging record** + code review (**hacks vs stubs vs assumptions**; playtest complete 2026-06-27)
 - `docs/midnight-assessment/warbands/warbands-retail-sniff-2026-06-27.md` — retail sniff `12.0.7.68275` (Capture A: Phase 4 bank; Capture B: Phase 1 transfer wire format)
 - `docs/midnight-assessment/warbands/warbands-agent-intro.md` — **paste/read first** for agents starting in-game warbands work
-- `docs/midnight-assessment/fel-rush-handoff.md` — Fel Rush DH movement (scripts, path damage **192611** — **RESOLVED** 2026-06-29)
-- `docs/midnight-assessment/fel-rush-aura-373-mod-speed-no-control-handoff.md` — aura **373** core handler + Monk/Fel dash profiles
-- `docs/midnight-assessment/fel-rush-dash-movement-sync-handoff.md` — **offshoot:** airborne **197923** dash movement sync (**Tier 2 complete** 2026-06-29; RCA §14)
-- `docs/midnight-assessment/fel-rush-dash-movement-tier3-polish-handoff.md` — **Tier 3 polish** (complete) + §14 path-damage closeout
-- `docs/midnight-assessment/fel-rush-path-damage-rca.md` — **path damage 192611 RCA** (cast-order vs dash-bundle casting lockout; **resolved / fixed** 2026-06-29; air spot-check deferred by owner)
+- `docs/midnight-assessment/complete/fel-rush-handoff.md` — Fel Rush DH movement, **complete** 2026-06-29 (parent of a 5-doc cluster now archived under `complete/`; air spot-check deferred by owner, not NYI)
+- `docs/midnight-assessment/combat-stats-retail-parity-handoff.md` — **Global stat/combat parity** (all classes + creatures) — parent handoff
+- `docs/midnight-assessment/combat-stats-retail-parity-phase0-pass-a-handoff.md` — **Phase 0 Pass A** (**complete** — evidence only)
+- `docs/midnight-assessment/combat-stats-retail-parity-phase0-pass-b-handoff.md` — **Phase 0 Pass B** (**complete** 2026-06-30 — **FR-B–F**; L80 squish RCA)
+- `docs/midnight-assessment/combat-stats-retail-parity-phase-p1-handoff.md` — **Phase P1** (**ready to implement** — Option A + 12.0 squish §3.5)
+- `docs/midnight-assessment/combat-stats-retail-parity-roadmap.md` — combat-stats phases (P/C/S tracks)
+- `docs/midnight-assessment/combat-stats-retail-parity-contract.md` — combat-stats locked work rules
 - `docs/midnight-assessment/dracthyr/dracthyr-forbidden-reach-handoff.md` — side project: Dracthyr intro overview; **§8 evidence/gap labels**
 - `docs/midnight-assessment/dracthyr/dracthyr-phase-1b-handoff.md` — Phase 1b lower War Creche (mostly done; playtest bugs B1–B3)
 - `docs/midnight-assessment/dracthyr/dracthyr-intro-quest-popup-decline-handoff.md` — **R2 done:** Accept/Decline **64864** (`OfferedScriptQuestID` + `ACCEPT_QUEST` grant)
