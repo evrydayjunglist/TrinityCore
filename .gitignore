@@ -46,3 +46,6 @@ cmake-build-*/*
 /tools/
 # Local packet captures at repo root (prefer temp/ for sniff work)
 /*.pkt
+
+# Generated HTML docs (source of truth is docs/*.md) — optional to commit later
+/docs/html/
