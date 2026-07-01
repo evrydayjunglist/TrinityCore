@@ -1,0 +1,23 @@
+-- Dracthyr Forbidden Reach: fix stale `creature_addon` rows shadowing the lower War Creche
+-- NPCs' correct `creature_template_addon` pose data (B1 — "not in stasis visually"; and the
+-- related "Kethahn standing on the bed instead of lying dead" report).
+--
+-- Root cause: Phase 1b (`2026_06_25_26_world_evry_dracthyr_lower_war_creche.sql`) spawned
+-- Talon Kethahn (181712), Tethalash (181680), Scalecommander Azurathel-stasis (183380), and the
+-- [DNT] Cave In credit (187015) at guids 9003900-9003903, and set their pose data via
+-- `creature_template_addon` (aiAnimKit 24296/24297 for the stasis pair; aura 29266 "feign death"
+-- for Kethahn). `Creature::GetCreatureAddon()` checks the per-spawn `creature_addon` table
+-- *first* and only falls back to `creature_template_addon` when no per-guid row exists
+-- (Creature.cpp). Guids 9003900/9003901/9003903 already had leftover `creature_addon` rows from
+-- an unrelated, older base-DB spawn that used to occupy those same guid numbers (StandState 0,
+-- aiAnimKit 0, emote 69/69/426, no auras) — those stale rows fully shadow the intended
+-- `creature_template_addon` values, so the stasis AnimKit and feign-death aura never apply.
+-- Scalecommander Azurathel's stasis guid (9003902) has no such leftover row, which is why it
+-- was not reported broken. Purely a pose data-collision; the underlying spellclick/gossip/quest
+-- credit wiring is untouched and unaffected (confirmed working per prior playtests).
+--
+-- Fix: delete the stale per-guid rows so the correct `creature_template_addon` rows apply again.
+-- See docs/midnight-assessment/dracthyr/dracthyr-forbidden-reach-handoff.md and
+-- dracthyr-phase-1b-handoff.md §11 (B1/B2).
+
+DELETE FROM `creature_addon` WHERE `guid` IN (9003900, 9003901, 9003902, 9003903);
