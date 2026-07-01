@@ -63,8 +63,10 @@ Scoped tasks: [`agent-task-handoff-template.md`](docs/midnight-assessment/agent-
 asks. Finish validation + closeout first; owner reviews and commits when ready.
 
 **SQL (fork):** new tables/data → **`sql/updates/{world,auth,characters,hotfixes}/master/`**
-only — **do not patch `sql/base/dev/`** unless the owner explicitly requests a full
-base refresh. Existing dev DBs apply changes via **`worldserver -u`**. See
+only — **do not patch `sql/base/`** (incl. `sql/base/dev/`) unless the owner explicitly
+requests a full base refresh. **Never hand-edit a base dump's `updates` table** (that's
+TrinityCore's own official-release tracking) — no exception, even during a base refresh.
+Existing dev DBs apply changes via **`worldserver -u`**. See
 [`sql-update-conventions.md`](docs/midnight-assessment/sql-update-conventions.md).
 
 ## Reference vs implementation
