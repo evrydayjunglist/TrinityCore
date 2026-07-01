@@ -1,0 +1,6 @@
+build=12.0.7.67808
+client_patch=12.0.7.68275
+exported=2026-06-29
+source=EvryDb2Export
+tables=ExpectedStat,ExpectedStatMod,ContentTuningXExpected,HpPerSta
+handoff=docs/midnight-assessment/combat-stats-retail-parity-phase0-pass-a-handoff.md
