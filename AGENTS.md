@@ -204,8 +204,10 @@ After changes (unless user says otherwise): when a module system exists,
 - `docs/midnight-assessment/combat-stats-retail-parity-handoff.md` — **Global stat/combat parity** (all classes + creatures) — parent handoff
 - `docs/midnight-assessment/combat-stats-retail-parity-phase0-pass-a-handoff.md` — **Phase 0 Pass A** (**complete** — evidence only)
 - `docs/midnight-assessment/combat-stats-retail-parity-phase0-pass-b-handoff.md` — **Phase 0 Pass B** (**complete** 2026-06-30 — **FR-B–F**; L80 squish RCA)
-- `docs/midnight-assessment/combat-stats-retail-parity-phase-p1-handoff.md` — **Phase P1** (**ready to implement** — Option A + 12.0 squish §3.5)
+- `docs/midnight-assessment/combat-stats-retail-parity-phase-p1-handoff.md` — **Phase P1** base stamina/HP (**CLOSED** 2026-07-01 — Option A + 12.0 squish; owner-playtest-verified; known gap: L81-90 taper, not NYI)
+- `docs/midnight-assessment/combat-stats-retail-parity-phase-p2-handoff.md` — **Phase P2** STR/AGI/INT + AttackPower (**CLOSED** 2026-07-01 — 6/13 classes sniff-derived, owner-playtest-verified; known gaps: 7-class fallback weights, L81-90 taper)
 - `docs/midnight-assessment/combat-stats-retail-parity-roadmap.md` — combat-stats phases (P/C/S tracks)
+- `docs/midnight-assessment/combat-stats-retail-parity-phase-p3-handoff.md` — **Phase P3** base armor (**kicked off, blocked on evidence** 2026-07-01 — `agi*2` confirmed wrong mechanism; needs a 2nd retail armor data point before a replacement formula can be picked)
 - `docs/midnight-assessment/combat-stats-retail-parity-contract.md` — combat-stats locked work rules
 - `docs/midnight-assessment/dracthyr/dracthyr-forbidden-reach-handoff.md` — side project: Dracthyr intro overview; **§8 evidence/gap labels**
 - `docs/midnight-assessment/dracthyr/dracthyr-phase-1b-handoff.md` — Phase 1b lower War Creche (mostly done; playtest bugs B1–B3)
