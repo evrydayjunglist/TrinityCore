@@ -18,6 +18,8 @@
 #include "PlayerbotAIBase.h"
 #include "PlayerbotsConfig.h"
 #include "Player.h"
+#include "Packets/MovementPackets.h"
+#include "WorldSession.h"
 #include <algorithm>
 
 PlayerbotAIBase::PlayerbotAIBase(Player* bot) : _bot(bot)
@@ -31,6 +33,15 @@ bool PlayerbotAIBase::CanUpdateAI() const
 
 void PlayerbotAIBase::UpdateAI(uint32 diff)
 {
+    // Checked every raw tick, ahead of the react-delay throttle below — mirrors AC's
+    // PlayerbotHolder::UpdateSessions(), which polls every bot's teleport state unconditionally
+    // rather than on the AI decision cadence, so a stuck bot self-acks as soon as possible.
+    if (_bot && _bot->IsBeingTeleported())
+    {
+        HandleTeleportAck();
+        return;
+    }
+
     if (_nextAICheckDelay > diff)
     {
         _nextAICheckDelay -= diff;
@@ -49,4 +60,28 @@ void PlayerbotAIBase::UpdateAI(uint32 diff)
 void PlayerbotAIBase::SetNextCheckDelay(uint32 delay)
 {
     _nextAICheckDelay = delay;
+}
+
+void PlayerbotAIBase::HandleTeleportAck()
+{
+    WorldSession* session = _bot ? _bot->GetSession() : nullptr;
+    if (!session || !session->IsBotSession())
+        return;
+
+    if (_bot->IsBeingTeleportedFar())
+    {
+        // Documented in WorldSession.h as safe for server-side calls (already used for the
+        // reconnect-mid-teleport edge case) — exactly what a bot's non-existent client would
+        // have triggered via CMSG_WORLD_PORT_RESPONSE.
+        session->HandleMoveWorldportAck();
+        return;
+    }
+
+    if (_bot->IsBeingTeleportedNear())
+    {
+        WorldPacket rawAckPacket(CMSG_MOVE_TELEPORT_ACK);
+        WorldPackets::Movement::MoveTeleportAck ack(std::move(rawAckPacket));
+        ack.MoverGUID = _bot->GetGUID();
+        session->HandleMoveTeleportAck(ack);
+    }
 }

@@ -39,6 +39,13 @@ protected:
     void SetNextCheckDelay(uint32 delay);
 
 private:
+    // AC-mirrored (PlayerbotAI::HandleTeleportAck): bot sessions never receive any outbound
+    // packet (WorldSession::SendPacket no-ops for IsBotSession()), so the client ack that
+    // Player::TeleportTo()'s near/far branches wait on can never arrive on its own. Self-acks
+    // through the same core handlers a real client's ack would hit, instead of leaving the bot
+    // stuck in TeleportState::WaitingForTeleportAck/WaitingForWorldPortAck forever.
+    void HandleTeleportAck();
+
     Player* _bot;
     uint32 _nextAICheckDelay = 0;
 
