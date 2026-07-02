@@ -76,6 +76,11 @@ void AccountCurrencyMgr::SaveToDB(LoginDatabaseTransaction trans)
 {
     uint32 const battlenetAccountId = _owner->GetBattlenetAccountId();
 
+    // Bnet-account-scoped table FKs on battlenetAccountId - nothing valid to save for a
+    // session with no linked Battle.net account (id 0).
+    if (!battlenetAccountId)
+        return;
+
     for (auto itr = _currencies.begin(); itr != _currencies.end();)
     {
         PlayerCurrency& currency = itr->second;

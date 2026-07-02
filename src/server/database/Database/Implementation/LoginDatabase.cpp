@@ -46,6 +46,11 @@ void LoginDatabaseConnection::DoPrepareStatements()
         "LEFT JOIN account_access aa ON a.id = aa.AccountID AND aa.RealmID IN (-1, ?) LEFT JOIN battlenet_account_bans bab ON ba.id = bab.id LEFT JOIN account_banned ab ON a.id = ab.id AND ab.active = 1 "
         "WHERE a.username = ? AND LENGTH(a.session_key_bnet) = 64 ORDER BY aa.RealmID DESC LIMIT 1", CONNECTION_ASYNC);
 
+    // Mirrors the bnet_account_id/bnet_account_email columns of LOGIN_SEL_ACCOUNT_INFO_BY_NAME above, keyed by
+    // account id instead of username - used for session paths that already know the account id (e.g. bot sessions).
+    PrepareStatement(LOGIN_SEL_BNET_ACCOUNT_INFO_BY_ACCOUNT_ID, "SELECT ba.id, ba.email FROM account a "
+        "LEFT JOIN battlenet_accounts ba ON a.battlenet_account = ba.id WHERE a.id = ?", CONNECTION_SYNCH);
+
     PrepareStatement(LOGIN_SEL_ACCOUNT_LIST_BY_EMAIL, "SELECT id, username FROM account WHERE email = ?", CONNECTION_SYNCH);
     PrepareStatement(LOGIN_SEL_ACCOUNT_BY_IP, "SELECT id, username FROM account WHERE last_ip = ?", CONNECTION_SYNCH);
     PrepareStatement(LOGIN_SEL_ACCOUNT_BY_ID, "SELECT 1 FROM account WHERE id = ?", CONNECTION_SYNCH);

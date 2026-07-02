@@ -328,6 +328,11 @@ void BattlePetMgr::LoadFromDB(PreparedQueryResult pets, PreparedQueryResult slot
 
 void BattlePetMgr::SaveToDB(LoginDatabaseTransaction trans)
 {
+    // Bnet-account-scoped tables all FK on battlenetAccountId - nothing valid to save for a
+    // session with no linked Battle.net account (id 0).
+    if (!_owner->GetBattlenetAccountId())
+        return;
+
     LoginDatabasePreparedStatement* stmt = nullptr;
 
     for (auto itr = _pets.begin(); itr != _pets.end();)

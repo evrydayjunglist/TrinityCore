@@ -314,6 +314,11 @@ std::vector<WorldPackets::Character::WarbandGroup> WarbandGroupMgr::BuildEnumGro
 
 void WarbandGroupMgr::SaveToDB()
 {
+    // Bnet-account-scoped tables all FK on battlenetAccountId - nothing valid to save for a
+    // session with no linked Battle.net account (id 0).
+    if (!_owner->GetBattlenetAccountId())
+        return;
+
     LoginDatabaseTransaction trans = LoginDatabase.BeginTransaction();
 
     LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_BNET_WARBAND_GROUP_MEMBERS);

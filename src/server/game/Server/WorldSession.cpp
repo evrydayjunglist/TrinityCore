@@ -240,7 +240,25 @@ WorldSession* WorldSession::CreateForBot(uint32 accountId, std::string accountNa
         .Type = ClientBuild::Type::Retail
     };
 
-    WorldSession* session = new WorldSession(accountId, std::move(accountName), 0, std::string(),
+    // Bot accounts are regular `account` rows and, on this fork, are already linked to a real
+    // `battlenet_accounts` row via `account.battlenet_account` (same as any human alt on that
+    // account) - look it up instead of hardcoding 0, so Bnet-account-scoped saves (CollectionMgr,
+    // BattlePetMgr, warbands AccountCurrencyMgr/WarbandGroupMgr) work for bots exactly like they
+    // do for a human session on the same account. If a bot account somehow has no linked
+    // battlenet_accounts row, this legitimately yields 0/empty, which downstream save paths must
+    // treat as "no Bnet account, skip the write" rather than attempt an FK insert.
+    uint32 battlenetAccountId = 0;
+    std::string battlenetAccountEmail;
+    LoginDatabasePreparedStatement* bnetStmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BNET_ACCOUNT_INFO_BY_ACCOUNT_ID);
+    bnetStmt->setUInt32(0, accountId);
+    if (PreparedQueryResult bnetResult = LoginDatabase.Query(bnetStmt))
+    {
+        Field* bnetFields = bnetResult->Fetch();
+        battlenetAccountId = bnetFields[0].GetUInt32();
+        battlenetAccountEmail = bnetFields[1].GetString();
+    }
+
+    WorldSession* session = new WorldSession(accountId, std::move(accountName), battlenetAccountId, std::move(battlenetAccountEmail),
         nullptr, sec, expansion, 0, std::string("Bot"), Minutes(0),
         clientBuild, buildVariant, LOCALE_enUS, 0, false);
 

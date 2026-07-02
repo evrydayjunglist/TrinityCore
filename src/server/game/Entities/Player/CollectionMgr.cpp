@@ -117,6 +117,12 @@ void CollectionMgr::LoadCharacterData()
 
 void CollectionMgr::SaveToDB(LoginDatabaseTransaction trans)
 {
+    // Bnet-account-scoped tables all FK on battlenetAccountId - a session with no linked
+    // Battle.net account (id 0) has nothing valid to save here; skip rather than let every
+    // sub-save below hit the same FK violation on insert.
+    if (!_owner->GetBattlenetAccountId())
+        return;
+
     SaveAccountToys(trans);
     SaveAccountHeirlooms(trans);
     SaveAccountMounts(trans);
