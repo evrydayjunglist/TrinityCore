@@ -10254,6 +10254,11 @@ void Unit::SetAI(UnitAI* newAI)
             {
                 TC_LOG_ERROR("entities.player", "Unit::SetAI: refused for bot session player '{}' ({}) — use PlayerbotsMgr / GET_PLAYERBOT_AI, not UnitAI",
                     player->GetName(), player->GetGUID().ToString());
+                // Callers (e.g. Unit::UpdateCharmAI on a charm/mind-control effect) allocate newAI
+                // expecting SetAI to take ownership (matching the PushAI(newAI) path below, which
+                // wraps it in a shared_ptr). Refusing without freeing it here would leak that
+                // allocation every time a bot session player gets charmed.
+                delete newAI;
                 return;
             }
         }

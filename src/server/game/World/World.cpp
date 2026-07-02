@@ -368,12 +368,17 @@ void World::AddBotSession(WorldSession* s)
 
 void World::RemoveBotSession(uint32 accountId)
 {
-    SessionMap::iterator itr = m_botSessionsByAccount.find(accountId);
-    if (itr == m_botSessionsByAccount.end())
+    SessionMap::const_iterator itr = m_botSessionsByAccount.find(accountId);
+    if (itr == m_botSessionsByAccount.end() || !itr->second)
         return;
 
-    delete itr->second;
-    m_botSessionsByAccount.erase(itr);
+    // Bot sessions have no socket, so WorldSession::KickPlayer() (which only closes sockets) is a
+    // no-op for them. LogoutPlayer() is what actually clears the session's player, which lets
+    // WorldSession::Update()'s IsBotSession() branch signal removal - the per-tick bot-session
+    // loop below then safely erases + deletes, exactly like the human RemoveSession() path above.
+    // Mirrors modules/mod-playerbots/src/Mgr/BotSessionMgr.cpp's LogoutBotSession, so this is safe
+    // to call even from within the target session's own call stack.
+    itr->second->LogoutPlayer(true);
 }
 
 /// Remove a given session
