@@ -1,0 +1,10 @@
+# Cursor respects .gitignore/.git-exclude for indexing and search (Glob/Grep) by
+# default. That's right for build output and vendored/reference trees in general,
+# but these specific paths are still actively read/searched by agents working in
+# this repo, so explicitly re-include them here (negation overrides gitignore).
+#
+# See docs/README.md (in the decoupled docs/ repo) and
+# .cursor/rules/reference-trees-gitignored.mdc for background.
+
+!/BfaCore-Reforged/
+!/docs/
