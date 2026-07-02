@@ -20,32 +20,6 @@ nbproject/*
 .idea/*
 .browse.VC*
 .vscode
-.cursor/
 cmake-build-*/*
 .vs
 *.user
-
-# Local reference source trees. Kept beside this fork for comparison only.
-# Do not commit, build, link, or bulk-paste from these paths.
-/BfaCore-Reforged/
-/azerothcore-wotlk-master/
-/azerothcore-wotlk-Playerbot/
-/mod-playerbots-master/
-/azerothcore/
-/mod-playerbots/
-/azerothcore-playerbots/
-
-# Fork-local PowerShell/Python helpers — local only; do not commit.
-/scripts/
-
-# Local playtest scratch, sniff dumps, and server logs — not product artifacts.
-/temp/*
-!/temp/db2/
-!/temp/db2/README.md
-# Fork DB2 tooling (EvryDb2Export, WoWDBDefs clone) — local only; see tools/README.md on disk
-/tools/
-# Local packet captures at repo root (prefer temp/ for sniff work)
-/*.pkt
-
-# Generated HTML docs (source of truth is docs/*.md) — optional to commit later
-/docs/html/
