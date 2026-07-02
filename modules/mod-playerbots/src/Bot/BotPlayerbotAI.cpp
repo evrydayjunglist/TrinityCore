@@ -21,6 +21,8 @@
 #include "Log.h"
 #include "Player.h"
 #include "PlayerbotsConfig.h"
+#include "Random.h"
+#include "RandomPlayerbotMgr.h"
 
 BotPlayerbotAI::BotPlayerbotAI(Player* bot) : PlayerbotAIBase(bot)
 {
@@ -36,13 +38,26 @@ void BotPlayerbotAI::ResetStrategies()
 
     _engine->RemoveAllStrategies();
 
+    std::string appliedStrategies;
     if (HasMaster())
     {
         _engine->AddStrategy("follow");
         _engine->AddStrategy("attack");
+        appliedStrategies = "follow,attack";
+    }
+    else if (Player* bot = GetBot(); bot && sRandomPlayerbotMgr->IsRandomBot(bot->GetGUID()) &&
+        roll_chance(Playerbots::GetRandomBotRpgChance()))
+    {
+        // AC: masterless random bots run the "newrpg" wander/grind/quest-giver loop instead of
+        // sitting passive; RandomBotRpgChance is this fork's single on/off-with-a-dial knob for it.
+        _engine->AddStrategy("newrpg");
+        appliedStrategies = "newrpg";
     }
     else
+    {
         _engine->AddStrategy("passive");
+        appliedStrategies = "passive";
+    }
 
     _engine->Init();
 
@@ -51,7 +66,7 @@ void BotPlayerbotAI::ResetStrategies()
         TC_LOG_DEBUG("playerbots", "BotPlayerbotAI::ResetStrategies bot={} master={} strategies={}",
             GetBot() ? GetBot()->GetName() : "?",
             HasMaster() ? "yes" : "no",
-            HasMaster() ? "follow,attack" : "passive");
+            appliedStrategies);
     }
 }
 

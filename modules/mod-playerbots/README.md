@@ -1,4 +1,4 @@
-# mod-playerbots (Gates 1–9)
+# mod-playerbots (Gates 1–10)
 
 Playerbots module for this TrinityCore fork. **Disabled by default.**
 
@@ -36,10 +36,17 @@ modules/mod-playerbots/src/
       PassiveStrategy.h/.cpp        # Gate 6 passive (GM bots without master)
       FollowMasterStrategy.h/.cpp   # Gate 8 follow
       CombatStrategy.h/.cpp         # Gate 8 attack
+      NewRpgStrategy.h/.cpp         # Gate 10 world RPG loop (masterless random bots)
     Action/
       FollowAction.h/.cpp           # Gate 8 MoveFollow
       AttackAction.h/.cpp           # Gate 8 attack my target
-    BotPlayerbotAI.h/.cpp           # Gate 5–8 bot AI
+      AttackValidity.h/.cpp         # Gate 10 shared hostility/LOS check (extracted from AttackAction)
+      WanderAction.h/.cpp           # Gate 10 idle random-offset movement
+      GrindAction.h/.cpp            # Gate 10 cached grind spot + live hostile search/attack
+      QuestGiverAction.h/.cpp       # Gate 10 generic nearby quest-giver accept/turn-in
+    Rpg/
+      GrindLocationCache.h/.cpp     # Gate 10 Layer 1: lazy per-map SQL-scan grind spot cache
+    BotPlayerbotAI.h/.cpp           # Gate 5–10 bot AI
   Mgr/
     BotSessionMgr.h/.cpp            # TC socketless sessions (Gates 3–4, 7, 9 scheduler)
     PlayerbotMgr.h/.cpp             # Per-human master-alt control (Gate 7)
@@ -171,7 +178,7 @@ Closeout: [`playerbots-gate-08-movement-combat-handoff.md`](../../docs/midnight-
 - Module SQL under `data/sql/playerbots/` — version table + optional account key/link tables
 - `PlayerbotsDatabaseMgr` — connection/version check from module
 - `RandomPlayerbotMgr` — world-tick scheduler (5s); logs in reserved-account bots via `BotSessionMgr::LoginReservedCharacter`
-- Random bots: **passive** AI (no master); `DisabledWithoutRealPlayer` stops scheduler when last human logs out
+- Random bots: **passive** AI by default (no master); Gate 10 adds an opt-in `newrpg` AI — see below; `DisabledWithoutRealPlayer` stops scheduler when last human logs out
 - **Roster (Gate 9 interim):** one online random bot per reserved account — pair `RandomBotAccounts` with `RandomBotCharacterNames` by index (e.g. account 3 → `Three`, account 4 → `Threethree`)
 - **North-star goal (AC parity, Gate 11+):** multiple random-bot characters on the **same** account in-world together — see [`playerbots-future-gates-roadmap.md`](../../docs/midnight-assessment/playerbots/playerbots-future-gates-roadmap.md) § *AC random bot session model*
 - `.playerbot rndbot status|start|stop` — GM ops surface
@@ -187,6 +194,48 @@ Closeout: [`playerbots-gate-08-movement-combat-handoff.md`](../../docs/midnight-
 
 Closeout: [`playerbots-gate-09-db-random-bootstrap-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-gate-09-db-random-bootstrap-handoff.md) — **complete** (agent + owner playtest 2026-06-29).
 
-## Gate 10 (next)
+## Gate 10 (World RPG loop)
 
-World RPG slice (single-zone wander/grind) — [`playerbots-future-gates-roadmap.md`](../../docs/midnight-assessment/playerbots/playerbots-future-gates-roadmap.md) § Gate 10.
+Random bots start at their **normal** per-race/faction character-creation position — no
+forced teleport, no owner-picked test zone — then optionally run a generic wander/grind/
+quest-giver loop driven entirely by the world DB, matching AC mod-playerbots'
+`NewRpgStrategy` shape.
+
+**Level config (AC `PlayerbotAIConfig.h` analogues):**
+
+- `Playerbots.RandomBotMinLevel` / `Playerbots.RandomBotMaxLevel` — inclusive first-login
+  level roll range (`MaxLevel = 0` → server max level)
+- `Playerbots.DisableRandomLevels` + `Playerbots.RandombotStartingLevel` — fixed starting
+  level instead of a roll
+- `Playerbots.RandomBotFixedLevel` — AC semantics: a toggle, not a level; `1` locks the bot
+  at its current level (no XP gain at all)
+- `Playerbots.RandomBotXPRate` — XP multiplier for random bots (ignored when `FixedLevel = 1`)
+- Wired via `mod_playerbots_player_script`: `OnLogin` sets the starting level once (level 1
+  only, so re-logins don't re-roll); `OnGiveXP` applies the fixed-level/rate behavior
+
+**World RPG loop — two-layer grind-spot design (matches AC's real split, not a single
+mechanism):**
+
+- **Layer 1 (`GrindLocationCache`, "where to grind"):** lazy per-map cache built from
+  `sObjectMgr->GetAllCreatureData()` (in-memory creature spawns, not a fresh SQL query),
+  filtered to hostile/attackable/lootable creatures with resolvable level data
+  (`ContentTuningID` → `ContentTuning.db2`, or `DeltaLevelMin/Max` fallback), grid-clustered
+  into ~50yd cells. Built once per map on first use; no live invalidation (Layer 2 always
+  re-validates against live state).
+- **Layer 2 (live grid search, "what to attack/interact with right now"):** standard TC
+  grid searches over currently-loaded `Creature`/`GameObject`s near the bot's actual
+  position — reuses the Gate 8 hostility/LOS check (extracted into
+  `Bot/Action/AttackValidity.h`) for combat targets, and `Player::PrepareQuestMenu` +
+  `PlayerTalkClass->GetQuestMenu()` for quest givers.
+- `NewRpgStrategy` (`STRATEGY_TYPE_NONCOMBAT`) — `quest giver` (30.0) > `grind` (20.0) >
+  `wander` (10.0) default actions; a bot always checks for quest opportunities before
+  grinding, and grinds before idly wandering.
+- `Playerbots.RandomBotRpgChance` (0–100) — chance a masterless random bot runs `newrpg`
+  instead of `passive`, rolled in `BotPlayerbotAI::ResetStrategies()`. Fork-native knob: AC's
+  own `randomBotRpgChance` picks between RPG-vs-grind sub-states inside an already-RPG bot;
+  here the RPG subset itself is the only active behavior, so this is the single
+  on/off-with-a-dial knob for it.
+- GM `.playerbot login` bots and master-alt bots are unaffected — the `newrpg` branch only
+  applies when `!HasMaster() && sRandomPlayerbotMgr->IsRandomBot(guid)`.
+
+Closeout: [`playerbots-gate-10-world-rpg-slice-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-gate-10-world-rpg-slice-handoff.md).

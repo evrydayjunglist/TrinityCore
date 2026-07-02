@@ -85,3 +85,29 @@ Playerbots.DisabledWithoutRealPlayer = 1
 #
 Playerbots.RandomBotAccounts =
 Playerbots.RandomBotCharacterNames =
+
+#
+# Random bot leveling + world RPG loop (Gate 10). AC analogues: PlayerbotAIConfig.h
+# randomBotMinLevel/MaxLevel, disableRandomLevels, randombotStartingLevel,
+# randomBotFixedLevel, randomBotXpRate, randomBotRpgChance.
+#
+# MinLevel/MaxLevel — inclusive range a random bot's first login picks from (MaxLevel = 0
+# means "server max level"). DisableRandomLevels — when 1, every random bot starts at the
+# fixed RandombotStartingLevel instead of a roll. FixedLevel — AC semantics: a toggle, not
+# a level; when 1 the bot gains no XP at all (level stays locked at whatever it started at).
+# XPRate — multiplier applied to a random bot's XP gains (ignored when FixedLevel = 1).
+#
+Playerbots.RandomBotMinLevel = 1
+Playerbots.RandomBotMaxLevel = 0
+Playerbots.DisableRandomLevels = 0
+Playerbots.RandombotStartingLevel = 1
+Playerbots.RandomBotFixedLevel = 0
+Playerbots.RandomBotXPRate = 1.0
+
+#
+# Chance (0-100) that a masterless random bot runs the "newrpg" wander/grind/quest-giver
+# loop instead of staying passive. Fork-native knob — AC's own randomBotRpgChance selects
+# between RPG-vs-grind sub-states inside an already-RPG bot; here the RPG subset itself is
+# the only active behavior, so this is the single on/off-with-a-dial knob for it.
+#
+Playerbots.RandomBotRpgChance = 100.0

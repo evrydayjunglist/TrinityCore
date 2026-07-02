@@ -16,6 +16,7 @@
  */
 
 #include "AttackAction.h"
+#include "AttackValidity.h"
 #include "BotPlayerbotAI.h"
 #include "MotionMaster.h"
 #include "ObjectAccessor.h"
@@ -38,26 +39,6 @@ Unit* GetMasterAttackTarget(BotPlayerbotAI* botAI, Player* bot)
         return nullptr;
 
     return ObjectAccessor::GetUnit(*bot, targetGuid);
-}
-
-bool IsValidAttackTarget(Player* bot, Unit* target)
-{
-    if (!bot || !target || !target->IsInWorld())
-        return false;
-
-    if (target->isDead())
-        return false;
-
-    if (bot->IsFriendlyTo(target))
-        return false;
-
-    if (!bot->IsValidAttackTarget(target))
-        return false;
-
-    if (!bot->IsWithinLOSInMap(target))
-        return false;
-
-    return true;
 }
 }
 

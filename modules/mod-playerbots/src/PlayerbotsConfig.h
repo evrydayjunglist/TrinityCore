@@ -212,6 +212,48 @@ inline std::vector<std::string> GetRandomBotCharacterNames()
 {
     return ParseCommaStringList(sConfigMgr->GetStringDefault("Playerbots.RandomBotCharacterNames", ""));
 }
+
+// Gate 10 — world RPG loop / random bot leveling (ported from AC's AiPlayerbot.* level block,
+// see playerbots-gate-10-world-rpg-slice-handoff.md § TC-Midnight adaptations)
+inline uint32 GetRandomBotMinLevel()
+{
+    return std::max<uint32>(sConfigMgr->GetIntDefault("Playerbots.RandomBotMinLevel", 1), 1u);
+}
+
+inline uint32 GetRandomBotMaxLevel()
+{
+    return sConfigMgr->GetIntDefault("Playerbots.RandomBotMaxLevel", 0);
+}
+
+inline bool GetDisableRandomLevels()
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.DisableRandomLevels", false);
+}
+
+inline uint32 GetRandombotStartingLevel()
+{
+    return std::max<uint32>(sConfigMgr->GetIntDefault("Playerbots.RandombotStartingLevel", 1), 1u);
+}
+
+// AC semantics: a toggle, not a level — when true the bot's level is locked (no XP gain at all).
+inline bool GetRandomBotFixedLevel()
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.RandomBotFixedLevel", false);
+}
+
+inline float GetRandomBotXPRate()
+{
+    return std::max<float>(sConfigMgr->GetFloatDefault("Playerbots.RandomBotXPRate", 1.0f), 0.0f);
+}
+
+// Chance (0-100) that an idle random bot runs the "newrpg" wander/grind/quest-giver loop
+// instead of staying passive. Fork-native knob (AC's own randomBotRpgChance selects between
+// RPG-vs-grind sub-states inside an already-RPG bot; here the RPG subset itself is the only
+// active behavior, so this is the single on/off-with-a-dial knob for it).
+inline float GetRandomBotRpgChance()
+{
+    return std::clamp<float>(sConfigMgr->GetFloatDefault("Playerbots.RandomBotRpgChance", 100.0f), 0.0f, 100.0f);
+}
 }
 
 #endif

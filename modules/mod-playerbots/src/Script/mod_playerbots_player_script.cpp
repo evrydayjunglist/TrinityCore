@@ -24,11 +24,46 @@
 #include "Playerbots.h"
 #include "PlayerbotsConfig.h"
 #include "RandomPlayerbotMgr.h"
+#include "Random.h"
+#include "World.h"
 #include "WorldSession.h"
+#include <algorithm>
 
 // Bot lifecycle: session registration + PlayerbotsMgr AI registry (Gate 5).
 // Human lifecycle: PlayerbotMgr per master (Gate 7).
 // Do not use Player::SetAI / UnitAI for socketless bots — core refuses SetAI on IsBotSession() players.
+
+namespace
+{
+// Gate 10 — applied once, the first time a random bot logs in on its freshly-created
+// (level 1) character; matches AC's RandomizeFirst() level roll in spirit, without AC's
+// mass PlayerbotFactory gear/talent randomization (out of Gate 10 scope — see roadmap).
+void ApplyRandomBotStartingLevel(Player* bot)
+{
+    if (!bot || bot->GetLevel() != 1)
+        return;
+
+    uint32 const serverMaxLevel = sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL);
+    uint32 maxLevel = Playerbots::GetRandomBotMaxLevel();
+    if (!maxLevel || maxLevel > serverMaxLevel)
+        maxLevel = serverMaxLevel;
+
+    uint32 const minLevel = std::min(Playerbots::GetRandomBotMinLevel(), maxLevel);
+
+    uint32 level;
+    if (Playerbots::GetDisableRandomLevels())
+        level = std::clamp(Playerbots::GetRandombotStartingLevel(), 1u, maxLevel);
+    else
+        level = minLevel >= maxLevel ? maxLevel : urand(minLevel, maxLevel);
+
+    if (level <= 1)
+        return;
+
+    bot->GiveLevel(static_cast<uint8>(level));
+    bot->InitTalentForLevel();
+    bot->SetXP(0);
+}
+}
 
 class mod_playerbots_player_script : public PlayerScript
 {
@@ -49,6 +84,9 @@ public:
             sBotSessionMgr->RegisterSession(session, player->GetGUID());
             sPlayerbotsMgr->AddPlayerbotData(player, true);
 
+            if (sRandomPlayerbotMgr->IsRandomBot(player->GetGUID()))
+                ApplyRandomBotStartingLevel(player);
+
             ObjectGuid const masterGuid = sBotSessionMgr->GetMasterGuidForBot(player->GetGUID());
             if (!masterGuid.IsEmpty())
                 if (Player* master = ObjectAccessor::FindConnectedPlayer(masterGuid))
@@ -58,6 +96,27 @@ public:
         }
 
         sPlayerbotsMgr->AddPlayerbotData(player, false);
+    }
+
+    void OnGiveXP(Player* player, uint32& amount, Unit* /*victim*/) override
+    {
+        if (!Playerbots::IsEnabled() || !player)
+            return;
+
+        if (!sRandomPlayerbotMgr->IsRandomBot(player->GetGUID()))
+            return;
+
+        // AC semantics (see PlayerbotAIConfig randomBotFixedLevel / XpGainAction.cpp comment):
+        // fixed-level bots gain no XP at all; otherwise scale by the configured rate.
+        if (Playerbots::GetRandomBotFixedLevel())
+        {
+            amount = 0;
+            return;
+        }
+
+        float const rate = Playerbots::GetRandomBotXPRate();
+        if (rate != 1.0f)
+            amount = static_cast<uint32>(amount * rate);
     }
 
     void OnLogout(Player* player) override

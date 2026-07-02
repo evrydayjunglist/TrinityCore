@@ -19,8 +19,12 @@
 #include "AiObjectContext.h"
 #include "Bot/Action/AttackAction.h"
 #include "Bot/Action/FollowAction.h"
+#include "Bot/Action/GrindAction.h"
+#include "Bot/Action/QuestGiverAction.h"
+#include "Bot/Action/WanderAction.h"
 #include "Bot/Strategy/CombatStrategy.h"
 #include "Bot/Strategy/FollowMasterStrategy.h"
+#include "Bot/Strategy/NewRpgStrategy.h"
 #include "Bot/Strategy/PassiveStrategy.h"
 #include "BotPlayerbotAI.h"
 #include "DB2Stores.h"
@@ -34,8 +38,12 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterStrategy("passive", std::make_unique<PassiveStrategy>(botAI));
     context->RegisterStrategy("follow", std::make_unique<FollowMasterStrategy>(botAI));
     context->RegisterStrategy("attack", std::make_unique<CombatStrategy>(botAI));
+    context->RegisterStrategy("newrpg", std::make_unique<NewRpgStrategy>(botAI));
     context->RegisterAction("follow", std::make_unique<FollowAction>(botAI));
     context->RegisterAction("attack my target", std::make_unique<AttackMyTargetAction>(botAI));
+    context->RegisterAction("wander", std::make_unique<WanderAction>(botAI));
+    context->RegisterAction("grind", std::make_unique<GrindAction>(botAI));
+    context->RegisterAction("quest giver", std::make_unique<QuestGiverAction>(botAI));
 
     if (Playerbots::GetLogLevel() >= 1 && player)
     {
