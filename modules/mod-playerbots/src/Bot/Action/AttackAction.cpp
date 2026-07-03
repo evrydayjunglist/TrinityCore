@@ -63,13 +63,18 @@ bool AttackMyTargetAction::Execute(Event /*event*/)
     if (!IsValidAttackTarget(bot, target))
         return false;
 
-    if (bot->GetMotionMaster()->GetCurrentMovementGeneratorType() == FOLLOW_MOTION_TYPE)
-        bot->GetMotionMaster()->Clear(MOTION_SLOT_ACTIVE);
-
     bot->SetSelection(target->GetGUID());
 
     if (!bot->HasInArc(float(M_PI), target))
         bot->SetFacingToObject(target);
 
-    return bot->Attack(target, true);
+    if (!bot->Attack(target, true))
+        return false;
+
+    // Close to melee range and stay on the target (core ChaseMovementGenerator). MoveChase
+    // installs an active-slot generator that supersedes the +follow FollowMovementGenerator, so
+    // no explicit follow Clear() is needed. Mirrors AttackAnythingAction (random/newrpg bots) —
+    // without this a master-alt bot only lands hits when the mob walks into it.
+    bot->GetMotionMaster()->MoveChase(target);
+    return true;
 }
