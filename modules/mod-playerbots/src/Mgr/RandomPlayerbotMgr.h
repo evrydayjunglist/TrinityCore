@@ -58,10 +58,12 @@ private:
     void TryLogoutExcessRandomBots();
     bool LoginRosterEntry(RandomBotRosterEntry const& entry);
     void LogoutRandomBot(ObjectGuid characterGuid);
+    void SaveActiveRandomBots();
 
     std::vector<RandomBotRosterEntry> _roster;
     std::unordered_set<ObjectGuid> _activeRandomBotGuids;
     uint32 _updateTimer = 0;
+    uint32 _saveTimer = 0;
     bool _schedulerPaused = false;
 };
 

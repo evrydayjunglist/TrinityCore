@@ -213,6 +213,14 @@ inline std::vector<std::string> GetRandomBotCharacterNames()
     return ParseCommaStringList(sConfigMgr->GetStringDefault("Playerbots.RandomBotCharacterNames", ""));
 }
 
+// Review follow-up C1 (playerbots-review-c-followups-handoff.md): periodic DB flush for active
+// random bots, matching AC's periodic-save intent without porting its full online/offline DB
+// event machinery. 0 disables (no clamp to 1u like the other timers — 0 is a legitimate "off").
+inline uint32 GetRandomBotSaveIntervalSeconds()
+{
+    return sConfigMgr->GetIntDefault("Playerbots.RandomBotSaveIntervalSeconds", 300);
+}
+
 // Gate 10 — world RPG loop / random bot leveling (ported from AC's AiPlayerbot.* level block,
 // see playerbots-gate-10-world-rpg-slice-handoff.md § TC-Midnight adaptations)
 inline uint32 GetRandomBotMinLevel()

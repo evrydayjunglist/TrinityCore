@@ -201,6 +201,10 @@ bool Engine::DoNextAction(uint32 diff)
         return a.GetRelevance() > b.GetRelevance();
     });
 
+    // Review follow-up C2 (playerbots-review-c-followups-handoff.md): first-possible-wins is an
+    // intentional simplification of AC's engine, which additionally chains per-action
+    // prerequisites and alternatives (an action can require/spawn others). Fine for current
+    // scope (follow/attack/newrpg/party-join); revisit if a future gate needs action chaining.
     Event event;
     for (NextAction const& candidate : candidates)
     {

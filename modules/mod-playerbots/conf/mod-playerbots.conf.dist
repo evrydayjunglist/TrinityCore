@@ -88,6 +88,14 @@ Playerbots.RandomBotAccounts =
 Playerbots.RandomBotCharacterNames =
 
 #
+# Periodic DB save for active random bots (review follow-up C1) — AC saves random bots
+# periodically rather than only at logout; this fork previously only persisted via
+# LogoutPlayer(true) on clean logout, so a crash lost everything since login. Seconds
+# between flushes of each active random bot's already-in-memory state; 0 disables.
+#
+Playerbots.RandomBotSaveIntervalSeconds = 300
+
+#
 # Random bot leveling + world RPG loop (Gate 10). AC analogues: PlayerbotAIConfig.h
 # randomBotMinLevel/MaxLevel, disableRandomLevels, randombotStartingLevel,
 # randomBotFixedLevel, randomBotXpRate, randomBotRpgChance.

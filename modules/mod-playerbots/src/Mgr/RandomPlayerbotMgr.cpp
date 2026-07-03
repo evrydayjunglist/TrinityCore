@@ -19,6 +19,8 @@
 #include "BotSessionMgr.h"
 #include "CharacterCache.h"
 #include "Log.h"
+#include "ObjectAccessor.h"
+#include "Player.h"
 #include "PlayerbotsConfig.h"
 #include "PlayerbotsDatabaseMgr.h"
 #include "World.h"
@@ -53,6 +55,7 @@ void RandomPlayerbotMgr::Init()
     _roster.clear();
     _activeRandomBotGuids.clear();
     _updateTimer = 0;
+    _saveTimer = 0;
     _schedulerPaused = !Playerbots::GetRandomBotAutologin();
 
     if (!IsSchedulerEnabled())
@@ -134,6 +137,19 @@ void RandomPlayerbotMgr::Update(uint32 diff)
         return;
     }
 
+    // Review follow-up C1: periodic DB flush, independent of the login/logout balancing timer
+    // below (different cadence, must not be skipped by that timer's own early return).
+    uint32 const saveIntervalSeconds = Playerbots::GetRandomBotSaveIntervalSeconds();
+    if (saveIntervalSeconds > 0)
+    {
+        _saveTimer += diff;
+        if (_saveTimer >= saveIntervalSeconds * 1000)
+        {
+            _saveTimer = 0;
+            SaveActiveRandomBots();
+        }
+    }
+
     _updateTimer += diff;
     if (_updateTimer < RANDOM_BOT_UPDATE_INTERVAL_MS)
         return;
@@ -141,6 +157,18 @@ void RandomPlayerbotMgr::Update(uint32 diff)
     _updateTimer = 0;
     TryLoginRandomBots();
     TryLogoutExcessRandomBots();
+}
+
+void RandomPlayerbotMgr::SaveActiveRandomBots()
+{
+    for (ObjectGuid const& guid : _activeRandomBotGuids)
+    {
+        Player* bot = ObjectAccessor::FindConnectedPlayer(guid);
+        if (!bot || !bot->IsInWorld())
+            continue;
+
+        bot->SaveToDB(false);
+    }
 }
 
 void RandomPlayerbotMgr::TriggerSchedulerPass()
