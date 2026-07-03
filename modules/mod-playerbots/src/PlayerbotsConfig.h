@@ -255,6 +255,44 @@ inline float GetRandomBotRpgChance()
     return std::clamp<float>(sConfigMgr->GetFloatDefault("Playerbots.RandomBotRpgChance", 100.0f), 0.0f, 100.0f);
 }
 
+// Gate 10b — RPG state-machine knobs. Weights mirror AC's AiPlayerbot.RpgStatusProbWeight.*
+// defaults (WanderRandom 15 / GoGrind 15 / DoQuest 60 — mod-playerbots-master
+// PlayerbotAIConfig.cpp:678-685); a status whose weight is 0 is never chosen. Durations mirror
+// AC's NewRpgAction.h constants (statusWanderRandomDuration 5 min, statusDoQuestDuration 30 min,
+// poiStayTime 5 min) but are config keys here per the Gate 10b handoff ("tunable knobs"),
+// expressed in seconds.
+inline uint32 GetRpgStatusProbWeightWanderRandom()
+{
+    return sConfigMgr->GetIntDefault("Playerbots.RpgStatusProbWeight.WanderRandom", 15);
+}
+
+inline uint32 GetRpgStatusProbWeightGoGrind()
+{
+    return sConfigMgr->GetIntDefault("Playerbots.RpgStatusProbWeight.GoGrind", 15);
+}
+
+inline uint32 GetRpgStatusProbWeightDoQuest()
+{
+    return sConfigMgr->GetIntDefault("Playerbots.RpgStatusProbWeight.DoQuest", 60);
+}
+
+inline uint32 GetRpgStatusWanderRandomDurationMs()
+{
+    return std::max<uint32>(sConfigMgr->GetIntDefault("Playerbots.RpgStatusDuration.WanderRandom", 300), 1u) * 1000;
+}
+
+inline uint32 GetRpgStatusDoQuestDurationMs()
+{
+    return std::max<uint32>(sConfigMgr->GetIntDefault("Playerbots.RpgStatusDuration.DoQuest", 1800), 1u) * 1000;
+}
+
+// AC: NewRpgAction.h poiStayTime (5 min) — how long a bot holds at a quest POI with zero
+// objective progress before the quest goes on its abandon set.
+inline uint32 GetRpgPoiStayTimeMs()
+{
+    return std::max<uint32>(sConfigMgr->GetIntDefault("Playerbots.RpgPoiStayTime", 300), 1u) * 1000;
+}
+
 // Fork-native (not ported from AC — see playerbots-bot-wander-ground-clip-handoff.md §5): the
 // mmap navmesh's own "normal ground" cutoff is 55 degrees (src/common/mmaps_common/Generator/
 // TileBuilder.cpp), which PathGenerator already confines Player-type sources to (steep 55-70

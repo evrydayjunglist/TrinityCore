@@ -40,3 +40,14 @@ Action* AiObjectContext::GetAction(std::string const& name)
     auto itr = _actions.find(name);
     return itr != _actions.end() ? itr->second.get() : nullptr;
 }
+
+void AiObjectContext::RegisterTrigger(std::string const& name, std::unique_ptr<Trigger> trigger)
+{
+    _triggers[name] = std::move(trigger);
+}
+
+Trigger* AiObjectContext::GetTrigger(std::string const& name)
+{
+    auto itr = _triggers.find(name);
+    return itr != _triggers.end() ? itr->second.get() : nullptr;
+}

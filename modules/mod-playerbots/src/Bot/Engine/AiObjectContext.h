@@ -21,13 +21,16 @@
 #include "Action.h"
 #include "PlayerbotAIAware.h"
 #include "Strategy.h"
+#include "Trigger.h"
 #include <map>
 #include <memory>
 #include <string>
 
 class BotPlayerbotAI;
 
-// AC reference: mod-playerbots-master/src/Bot/Engine/AiObjectContext.h (stub — Gate 6 passive only)
+// AC reference: mod-playerbots-master/src/Bot/Engine/AiObjectContext.h (stub — Gate 6 passive only;
+// trigger registry added in Gate 10b so strategies' TriggerNodes resolve to real Trigger objects,
+// same name-keyed lookup AC's context provides)
 class AiObjectContext : public PlayerbotAIAware
 {
 public:
@@ -40,9 +43,13 @@ public:
     void RegisterAction(std::string const& name, std::unique_ptr<Action> action);
     Action* GetAction(std::string const& name);
 
+    void RegisterTrigger(std::string const& name, std::unique_ptr<Trigger> trigger);
+    Trigger* GetTrigger(std::string const& name);
+
 private:
     std::map<std::string, std::unique_ptr<Strategy>> _strategies;
     std::map<std::string, std::unique_ptr<Action>> _actions;
+    std::map<std::string, std::unique_ptr<Trigger>> _triggers;
 };
 
 #endif

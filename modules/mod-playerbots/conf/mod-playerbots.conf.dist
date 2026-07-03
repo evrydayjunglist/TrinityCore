@@ -113,6 +113,29 @@ Playerbots.RandomBotXPRate = 1.0
 Playerbots.RandomBotRpgChance = 100.0
 
 #
+# Gate 10b RPG state machine — weighted status picks when a bot goes idle. Weights mirror AC
+# mod-playerbots' AiPlayerbot.RpgStatusProbWeight.* defaults; a status with weight 0 is never
+# chosen. DoQuest = goal-directed quest doing (travel to objective POIs, then turn-in),
+# GoGrind = travel to a grind spot, WanderRandom = local wandering.
+#
+Playerbots.RpgStatusProbWeight.WanderRandom = 15
+Playerbots.RpgStatusProbWeight.GoGrind = 15
+Playerbots.RpgStatusProbWeight.DoQuest = 60
+
+#
+# How long (seconds) a bot stays in a status before going idle again (AC constants, config
+# keys on this fork): WanderRandom default 300 (5 min), DoQuest default 1800 (30 min).
+#
+Playerbots.RpgStatusDuration.WanderRandom = 300
+Playerbots.RpgStatusDuration.DoQuest = 1800
+
+#
+# How long (seconds) a bot holds at a quest POI with zero objective progress before it marks
+# the quest low-priority (abandons pursuing it) — AC's poiStayTime, default 300 (5 min).
+#
+Playerbots.RpgPoiStayTime = 300
+
+#
 # Maximum incline (degrees, rise over run) a bot will voluntarily walk up while wandering/
 # grinding/approaching a quest giver. Fork-native, not from AC — AC has no equivalent check.
 # The mmap navmesh's own "normal ground" cutoff is 55 degrees (steeper terrain, 55-70 degrees,

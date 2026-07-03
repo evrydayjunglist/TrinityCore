@@ -15,23 +15,27 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_PLAYERBOT_GRIND_ACTION_H
-#define TRINITY_PLAYERBOT_GRIND_ACTION_H
+#ifndef TRINITY_PLAYERBOT_NEW_RPG_TRIGGERS_H
+#define TRINITY_PLAYERBOT_NEW_RPG_TRIGGERS_H
 
-#include "Action.h"
+#include "Bot/Rpg/NewRpgInfo.h"
+#include "Trigger.h"
 
 class BotPlayerbotAI;
 
-// Gate 10 — NewRpgStrategy "grind" sub-behavior (AC: RPG_GO_GRIND / SelectRandomGrindPos).
-// Layer 1 (GrindLocationCache) picks a nearby cached grind spot to walk toward; Layer 2
-// (live grid search, reusing AttackValidity.h) picks the actual hostile to attack once close.
-class GrindAction : public Action
+// Gate 10b — status-gating trigger. AC reference: mod-playerbots-master/src/Ai/World/Rpg/
+// Trigger/NewRpgTriggers.h NewRpgStatusTrigger — active exactly while the bot's RPG state
+// machine sits in the given status, so exactly one per-status action runs per tick.
+class NewRpgStatusTrigger : public Trigger
 {
 public:
-    GrindAction(BotPlayerbotAI* botAI) : Action(botAI, "grind") { }
+    NewRpgStatusTrigger(BotPlayerbotAI* botAI, NewRpgStatus status)
+        : Trigger(botAI, "new rpg status"), _status(status) { }
 
-    bool Execute(Event event) override;
-    bool IsUseful() override;
+    bool IsActive() override;
+
+private:
+    NewRpgStatus _status;
 };
 
 #endif

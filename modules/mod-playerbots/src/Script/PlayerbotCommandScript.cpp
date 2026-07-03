@@ -19,6 +19,7 @@
 // This fork: top-level `.playerbot` (singular). Master-alt control is `.playerbot bot`.
 
 #include "ScriptMgr.h"
+#include "BotPlayerbotAI.h"
 #include "BotSessionMgr.h"
 #include "Chat.h"
 #include "ChatCommand.h"
@@ -27,6 +28,7 @@
 #include "Playerbots.h"
 #include "PlayerbotsConfig.h"
 #include "PlayerbotsDatabaseMgr.h"
+#include "PlayerbotsMgr.h"
 #include "RandomPlayerbotMgr.h"
 #include "RBAC.h"
 #include "WorldSession.h"
@@ -93,7 +95,20 @@ public:
             sBotSessionMgr->ForEachActiveBot([&](WorldSession* session, ObjectGuid /*characterGuid*/)
             {
                 if (Player* bot = session->GetPlayer())
-                    handler->PSendSysMessage("  - %s", bot->GetName().c_str());
+                {
+                    // Gate 10b: surface the RPG state machine + lifecycle counters per bot
+                    // (fork replacement for AC's whisper-based TellRpgStatusAction).
+                    if (BotPlayerbotAI* botAI = sPlayerbotsMgr->GetPlayerbotAI(bot))
+                    {
+                        NewRpgStatistic const& stats = botAI->GetRpgStatistics();
+                        handler->PSendSysMessage("  - %s | %s | quests accepted %u rewarded %u completed %u abandoned %u dropped %u",
+                            bot->GetName().c_str(), botAI->GetRpgInfo().ToString().c_str(),
+                            stats.questAccepted, stats.questRewarded, stats.questCompleted,
+                            stats.questAbandoned, stats.questDropped);
+                    }
+                    else
+                        handler->PSendSysMessage("  - %s", bot->GetName().c_str());
+                }
             });
 
             handler->SendSysMessage("Playerbots: GM — .playerbot login/logout. Master-alt — .playerbot bot add/remove/list/logout.");

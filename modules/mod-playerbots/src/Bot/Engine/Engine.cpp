@@ -57,6 +57,26 @@ void Engine::Init()
                 name, bot ? bot->GetName() : "?");
         }
     }
+
+    // Resolve each TriggerNode's name to the registered Trigger object (AC: Engine::Init does
+    // the same context lookup) — a node whose name is unknown can never fire, so flag it loudly.
+    if (_context)
+    {
+        for (TriggerNode* node : _triggers)
+        {
+            if (!node)
+                continue;
+
+            Trigger* trigger = _context->GetTrigger(node->GetName());
+            if (!trigger)
+            {
+                TC_LOG_ERROR("playerbots", "Engine::Init unknown trigger '{}'", node->GetName());
+                continue;
+            }
+
+            node->SetTrigger(trigger);
+        }
+    }
 }
 
 void Engine::AddStrategy(std::string const& name)

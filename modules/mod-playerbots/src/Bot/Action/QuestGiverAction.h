@@ -18,20 +18,27 @@
 #ifndef TRINITY_PLAYERBOT_QUEST_GIVER_ACTION_H
 #define TRINITY_PLAYERBOT_QUEST_GIVER_ACTION_H
 
-#include "Action.h"
+#include "NewRpgBaseAction.h"
 
 class BotPlayerbotAI;
+class WorldObject;
 
 // Gate 10 — NewRpgStrategy "quest-giver" sub-behavior (AC: SearchQuestGiverAndAcceptOrReward).
 // Live grid search for any nearby creature/GO with a quest relation to this bot; generic —
 // no hardcoded quest id, works for whatever the world DB actually offers near the bot.
-class QuestGiverAction : public Action
+// Gate 10b: composes NewRpgBaseAction so accepts are filtered through IsQuestWorthDoing/
+// IsQuestCapableDoing and the quest log gets OrganizeQuestLog hygiene before new pickups,
+// exactly like AC's SearchQuestGiverAndAcceptOrReward + InteractWithNpcOrGameObjectForQuest.
+class QuestGiverAction : public NewRpgBaseAction
 {
 public:
-    QuestGiverAction(BotPlayerbotAI* botAI) : Action(botAI, "quest giver") { }
+    QuestGiverAction(BotPlayerbotAI* botAI) : NewRpgBaseAction(botAI, "quest giver") { }
 
     bool Execute(Event event) override;
     bool IsUseful() override;
+
+private:
+    bool InteractWithQuestGiver(WorldObject* questGiver);
 };
 
 #endif

@@ -18,14 +18,16 @@
 #include "AiFactory.h"
 #include "AiObjectContext.h"
 #include "Bot/Action/AttackAction.h"
+#include "Bot/Action/AttackAnythingAction.h"
 #include "Bot/Action/FollowAction.h"
-#include "Bot/Action/GrindAction.h"
+#include "Bot/Action/NewRpgActions.h"
 #include "Bot/Action/QuestGiverAction.h"
 #include "Bot/Action/WanderAction.h"
 #include "Bot/Strategy/CombatStrategy.h"
 #include "Bot/Strategy/FollowMasterStrategy.h"
 #include "Bot/Strategy/NewRpgStrategy.h"
 #include "Bot/Strategy/PassiveStrategy.h"
+#include "Bot/Trigger/NewRpgTriggers.h"
 #include "BotPlayerbotAI.h"
 #include "DB2Stores.h"
 #include "Log.h"
@@ -42,8 +44,16 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterAction("follow", std::make_unique<FollowAction>(botAI));
     context->RegisterAction("attack my target", std::make_unique<AttackMyTargetAction>(botAI));
     context->RegisterAction("wander", std::make_unique<WanderAction>(botAI));
-    context->RegisterAction("grind", std::make_unique<GrindAction>(botAI));
     context->RegisterAction("quest giver", std::make_unique<QuestGiverAction>(botAI));
+
+    // Gate 10b — RPG state machine (AC: NewRpgActionContext / NewRpgTriggerContext)
+    context->RegisterAction("attack anything", std::make_unique<AttackAnythingAction>(botAI));
+    context->RegisterAction("new rpg status update", std::make_unique<NewRpgStatusUpdateAction>(botAI));
+    context->RegisterAction("new rpg go grind", std::make_unique<NewRpgGoGrindAction>(botAI));
+    context->RegisterAction("new rpg do quest", std::make_unique<NewRpgDoQuestAction>(botAI));
+    context->RegisterTrigger("go grind status", std::make_unique<NewRpgStatusTrigger>(botAI, RPG_GO_GRIND));
+    context->RegisterTrigger("wander random status", std::make_unique<NewRpgStatusTrigger>(botAI, RPG_WANDER_RANDOM));
+    context->RegisterTrigger("do quest status", std::make_unique<NewRpgStatusTrigger>(botAI, RPG_DO_QUEST));
 
     if (Playerbots::GetLogLevel() >= 1 && player)
     {

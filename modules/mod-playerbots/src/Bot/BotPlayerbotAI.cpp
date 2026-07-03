@@ -52,6 +52,7 @@ void BotPlayerbotAI::ResetStrategies()
         // sitting passive; RandomBotRpgChance is this fork's single on/off-with-a-dial knob for it.
         _engine->AddStrategy("newrpg");
         appliedStrategies = "newrpg";
+        _rpgInfo.Reset(); // Gate 10b: fresh state machine whenever the RPG strategy is (re)applied
     }
     else
     {

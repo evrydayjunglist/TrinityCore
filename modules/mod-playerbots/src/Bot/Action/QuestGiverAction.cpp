@@ -16,20 +16,25 @@
  */
 
 #include "QuestGiverAction.h"
+#include "BotPlayerbotAI.h"
 #include "CellImpl.h"
 #include "GameObject.h"
 #include "GossipDef.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
+#include "Log.h"
 #include "LootItemType.h"
 #include "MotionMaster.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "QuestDef.h"
+#include "SafeMovement.h"
 
 namespace
 {
-constexpr float QUEST_GIVER_SEARCH_RADIUS = 30.0f;
+// Gate 10b: widened from 30yd to AC's SearchQuestGiverAndAcceptOrReward radius (80yd) — still
+// opportunistic-nearby pickup only, no distant quest-giver routing (handoff scope).
+constexpr float QUEST_GIVER_SEARCH_RADIUS = 80.0f;
 
 class QuestGiverCreatureCheck
 {
@@ -106,13 +111,18 @@ WorldObject* FindNearbyQuestGiver(Player* bot)
     return best;
 }
 
+} // namespace
+
 // Accepts every offerable quest and turns in every completed one at this quest giver,
 // replaying the same server-side checks the client's accept/choose-reward flow uses
 // (WorldSession::HandleQuestgiverAcceptQuestOpcode / HandleQuestgiverChooseRewardOpcode)
 // without a UI in the loop. No hardcoded quest id — driven entirely by what the world DB
-// actually offers this bot at this object.
-bool InteractWithQuestGiver(Player* bot, WorldObject* questGiver)
+// actually offers this bot at this object. Gate 10b: accepts additionally pass AC's
+// IsQuestWorthDoing/IsQuestCapableDoing filters (InteractWithNpcOrGameObjectForQuest parity)
+// and feed the RPG statistics counters.
+bool QuestGiverAction::InteractWithQuestGiver(WorldObject* questGiver)
 {
+    Player* bot = GetBot();
     bot->PrepareQuestMenu(questGiver->GetGUID());
     QuestMenu& menu = bot->PlayerTalkClass->GetQuestMenu();
 
@@ -138,6 +148,8 @@ bool InteractWithQuestGiver(Player* bot, WorldObject* questGiver)
                 continue;
 
             bot->RewardQuest(quest, rewardType, rewardItemId, questGiver);
+            _botAI->GetRpgStatistics().questRewarded++;
+            TC_LOG_DEBUG("playerbots", "[New RPG] {} rewarded quest {}", bot->GetName(), item.QuestId);
             didSomething = true;
         }
         else if (bot->GetQuestStatus(item.QuestId) == QUEST_STATUS_NONE)
@@ -145,14 +157,18 @@ bool InteractWithQuestGiver(Player* bot, WorldObject* questGiver)
             if (!bot->CanTakeQuest(quest, false) || !bot->CanAddQuest(quest, false))
                 continue;
 
+            if (!IsQuestWorthDoing(quest) || !IsQuestCapableDoing(quest))
+                continue;
+
             bot->AddQuestAndCheckCompletion(quest, questGiver);
+            _botAI->GetRpgStatistics().questAccepted++;
+            TC_LOG_DEBUG("playerbots", "[New RPG] {} accepted quest {}", bot->GetName(), item.QuestId);
             didSomething = true;
         }
     }
 
     return didSomething;
 }
-} // namespace
 
 bool QuestGiverAction::IsUseful()
 {
@@ -169,6 +185,11 @@ bool QuestGiverAction::Execute(Event /*event*/)
     if (!bot)
         return false;
 
+    // Quest log hygiene before any new pickup (AC runs OrganizeQuestLog at the top of
+    // SearchQuestGiverAndAcceptOrReward) — drops greyed-out/incapable/failed quests when
+    // the log is nearly full so worthwhile ones still fit.
+    OrganizeQuestLog();
+
     WorldObject* questGiver = FindNearbyQuestGiver(bot);
     if (!questGiver)
         return false;
@@ -178,9 +199,10 @@ bool QuestGiverAction::Execute(Event /*event*/)
         if (bot->GetMotionMaster()->GetCurrentMovementGeneratorType() == POINT_MOTION_TYPE)
             return false; // already walking toward a destination this tick
 
-        bot->GetMotionMaster()->MovePoint(0, questGiver->GetPositionX(), questGiver->GetPositionY(), questGiver->GetPositionZ());
-        return true;
+        // Validate via a real mmap path before committing (see SafeMovement.h) — same steep-
+        // terrain clipping risk as Wander/Grind if the approach happens to cross an incline.
+        return TryMoveToValidatedPoint(bot, questGiver->GetPositionX(), questGiver->GetPositionY(), questGiver->GetPositionZ());
     }
 
-    return InteractWithQuestGiver(bot, questGiver);
+    return InteractWithQuestGiver(questGiver);
 }

@@ -16,6 +16,9 @@
  */
 
 #include "AttackValidity.h"
+#include "CellImpl.h"
+#include "GridNotifiers.h"
+#include "GridNotifiersImpl.h"
 #include "Player.h"
 #include "Unit.h"
 
@@ -37,4 +40,20 @@ bool IsValidAttackTarget(Player* bot, Unit* target)
         return false;
 
     return true;
+}
+
+Unit* FindNearbyAttackableUnit(Player* bot, float radius)
+{
+    if (!bot)
+        return nullptr;
+
+    Unit* victim = nullptr;
+    Trinity::NearestAttackableUnitInObjectRangeCheck check(bot, bot, radius);
+    Trinity::UnitLastSearcher<Trinity::NearestAttackableUnitInObjectRangeCheck> searcher(bot, victim, check);
+    Cell::VisitAllObjects(bot, searcher, radius);
+
+    if (victim && IsValidAttackTarget(bot, victim))
+        return victim;
+
+    return nullptr;
 }

@@ -27,4 +27,10 @@ class Unit;
 // see playerbots-gate-10-world-rpg-slice-handoff.md § Phase C / "no duplicate combat logic".
 bool IsValidAttackTarget(Player* bot, Unit* target);
 
+// Gate 10 Layer 2 live target search ("what to attack right now") — nearest attackable hostile
+// within radius, validated through IsValidAttackTarget. Moved here from GrindAction's anonymous
+// namespace in Gate 10b so the always-on "attack anything" action (AC's grind-strategy kill role)
+// and the RPG status-availability check can share it.
+Unit* FindNearbyAttackableUnit(Player* bot, float radius);
+
 #endif

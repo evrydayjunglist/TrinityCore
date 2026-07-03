@@ -23,8 +23,12 @@
 class BotPlayerbotAI;
 
 // Gate 10 — World RPG loop for masterless random bots (AC reference: mod-playerbots-master's
-// "newrpg" strategy, NewRpgStrategy.h). Quest-giver interaction outranks grinding, which
-// outranks idle wandering, so a bot always checks for quest opportunities first.
+// "new rpg" strategy, Ai/World/Rpg/Strategy/NewRpgStrategy.cpp). Gate 10b rewired it to AC's
+// actual shape: the status-update action runs as the top default and drives the NewRpgInfo
+// state machine, while NewRpgStatusTrigger nodes gate exactly one per-status action (grind
+// travel / wander / do quest) at low relevance. Opportunistic quest-giver pickup and the
+// always-on "attack anything" kill role sit above the status machine as default actions
+// (AC runs those through every RPG action / its separate grind strategy respectively).
 class NewRpgStrategy : public Strategy
 {
 public:
@@ -33,6 +37,7 @@ public:
     std::string GetName() override { return "newrpg"; }
     uint32 GetType() const override { return STRATEGY_TYPE_NONCOMBAT; }
     std::vector<NextAction> GetDefaultActions() override;
+    void InitTriggers(std::vector<TriggerNode*>& triggers) override;
 };
 
 #endif

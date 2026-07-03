@@ -19,9 +19,11 @@
 #define TRINITY_BOT_PLAYERBOT_AI_H
 
 #include "AiObjectContext.h"
+#include "Bot/Rpg/NewRpgInfo.h"
 #include "Engine.h"
 #include "PlayerbotAIBase.h"
 #include <memory>
+#include <unordered_set>
 
 class AiObjectContext;
 class Engine;
@@ -41,6 +43,12 @@ public:
     void SetMaster(Player* master) { _master = master; }
     bool HasMaster() const { return _master != nullptr; }
 
+    // Gate 10b — per-bot RPG state machine + lifecycle counters + abandon set (AC keeps the
+    // same trio as public members rpgInfo/rpgStatistic/lowPriorityQuest on PlayerbotAI).
+    NewRpgInfo& GetRpgInfo() { return _rpgInfo; }
+    NewRpgStatistic& GetRpgStatistics() { return _rpgStatistic; }
+    std::unordered_set<uint32>& GetLowPriorityQuests() { return _lowPriorityQuest; }
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -48,6 +56,9 @@ private:
     std::unique_ptr<AiObjectContext> _context;
     std::unique_ptr<Engine> _engine;
     Player* _master = nullptr;
+    NewRpgInfo _rpgInfo;
+    NewRpgStatistic _rpgStatistic;
+    std::unordered_set<uint32> _lowPriorityQuest;
 };
 
 #endif
