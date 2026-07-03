@@ -254,6 +254,20 @@ inline float GetRandomBotRpgChance()
 {
     return std::clamp<float>(sConfigMgr->GetFloatDefault("Playerbots.RandomBotRpgChance", 100.0f), 0.0f, 100.0f);
 }
+
+// Fork-native (not ported from AC — see playerbots-bot-wander-ground-clip-handoff.md §5): the
+// mmap navmesh's own "normal ground" cutoff is 55 degrees (src/common/mmaps_common/Generator/
+// TileBuilder.cpp), which PathGenerator already confines Player-type sources to (steep 55-70
+// degree ground is combat-creature-only). That still leaves room for a bot to be routed along a
+// technically-connected 45-55 degree incline that reads as "climbing a wall" to a human watching —
+// this is a stricter, additional bot-side sanity check on top of the engine's own navmesh
+// classification, not a replacement for it. Tune down (never above the engine's own 55 degree
+// ceiling — a higher value would meaninglessly reduce this check's own effect) if bots refuse
+// legitimate terrain too often.
+inline float GetMaxWalkableSlopeDegrees()
+{
+    return std::clamp<float>(sConfigMgr->GetFloatDefault("Playerbots.MaxWalkableSlopeDegrees", 45.0f), 1.0f, 55.0f);
+}
 }
 
 #endif

@@ -111,3 +111,16 @@ Playerbots.RandomBotXPRate = 1.0
 # the only active behavior, so this is the single on/off-with-a-dial knob for it.
 #
 Playerbots.RandomBotRpgChance = 100.0
+
+#
+# Maximum incline (degrees, rise over run) a bot will voluntarily walk up while wandering/
+# grinding/approaching a quest giver. Fork-native, not from AC — AC has no equivalent check.
+# The mmap navmesh's own "normal ground" cutoff is 55 degrees (steeper terrain, 55-70 degrees,
+# is reserved for combat creatures only and bots never route through it), but that alone still
+# lets a bot walk a technically-connected route a human watching would call "climbing a wall".
+# This is an additional, stricter bot-side sanity check on top of that. Never raise above 55 —
+# a higher value has no effect, since the engine's own navmesh already excludes anything steeper.
+# Lower it if bots still look like they're climbing too much; raise it (up to 55) if they refuse
+# reasonable terrain too often.
+#
+Playerbots.MaxWalkableSlopeDegrees = 45.0
