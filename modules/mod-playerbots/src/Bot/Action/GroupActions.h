@@ -15,23 +15,25 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_PLAYERBOT_FOLLOW_MASTER_STRATEGY_H
-#define TRINITY_PLAYERBOT_FOLLOW_MASTER_STRATEGY_H
+#ifndef TRINITY_PLAYERBOT_GROUP_ACTIONS_H
+#define TRINITY_PLAYERBOT_GROUP_ACTIONS_H
 
-#include "Strategy.h"
+#include "Action.h"
 
 class BotPlayerbotAI;
 
-// AC reference: mod-playerbots-master/src/Ai/Base/Strategy/FollowMasterStrategy.h
-class FollowMasterStrategy : public Strategy
+// AC reference: mod-playerbots-master/src/Ai/Base/Actions/AcceptInvitationAction.cpp — accepts a
+// pending party invite from the bot's master. AC drives HandleGroupAcceptOpcode off the invite
+// SMSG; this fork's socketless bots have no inbound packet, so we call TC's own accept handler
+// (HandlePartyInviteResponseOpcode) directly — the same server-side path the client's Accept
+// button reaches.
+class AcceptInvitationAction : public Action
 {
 public:
-    explicit FollowMasterStrategy(BotPlayerbotAI* botAI) : Strategy(botAI) { }
+    explicit AcceptInvitationAction(BotPlayerbotAI* botAI) : Action(botAI, "accept invitation") { }
 
-    std::string GetName() override { return "follow"; }
-    uint32 GetType() const override { return STRATEGY_TYPE_NONCOMBAT; }
-    std::vector<NextAction> GetDefaultActions() override;
-    void InitTriggers(std::vector<TriggerNode*>& triggers) override;
+    bool Execute(Event event) override;
+    bool IsUseful() override;
 };
 
 #endif

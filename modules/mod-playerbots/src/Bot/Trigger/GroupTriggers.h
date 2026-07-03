@@ -15,16 +15,23 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "FollowMasterStrategy.h"
+#ifndef TRINITY_PLAYERBOT_GROUP_TRIGGERS_H
+#define TRINITY_PLAYERBOT_GROUP_TRIGGERS_H
 
-std::vector<NextAction> FollowMasterStrategy::GetDefaultActions()
-{
-    return { NextAction("follow", 1.0f) };
-}
+#include "Trigger.h"
 
-void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+class BotPlayerbotAI;
+
+// Active while the bot has a pending party invite whose leader is its own master. AC's
+// equivalent is packet-driven (SMSG_GROUP_INVITE -> "group invite" handler in
+// WorldPacketHandlerStrategy); this fork's bot sessions are socketless and never receive that
+// outbound SMSG, so we poll TC's own Player::GetGroupInvite() state each tick instead.
+class GroupInviteTrigger : public Trigger
 {
-    // Auto-accept a pending party invite from the master. High relevance so it preempts the
-    // default "follow" the tick the invite lands; the trigger deactivates once accepted.
-    triggers.push_back(new TriggerNode("group invite", { NextAction("accept invitation", 100.0f) }));
-}
+public:
+    explicit GroupInviteTrigger(BotPlayerbotAI* botAI) : Trigger(botAI, "group invite") { }
+
+    bool IsActive() override;
+};
+
+#endif

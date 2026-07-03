@@ -20,6 +20,7 @@
 #include "Bot/Action/AttackAction.h"
 #include "Bot/Action/AttackAnythingAction.h"
 #include "Bot/Action/FollowAction.h"
+#include "Bot/Action/GroupActions.h"
 #include "Bot/Action/NewRpgActions.h"
 #include "Bot/Action/QuestGiverAction.h"
 #include "Bot/Action/WanderAction.h"
@@ -27,6 +28,7 @@
 #include "Bot/Strategy/FollowMasterStrategy.h"
 #include "Bot/Strategy/NewRpgStrategy.h"
 #include "Bot/Strategy/PassiveStrategy.h"
+#include "Bot/Trigger/GroupTriggers.h"
 #include "Bot/Trigger/NewRpgTriggers.h"
 #include "BotPlayerbotAI.h"
 #include "DB2Stores.h"
@@ -43,8 +45,13 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterStrategy("newrpg", std::make_unique<NewRpgStrategy>(botAI));
     context->RegisterAction("follow", std::make_unique<FollowAction>(botAI));
     context->RegisterAction("attack my target", std::make_unique<AttackMyTargetAction>(botAI));
+    context->RegisterAction("accept invitation", std::make_unique<AcceptInvitationAction>(botAI));
     context->RegisterAction("wander", std::make_unique<WanderAction>(botAI));
     context->RegisterAction("quest giver", std::make_unique<QuestGiverAction>(botAI));
+
+    // Master-alt party join (bot auto-accepts its master's invite). AC drives this off an
+    // SMSG_GROUP_INVITE packet trigger; socketless bots poll Player::GetGroupInvite() instead.
+    context->RegisterTrigger("group invite", std::make_unique<GroupInviteTrigger>(botAI));
 
     // Gate 10b — RPG state machine (AC: NewRpgActionContext / NewRpgTriggerContext)
     context->RegisterAction("attack anything", std::make_unique<AttackAnythingAction>(botAI));
