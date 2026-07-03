@@ -30,28 +30,36 @@ modules/mod-playerbots/src/
       AiObjectContext.h/.cpp
       AiFactory.h/.cpp
       PlayerbotAIAware.h
-      Action.h, Trigger.h, Strategy.h, Event.h
+      Action.h/.cpp, Trigger.h, Strategy.h, Event.h
       PlayerbotAIBase.h/.cpp
     Strategy/
       PassiveStrategy.h/.cpp        # Gate 6 passive (GM bots without master)
-      FollowMasterStrategy.h/.cpp   # Gate 8 follow
+      FollowMasterStrategy.h/.cpp   # Gate 8 follow; Gate 8 follow-ups (B2) group-invite trigger
       CombatStrategy.h/.cpp         # Gate 8 attack
-      NewRpgStrategy.h/.cpp         # Gate 10 world RPG loop (masterless random bots)
+      NewRpgStrategy.h/.cpp         # Gate 10/10b world RPG loop (masterless random bots)
+    Trigger/
+      GroupTriggers.h/.cpp          # Gate 8 follow-ups (B2) master group-invite poll
+      NewRpgTriggers.h/.cpp         # Gate 10b RPG status-machine triggers
     Action/
       FollowAction.h/.cpp           # Gate 8 MoveFollow
-      AttackAction.h/.cpp           # Gate 8 attack my target
+      AttackAction.h/.cpp           # Gate 8 attack my target; Gate 8 follow-ups (B1) chase
+      AttackAnythingAction.h/.cpp   # Gate 10b always-on kill role (random/newrpg bots)
       AttackValidity.h/.cpp         # Gate 10 shared hostility/LOS check (extracted from AttackAction)
-      WanderAction.h/.cpp           # Gate 10 idle random-offset movement
-      GrindAction.h/.cpp            # Gate 10 cached grind spot + live hostile search/attack
-      QuestGiverAction.h/.cpp       # Gate 10 generic nearby quest-giver accept/turn-in
+      GroupActions.h/.cpp           # Gate 8 follow-ups (B2) master-alt auto-accept party invite
+      WanderAction.h/.cpp           # Gate 10 idle random-offset movement (validated via SafeMovement)
+      NewRpgBaseAction.h/.cpp       # Gate 10b shared RPG helpers (quest filters, POI resolve, MoveFarTo)
+      NewRpgActions.h/.cpp          # Gate 10b status-update/go-grind/do-quest actions
+      QuestGiverAction.h/.cpp       # Gate 10/10b generic nearby quest-giver accept/turn-in
+      SafeMovement.h/.cpp           # Gate 10 ground-clip fix: validated-path + slope-checked moves
     Rpg/
       GrindLocationCache.h/.cpp     # Gate 10 Layer 1: lazy per-map SQL-scan grind spot cache
-    BotPlayerbotAI.h/.cpp           # Gate 5–10 bot AI
+      NewRpgInfo.h/.cpp             # Gate 10b per-bot RPG state machine + statistics
+    BotPlayerbotAI.h/.cpp           # Gate 5–10b bot AI
   Mgr/
     BotSessionMgr.h/.cpp            # TC socketless sessions (Gates 3–4, 7, 9 scheduler)
     PlayerbotMgr.h/.cpp             # Per-human master-alt control (Gate 7)
     PlayerbotsMgr.h/.cpp            # AI registry (Gate 5) + mgr map (Gate 7)
-    RandomPlayerbotMgr.h/.cpp       # Random bot scheduler (Gate 9)
+    RandomPlayerbotMgr.h/.cpp       # Random bot scheduler (Gate 9); periodic DB save (C1)
   Db/
     PlayerbotsDatabaseMgr.h/.cpp    # Playerbots DB version check (Gate 9)
   data/sql/playerbots/              # Module-local SQL (Gate 9)
@@ -84,6 +92,9 @@ Loaded via `ConfigMgr::LoadModuleConfigDir("modules")` — separate from `worlds
 Key options: `Playerbots.Enable`, `Playerbots.ReservedAccount.Ids` (or MinId/MaxId),
 `Playerbots.MaxActiveBots`, `Playerbots.AllowAccountBots`, `Playerbots.MaxAddedBots`,
 `Playerbots.ReactDelay`, `Playerbots.GlobalCooldown`, `Playerbots.FollowDistance`, `Playerbots.LogLevel`.
+Full current list (movement/RPG/save tuning included) lives in
+[`conf/mod-playerbots.conf.dist`](conf/mod-playerbots.conf.dist) — not duplicated key-by-key here
+to avoid this section drifting out of sync with the shipped defaults.
 
 **Gate 9 — Playerbots database + random bots:**
 
@@ -165,12 +176,19 @@ Closeout: [`playerbots-gate-07-master-alt-handoff.md`](../../docs/midnight-asses
 
 - Master-alt bots: `follow` + `attack` strategies via `ResetStrategies()` after `SetMaster`
 - `FollowAction` → `MotionMaster::MoveFollow(master, FollowDistance)` when out of range
-- `AttackMyTargetAction` → attacks `master->GetTarget()` via `Unit::Attack` (melee auto-attack)
+- `AttackMyTargetAction` → attacks `master->GetTarget()` via `Unit::Attack` (melee auto-attack),
+  then `MotionMaster::MoveChase` to close and stay on the target (**B1 follow-up**, 2026-07-03 —
+  originally attacked in place)
 - Single-engine relevance routing (`attack` 10.0 > `follow` 1.0); no dual `BotState` yet
 - GM `.playerbot login` bots without master stay **passive**
 - Config: `Playerbots.FollowDistance` (default 3.0)
+- **Party/group join (B2 follow-up, 2026-07-03):** a master-alt bot auto-accepts a pending
+  invite from its own master — `GroupTriggers::GroupInviteTrigger` polls `Player::GetGroupInvite()`
+  (socketless bots never see AC's `SMSG_GROUP_INVITE`) and `GroupActions::AcceptInvitationAction`
+  accepts via `WorldSession::HandlePartyInviteResponseOpcode`. Random-bot/any-player accept stays
+  **NYI** (AC gates it behind `PlayerbotSecurity`, itself not built here).
 
-Closeout: [`playerbots-gate-08-movement-combat-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-gate-08-movement-combat-handoff.md) — **complete** (agent 2026-06-29; owner playtest pending).
+Closeout: [`playerbots-gate-08-movement-combat-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-gate-08-movement-combat-handoff.md) — **complete** (agent 2026-06-29; owner playtest pending); follow-ups: [`playerbots-master-alt-followups-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-master-alt-followups-handoff.md).
 
 ## Gate 9 (Playerbots database + random bot bootstrap)
 
@@ -229,9 +247,11 @@ mechanism):**
   position — reuses the Gate 8 hostility/LOS check (extracted into
   `Bot/Action/AttackValidity.h`) for combat targets, and `Player::PrepareQuestMenu` +
   `PlayerTalkClass->GetQuestMenu()` for quest givers.
-- `NewRpgStrategy` (`STRATEGY_TYPE_NONCOMBAT`) — `quest giver` (30.0) > `grind` (20.0) >
-  `wander` (10.0) default actions; a bot always checks for quest opportunities before
-  grinding, and grinds before idly wandering.
+- `NewRpgStrategy` default actions (relevance): `quest giver` (30.0) > `attack anything` (20.0)
+  > `new rpg status update` (11.0), with the status machine's own `go grind`/`wander`/`do quest`
+  handlers at 3.0 — a bot always checks for quest opportunities and fights back before
+  progressing its current RPG status. Superseded by Gate 10b's full status machine (below);
+  see `NewRpgStrategy.cpp` for the up-to-date relevance layout.
 - `Playerbots.RandomBotRpgChance` (0–100) — chance a masterless random bot runs `newrpg`
   instead of `passive`, rolled in `BotPlayerbotAI::ResetStrategies()`. Fork-native knob: AC's
   own `randomBotRpgChance` picks between RPG-vs-grind sub-states inside an already-RPG bot;
@@ -241,3 +261,39 @@ mechanism):**
   applies when `!HasMaster() && sRandomPlayerbotMgr->IsRandomBot(guid)`.
 
 Closeout: [`playerbots-gate-10-world-rpg-slice-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-gate-10-world-rpg-slice-handoff.md).
+
+## Gate 10b (RPG_DO_QUEST — goal-directed questing)
+
+Masterless random bots running `newrpg` can now pick a quest from their own log, travel to
+the objective's POI, make kill/collect progress, walk back, and turn it in — not just
+opportunistic nearby pickup.
+
+- `Bot/Rpg/NewRpgInfo` — per-bot `std::variant` state machine (`Idle`/`WanderRandom`/`GoGrind`/
+  `DoQuest`), reset whenever `newrpg` is (re)applied in `ResetStrategies()`
+- `NewRpgStatusUpdateAction` — weighted status transitions (`Playerbots.RpgStatusProbWeight*`),
+  duration-gated exits (`Playerbots.RpgStatusDuration*Ms`)
+- `NewRpgDoQuestAction` — typed `QuestObjective` progress tracking (modern objective IDs, not
+  WotLK fixed-array index math), `GetQuestPOIPosAndObjective` blob resolution, POI-stay timeout
+  → abandon-set (`Playerbots.RpgPoiStayTimeMs`)
+- `NewRpgBaseAction::MoveFarTo` — long-distance travel on top of `SafeMovement`'s validated-path
+  contract, with stuck-detection teleport recovery (depends on the bot-session teleport self-ack
+  fix)
+- `OrganizeQuestLog` — drops greyed-out/incapable/failed quests when the log is nearly full,
+  same 3-pass AC contract
+- `.playerbot status` surfaces each bot's live RPG status string + quest accept/reward/complete/
+  abandon/drop counters (`NewRpgStatistic`) — fork replacement for AC's whisper-based
+  `TellRpgStatusAction`
+
+Closeout: [`playerbots-gate-10b-do-quest-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-gate-10b-do-quest-handoff.md).
+
+## Review follow-ups (2026-07-03)
+
+Owner-directed AC-likeness review of `track/playerbots` found and closed three small gaps
+beyond the numbered gates — **B1** (Gate 8 combat-chase), **B2** (Gate 8 party/group join,
+folded into the Gate 8 section above), and **C1/C2** (periodic random-bot DB save +
+engine-selection documentation note, see the `RandomPlayerbotMgr`/`Engine` bullets above).
+Full detail: [`playerbots-master-alt-followups-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-master-alt-followups-handoff.md),
+[`playerbots-review-c-followups-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-review-c-followups-handoff.md).
+Remaining known AC-likeness gaps (per-class rotations, talent/gear/security/text subsystems,
+bot outbound-packet observation) are tracked, not silently dropped — see
+[`playerbots-future-gates-roadmap.md` § Beyond Gate 10](../../docs/midnight-assessment/playerbots/playerbots-future-gates-roadmap.md#beyond-gate-10-not-numbered-here).
