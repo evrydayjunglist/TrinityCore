@@ -47,7 +47,6 @@ public:
     void RegisterSession(WorldSession* session, ObjectGuid characterGuid);
     void UnregisterSession(WorldSession* session);
 
-    WorldSession* GetSessionByAccountId(uint32 accountId) const;
     WorldSession* GetSessionByCharacterName(std::string const& name) const;
     ObjectGuid GetMasterGuidForBot(ObjectGuid botCharacterGuid) const;
 
@@ -68,7 +67,6 @@ private:
         LoginPolicy policy, ObjectGuid masterGuid);
     bool LogoutBotSession(WorldSession* session, ChatHandler* handler, bool sendMessage);
 
-    std::unordered_map<uint32, WorldSession*> _sessionsByAccountId;
     std::unordered_map<ObjectGuid, WorldSession*> _sessionsByCharacterGuid;
     std::unordered_map<ObjectGuid, ObjectGuid> _masterByBotCharacterGuid;
 };

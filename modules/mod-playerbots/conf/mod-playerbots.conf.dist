@@ -21,7 +21,9 @@ Playerbots.Enable = 0
 # Rules (locked contract):
 #   - Bot characters must live on accounts in this policy only.
 #   - Never use reserved ids for human Battle.net login.
-#   - One active socketless session per reserved account (Gate 3–4).
+#   - Bot sessions are tracked per-character, not per-account — a reserved account can host more
+#     than one simultaneous socketless session (multiple GM `.playerbot login` characters, or a
+#     multi-entry random-bot roster on the same account; see Playerbots.RandomBotAccounts below).
 #   - Set explicit Ids OR inclusive MinId/MaxId — Ids takes precedence when non-empty.
 #   - Empty / zero range = policy disabled until configured (.playerbot login rejected).
 #
@@ -77,11 +79,10 @@ Playerbots.MaxRandomBots = 0
 Playerbots.RandomBotAutologin = 0
 Playerbots.DisabledWithoutRealPlayer = 1
 #
-# Comma lists: reserved account ids and matching character names (same order).
-# Gate 9 interim: ONE online random bot per account (pair by index).
-# AC north-star goal: multiple chars on same rndbot account — Gate 11+ session model
-# (see docs/midnight-assessment/playerbots/playerbots-future-gates-roadmap.md).
-# Example: account 3 + char Three; account 4 + char Threethree (not both on account 3).
+# Comma lists: reserved account ids and matching character names (same order/index — repeat an
+# account id to add another character on it, e.g. multiple bots sharing one reserved account,
+# AC parity, see docs/midnight-assessment/playerbots/playerbots-bot-session-account-cap-handoff.md).
+# Example: account 3 + char Three, account 3 + char Threethree (both live on account 3 at once).
 #
 Playerbots.RandomBotAccounts =
 Playerbots.RandomBotCharacterNames =

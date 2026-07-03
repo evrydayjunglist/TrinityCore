@@ -185,10 +185,10 @@ World::~World()
         m_sessions.erase(m_sessions.begin());
     }
 
-    while (!m_botSessionsByAccount.empty())
+    while (!m_botSessionsByGuid.empty())
     {
-        delete m_botSessionsByAccount.begin()->second;
-        m_botSessionsByAccount.erase(m_botSessionsByAccount.begin());
+        delete m_botSessionsByGuid.begin()->second;
+        m_botSessionsByGuid.erase(m_botSessionsByGuid.begin());
     }
 
     CliCommandHolder* command = nullptr;
@@ -338,38 +338,32 @@ WorldSession* World::FindSession(uint32 id) const
         return nullptr;
 }
 
-WorldSession* World::FindBotSession(uint32 accountId) const
+WorldSession* World::FindBotSession(ObjectGuid characterGuid) const
 {
-    SessionMap::const_iterator itr = m_botSessionsByAccount.find(accountId);
-    return itr != m_botSessionsByAccount.end() ? itr->second : nullptr;
+    auto itr = m_botSessionsByGuid.find(characterGuid);
+    return itr != m_botSessionsByGuid.end() ? itr->second : nullptr;
 }
 
-void World::AddBotSession(WorldSession* s)
+void World::AddBotSession(WorldSession* s, ObjectGuid characterGuid)
 {
     ASSERT(s && s->IsBotSession());
 
-    SessionMap::const_iterator existing = m_sessions.find(s->GetAccountId());
-    if (existing != m_sessions.end() && existing->second && !existing->second->IsBotSession())
-    {
-        if (m_botSessionsByAccount.contains(s->GetAccountId()))
-        {
-            s->KickPlayer("World::AddBotSession duplicate bot session on account with human");
-            delete s;
-            return;
-        }
-
-        m_botSessionsByAccount[s->GetAccountId()] = s;
-        s->InitializeSession();
-        return;
-    }
-
-    AddSession(s);
+    // Bot sessions are tracked per-character (not per-account) in their own map, entirely
+    // separate from m_sessions — never queued, never subject to m_sessions' one-session-per-
+    // account slot, and never kicked by a same-account AddSession_() call the way a second human
+    // login on the same account would kick the first. This is what lets several bot characters
+    // (random-bot roster entries, or a master's alts) share a single reserved/master account
+    // (AC parity; see docs/midnight-assessment/playerbots/playerbots-bot-session-account-cap-handoff.md).
+    // Every bot session — reserved-account or master-alt alike — goes through this path; only
+    // real human logins ever touch m_sessions/AddSession().
+    m_botSessionsByGuid[characterGuid] = s;
+    s->InitializeSession();
 }
 
-void World::RemoveBotSession(uint32 accountId)
+void World::RemoveBotSession(ObjectGuid characterGuid)
 {
-    SessionMap::const_iterator itr = m_botSessionsByAccount.find(accountId);
-    if (itr == m_botSessionsByAccount.end() || !itr->second)
+    auto itr = m_botSessionsByGuid.find(characterGuid);
+    if (itr == m_botSessionsByGuid.end() || !itr->second)
         return;
 
     // Bot sessions have no socket, so WorldSession::KickPlayer() (which only closes sockets) is a
@@ -3028,7 +3022,7 @@ void World::UpdateSessions(uint32 diff)
         }
     }
 
-    for (SessionMap::iterator itr = m_botSessionsByAccount.begin(), next; itr != m_botSessionsByAccount.end(); itr = next)
+    for (auto itr = m_botSessionsByGuid.begin(), next = itr; itr != m_botSessionsByGuid.end(); itr = next)
     {
         next = itr;
         ++next;
@@ -3038,7 +3032,7 @@ void World::UpdateSessions(uint32 diff)
 
         if (!pSession->Update(diff, updater))
         {
-            m_botSessionsByAccount.erase(itr);
+            m_botSessionsByGuid.erase(itr);
             delete pSession;
         }
     }

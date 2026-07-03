@@ -574,10 +574,13 @@ class TC_GAME_API World
         static std::atomic<uint32> m_worldLoopCounter;
 
         WorldSession* FindSession(uint32 id) const;
-        WorldSession* FindBotSession(uint32 accountId) const;
+        // Bot sessions are identity-keyed by character, not account — unlike real accounts,
+        // one reserved/master account can legitimately host several simultaneous bot
+        // characters (Playerbots AC-likeness fix, see playerbots-bot-session-account-cap-handoff.md).
+        WorldSession* FindBotSession(ObjectGuid characterGuid) const;
         void AddSession(WorldSession* s);
-        void AddBotSession(WorldSession* s);
-        void RemoveBotSession(uint32 accountId);
+        void AddBotSession(WorldSession* s, ObjectGuid characterGuid);
+        void RemoveBotSession(ObjectGuid characterGuid);
         void AddInstanceSocket(std::weak_ptr<WorldSocket> sock, uint64 connectToKey);
         void SendAutoBroadcast();
         bool RemoveSession(uint32 id);
@@ -841,7 +844,7 @@ class TC_GAME_API World
         time_t blackmarket_timer;
 
         SessionMap m_sessions;
-        SessionMap m_botSessionsByAccount;
+        std::unordered_map<ObjectGuid, WorldSession*> m_botSessionsByGuid;
         std::unordered_multimap<ObjectGuid, WorldSession*> m_sessionsByBnetGuid;
         typedef std::unordered_map<uint32, time_t> DisconnectMap;
         DisconnectMap m_disconnects;

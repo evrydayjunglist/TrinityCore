@@ -52,12 +52,6 @@ ObjectGuid BotSessionMgr::ResolveCharacterGuid(std::string const& nameOrGuid)
     return sCharacterCache->GetCharacterGuidByName(nameOrGuid);
 }
 
-WorldSession* BotSessionMgr::GetSessionByAccountId(uint32 accountId) const
-{
-    auto itr = _sessionsByAccountId.find(accountId);
-    return itr != _sessionsByAccountId.end() ? itr->second : nullptr;
-}
-
 WorldSession* BotSessionMgr::GetSessionByCharacterName(std::string const& name) const
 {
     ObjectGuid guid = sCharacterCache->GetCharacterGuidByName(name);
@@ -82,7 +76,6 @@ void BotSessionMgr::ForEachActiveBot(std::function<void(WorldSession* session, O
 
 void BotSessionMgr::RegisterSession(WorldSession* session, ObjectGuid characterGuid)
 {
-    _sessionsByAccountId[session->GetAccountId()] = session;
     _sessionsByCharacterGuid[characterGuid] = session;
 }
 
@@ -100,10 +93,6 @@ void BotSessionMgr::UnregisterSession(WorldSession* session)
         _sessionsByCharacterGuid.erase(characterGuid);
         _masterByBotCharacterGuid.erase(characterGuid);
     }
-
-    auto itr = _sessionsByAccountId.find(session->GetAccountId());
-    if (itr != _sessionsByAccountId.end() && itr->second == session)
-        _sessionsByAccountId.erase(itr);
 }
 
 bool BotSessionMgr::CanStartBotLogin(ChatHandler* handler, ObjectGuid characterGuid, uint32 accountId,
@@ -158,13 +147,11 @@ bool BotSessionMgr::CanStartBotLogin(ChatHandler* handler, ObjectGuid characterG
             return false;
         }
 
-        if (GetSessionByAccountId(accountId))
-        {
-            if (handler)
-                handler->PSendSysMessage("Playerbots: bot session already tracked for account %u.", accountId);
-            return false;
-        }
-
+        // No account-level "already has a bot" gate here on purpose — a reserved account can
+        // legitimately host several simultaneous random-bot characters (AC parity). The real
+        // caps are the per-character check above (_sessionsByCharacterGuid.contains), the global
+        // Playerbots.MaxActiveBots check above, and RandomPlayerbotMgr's own roster/MaxRandomBots
+        // accounting. See playerbots-bot-session-account-cap-handoff.md.
         return true;
     }
 
@@ -199,18 +186,11 @@ bool BotSessionMgr::CanStartBotLogin(ChatHandler* handler, ObjectGuid characterG
         return false;
     }
 
-    if (sWorld->FindBotSession(accountId))
-    {
-        SendBotMessage(handler, "Playerbots: you already have a master-alt bot active on this account.");
-        return false;
-    }
-
-    if (GetSessionByAccountId(accountId))
-    {
-        SendBotMessage(handler, "Playerbots: a bot session is already tracked for your account.");
-        return false;
-    }
-
+    // No account-level "already has a bot" gate here on purpose — Playerbots.MaxAddedBots
+    // (checked by PlayerbotMgr::AddBot before this is even called) is the real per-master cap,
+    // and it's meant to allow more than one alt when configured above 1. The per-character check
+    // above (_sessionsByCharacterGuid.contains) still blocks logging the same character in twice.
+    // See playerbots-bot-session-account-cap-handoff.md.
     return true;
 }
 
@@ -232,10 +212,9 @@ bool BotSessionMgr::StartBotLogin(ChatHandler* handler, ObjectGuid characterGuid
         _masterByBotCharacterGuid[characterGuid] = masterGuid;
 
     WorldSession* session = WorldSession::CreateForBot(accountId, std::move(accountName), security, expansion);
-    if (policy == LoginPolicy::MasterAlt)
-        sWorld->AddBotSession(session);
-    else
-        sWorld->AddSession(session);
+    // Every bot session (reserved-account or master-alt) is tracked in World's GUID-keyed bot
+    // map, never World::AddSession()'s account-keyed human map — see World::AddBotSession.
+    sWorld->AddBotSession(session, characterGuid);
 
     session->LoginBotCharacter(characterGuid);
 

@@ -93,8 +93,8 @@ Key options: `Playerbots.Enable`, `Playerbots.ReservedAccount.Ids` (or MinId/Max
 - `Playerbots.MinRandomBots` / `Playerbots.MaxRandomBots` — default `0` (feature off when `MaxRandomBots=0`)
 - `Playerbots.RandomBotAutologin` — scheduler autologin when `1`
 - `Playerbots.DisabledWithoutRealPlayer` — default `1`; no random bots when no humans online
-- `Playerbots.RandomBotAccounts` — comma-separated reserved account ids (**one online random bot per account** in Gate 9; AC multi-char-per-account is Gate 11+)
-- `Playerbots.RandomBotCharacterNames` — comma-separated character names (same order as accounts; one name per account slot)
+- `Playerbots.RandomBotAccounts` — comma-separated reserved account ids; **repeat an id to add another character on the same account** (AC parity — see [`playerbots-bot-session-account-cap-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-bot-session-account-cap-handoff.md))
+- `Playerbots.RandomBotCharacterNames` — comma-separated character names, same order/index as `RandomBotAccounts` (one name per roster slot, not per account)
 
 ## AC contract (do not violate)
 
@@ -157,7 +157,7 @@ Closeout: [`playerbots-gate-06-engine-skeleton-handoff.md`](../../docs/midnight-
 - `.playerbot bot add/remove/list/logout` — same-account alts only (`AllowAccountBots`)
 - `MaxAddedBots` per master + `MaxActiveBots` global cap
 - `BotSessionMgr::LoginMasterAlt` — socketless login without reserved-account requirement
-- Core: `World::AddBotSession` — human + bot on same `accountId`
+- Core: `World::AddBotSession` — GUID-keyed bot session map, human master + one or more bot alts share one `accountId` (see [`playerbots-bot-session-account-cap-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-bot-session-account-cap-handoff.md))
 
 Closeout: [`playerbots-gate-07-master-alt-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-gate-07-master-alt-handoff.md) — **complete** (agent 2026-06-29; owner playtest pending).
 
@@ -179,8 +179,10 @@ Closeout: [`playerbots-gate-08-movement-combat-handoff.md`](../../docs/midnight-
 - `PlayerbotsDatabaseMgr` — connection/version check from module
 - `RandomPlayerbotMgr` — world-tick scheduler (5s); logs in reserved-account bots via `BotSessionMgr::LoginReservedCharacter`
 - Random bots: **passive** AI by default (no master); Gate 10 adds an opt-in `newrpg` AI — see below; `DisabledWithoutRealPlayer` stops scheduler when last human logs out
-- **Roster (Gate 9 interim):** one online random bot per reserved account — pair `RandomBotAccounts` with `RandomBotCharacterNames` by index (e.g. account 3 → `Three`, account 4 → `Threethree`)
-- **North-star goal (AC parity, Gate 11+):** multiple random-bot characters on the **same** account in-world together — see [`playerbots-future-gates-roadmap.md`](../../docs/midnight-assessment/playerbots/playerbots-future-gates-roadmap.md) § *AC random bot session model*
+- **Roster:** pair `RandomBotAccounts` with `RandomBotCharacterNames` by index; multiple entries can
+  share the same account id (AC parity — several random-bot characters on one reserved account
+  in-world together, e.g. account 3 → `Three`, account 3 → `Threethree`) — fixed
+  2026-07-03, see [`playerbots-bot-session-account-cap-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-bot-session-account-cap-handoff.md)
 - `.playerbot rndbot status|start|stop` — GM ops surface
 - `.playerbot account setKey/link` — remain NYI (schema exists empty)
 

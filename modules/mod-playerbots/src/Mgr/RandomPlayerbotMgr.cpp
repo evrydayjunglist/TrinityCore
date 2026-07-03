@@ -166,9 +166,9 @@ void RandomPlayerbotMgr::TryLoginRandomBots()
         if (_activeRandomBotGuids.contains(entry.CharacterGuid))
             continue;
 
-        if (sBotSessionMgr->GetSessionByAccountId(entry.AccountId))
-            continue;
-
+        // No account-level skip here on purpose — a reserved account can host several roster
+        // entries (e.g. Three + Threethree both on account 3); the per-character check above
+        // is the correct guard. See playerbots-bot-session-account-cap-handoff.md.
         LoginRosterEntry(entry);
     }
 }
