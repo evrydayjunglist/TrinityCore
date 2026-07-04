@@ -318,15 +318,38 @@ inline std::vector<uint32> GetAllowedRaces()
     return ParseCommaUintList(sConfigMgr->GetStringDefault("Playerbots.AllowedRaces", ""));
 }
 
-// Session 2 seam (playerbots-special-races-classes-s2-hero-classes-handoff.md): hero classes
-// (Death Knight / Demon Hunter / Evoker) start in instanced scenarios the wander strategy cannot
-// path out of, with no world relocation yet, so generation keeps them excluded until Session 2
-// implements the create-time open-world override. Default off. This is the clean config-gated
-// extension point Session 2 flips on — not a hardcoded "hero excluded". Enabling it before
-// Session 2 lands will create hero bots stuck in their starting scenario.
+// Session 2 — hero classes (playerbots-special-races-classes-s2-hero-classes-handoff.md). When true
+// (default), generated random bots may roll Death Knight / Demon Hunter / Evoker — detected data-first
+// by the CLASS_* enum, never a hardcoded id list. This also un-gates the Dracthyr race (Evoker's
+// paired race, an elevated-StartingLevel scenario-start race). Set to 0 to generate base + allied
+// classes only. AC-minded: AC (WotLK) has DK but no DH/Evoker, so this is the TC-native master toggle
+// alongside the AC-shaped DisableDeathKnightLogin below.
+//
+// Hero-class bots currently spawn in their instanced intro scenarios (Acherus / Mardum / Forbidden
+// Reach) — the wander strategy cannot leave those yet. That is an accepted state for now (owner
+// decision 2026-07-04); teaching bots to complete/exit the starting scenarios is future work (NYI).
+// Their start level/money come from Player::Create, never a literal.
 inline bool GetEnableHeroClasses()
 {
-    return sConfigMgr->GetBoolDefault("Playerbots.EnableHeroClasses", false);
+    return sConfigMgr->GetBoolDefault("Playerbots.EnableHeroClasses", true);
+}
+
+// AC's AiPlayerbot.DisableDeathKnightLogin analog. When true, generated bots never roll Death Knight
+// (even with EnableHeroClasses on). AC combines this with an expansion check (noDK = config || not
+// WotLK); on Midnight all three hero classes are available at the realm expansion, so the toggle is
+// the gate. Default off (DK enabled) to match AC's default. DH/Evoker are governed by EnableHeroClasses.
+inline bool GetDisableDeathKnightLogin()
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.DisableDeathKnightLogin", false);
+}
+
+// Optional curated include-list of class ids a generated bot may roll (comma-separated). Empty
+// (default) = every class allowed by the expansion / disabled-class mask / hero-class toggles.
+// Non-empty restricts generation to exactly these class ids (still intersected with those gates).
+// Mirrors GetAllowedRaces; data-first knob, not a substitute for the enum-based hero detection.
+inline std::vector<uint32> GetAllowedClasses()
+{
+    return ParseCommaUintList(sConfigMgr->GetStringDefault("Playerbots.AllowedClasses", ""));
 }
 
 // Review follow-up C1 (playerbots-review-c-followups-handoff.md): periodic DB flush for active

@@ -44,8 +44,10 @@
 
 namespace
 {
-// Hero classes (DK / DH / Evoker) start in instanced intro scenarios (DK plague lands, DH Mardum,
-// Evoker Forbidden Reach) the wander strategy can't path out of, with no world relocation yet.
+// Hero classes (DK / DH / Evoker) — detected data-first by the CLASS_* enum, never a hardcoded id
+// list. They start in instanced intro scenarios (DK Acherus, DH Mardum, Evoker Forbidden Reach) the
+// wander strategy can't path out of yet; generation still produces them (Session 2), and teaching
+// bots to complete/exit those starting scenarios is future work (NYI, owner decision 2026-07-04).
 bool IsHeroClass(uint8 cls)
 {
     return cls == CLASS_DEATH_KNIGHT || cls == CLASS_DEMON_HUNTER || cls == CLASS_EVOKER;
@@ -59,11 +61,26 @@ bool IsGeneratableClass(uint8 cls)
         return false;
     if (!sChrClassesStore.LookupEntry(cls))
         return false;
-    // Session 2 seam: hero classes stay excluded behind a config toggle (default off) instead of a
-    // hardcoded exclude, so Session 2 can enable them once hero-class create specifics (scenario
-    // relocation) exist. See playerbots-special-races-classes-s2-hero-classes-handoff.md.
-    if (IsHeroClass(cls) && !Playerbots::GetEnableHeroClasses())
+
+    // Optional curated include-list (data-first): if set, only these class ids generate. Mirrors
+    // GetAllowedRaces; empty (default) = every class allowed by the gates below.
+    std::vector<uint32> const allowed = Playerbots::GetAllowedClasses();
+    if (!allowed.empty() && std::ranges::find(allowed, uint32(cls)) == allowed.end())
         return false;
+
+    // Hero-class arm, AC-shaped (AC's IsValidRaceClassCombination expansion skip +
+    // AiPlayerbot.DisableDeathKnightLogin). Gated behind EnableHeroClasses (master toggle) with a
+    // DK-specific DisableDeathKnightLogin analog. TC-native: AC (WotLK) has DK only, so DH/Evoker are
+    // necessarily fork additions kept AC-minded (config-driven). Start level/money come from
+    // Player::Create (CONFIG_START_{DEATH_KNIGHT,DEMON_HUNTER,EVOKER}_PLAYER_LEVEL), never a literal.
+    if (IsHeroClass(cls))
+    {
+        if (!Playerbots::GetEnableHeroClasses())
+            return false;
+        if (cls == CLASS_DEATH_KNIGHT && Playerbots::GetDisableDeathKnightLogin())
+            return false;
+    }
+
     if ((1 << (cls - 1)) & sWorld->getIntConfig(CONFIG_CHARACTER_CREATING_DISABLED_CLASSMASK))
         return false;
     return true;
@@ -106,10 +123,14 @@ bool IsGeneratableRace(uint8 race)
     if (chrRace->GetFlags().HasFlag(ChrRacesFlag::IsAlliedRace))
         return Playerbots::GetEnableAlliedRaces();
 
-    // Non-allied race: base races start at the normal player level; a higher start level marks an
-    // instanced-scenario special race (Dracthyr) that Session 1 does not generate (Session 2).
+    // Non-allied race: base races start at the normal player level. A higher StartingLevel marks an
+    // instanced-scenario special race (Dracthyr — Forbidden Reach), detected data-first by the level
+    // signal, never a hardcoded {52,70} id list. Dracthyr is Evoker's paired race, so it rides the
+    // same gate as the hero classes: generatable only when hero classes are enabled (Session 2). Like
+    // the hero classes it spawns in its intro scenario for now (scenario traversal is NYI — see
+    // IsGeneratableClass). Its start level (10) still comes from Player::Create for free.
     if (chrRace->StartingLevel > int32(sWorld->getIntConfig(CONFIG_START_PLAYER_LEVEL)))
-        return false;
+        return Playerbots::GetEnableHeroClasses();
 
     return true;
 }

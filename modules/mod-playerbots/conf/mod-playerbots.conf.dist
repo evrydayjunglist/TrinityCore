@@ -103,8 +103,9 @@ Playerbots.RandomBotRandomPassword = 0
 Playerbots.DeleteRandomBotAccounts = 0
 
 #
-# Special races & classes for generation (Session 1 — allied races). See
-# docs/midnight-assessment/playerbots/playerbots-special-races-classes-s1-allied-races-handoff.md.
+# Special races & classes for generation (Session 1 — allied races; Session 2 — hero classes). See
+# docs/midnight-assessment/playerbots/playerbots-special-races-classes-s1-allied-races-handoff.md and
+# .../playerbots-special-races-classes-s2-hero-classes-handoff.md.
 # Generation sets every bot account's expansion to the realm's, so allied/special races are unlocked.
 #
 # Allied races (Void Elf, Lightforged Draenei, Dark Iron Dwarf, Kul Tiran, Mechagnome, Nightborne,
@@ -117,11 +118,21 @@ Playerbots.EnableAlliedRaces = 1
 # restricts generation to exactly these race ids (still intersected with expansion / disabled-race
 # masks and EnableAlliedRaces). Example: Playerbots.AllowedRaces = 1,2,29,34
 Playerbots.AllowedRaces =
-# Hero classes (Death Knight / Demon Hunter / Evoker) — Session 2 seam. They start in instanced
-# scenarios the wander strategy can't leave yet, so generation excludes them until Session 2 adds
-# create-time world relocation. Leave 0; enabling before Session 2 lands creates hero bots stuck in
-# their starting scenario.
-Playerbots.EnableHeroClasses = 0
+# Hero classes (Death Knight / Demon Hunter / Evoker) — Session 2. When 1 (default) a generated bot
+# may roll a hero class the realm's expansion allows — detected data-first by the CLASS_* enum, never
+# a hardcoded id list. This also un-gates the Dracthyr race (Evoker's paired race). Set to 0 to
+# generate base + allied classes only.
+# NOTE: hero-class bots currently spawn in their instanced intro scenarios (Acherus / Mardum /
+# Forbidden Reach); the wander strategy can't leave those yet and teaching bots to complete the
+# starting scenarios is future work. Their start level comes from the core StartXPlayerLevel configs.
+Playerbots.EnableHeroClasses = 1
+# AC's AiPlayerbot.DisableDeathKnightLogin analog. When 1, generated bots never roll Death Knight even
+# with EnableHeroClasses on (Demon Hunter / Evoker unaffected). Default 0 (DK enabled), matching AC.
+Playerbots.DisableDeathKnightLogin = 0
+# Optional curated include-list of class ids a generated bot may roll (comma-separated). Empty
+# (default) = every class allowed by the expansion / disabled-class mask / hero-class toggles. Non-empty
+# restricts generation to exactly these class ids. Example (casters only): Playerbots.AllowedClasses = 5,8,9
+Playerbots.AllowedClasses =
 
 #
 # DEPRECATED (superseded by generation + DB-enumerated roster above). The fixed-roster hand-list is
