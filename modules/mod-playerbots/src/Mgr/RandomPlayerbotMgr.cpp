@@ -18,6 +18,7 @@
 #include "RandomPlayerbotMgr.h"
 #include "BotSessionMgr.h"
 #include "CharacterCache.h"
+#include "Containers.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
@@ -186,18 +187,27 @@ void RandomPlayerbotMgr::TryLoginRandomBots()
     if (_activeRandomBotGuids.size() >= target)
         return;
 
+    // AC picks the next bot to add at random from the available pool (RandomPlayerbotFactory /
+    // AddRandomBots), rather than a fixed scan order. Shuffle the not-yet-active candidates each
+    // pass so a roster larger than MaxRandomBots doesn't always favor the same declared-order
+    // prefix — matters once the roster is a real pool rather than this fork's small dev fixture.
+    std::vector<RandomBotRosterEntry const*> candidates;
+    candidates.reserve(_roster.size());
     for (RandomBotRosterEntry const& entry : _roster)
+        if (!_activeRandomBotGuids.contains(entry.CharacterGuid))
+            candidates.push_back(&entry);
+
+    Trinity::Containers::RandomShuffle(candidates);
+
+    for (RandomBotRosterEntry const* entry : candidates)
     {
         if (_activeRandomBotGuids.size() >= target)
             break;
 
-        if (_activeRandomBotGuids.contains(entry.CharacterGuid))
-            continue;
-
         // No account-level skip here on purpose — a reserved account can host several roster
         // entries (e.g. Three + Threethree both on account 3); the per-character check above
         // is the correct guard. See playerbots-bot-session-account-cap-handoff.md.
-        LoginRosterEntry(entry);
+        LoginRosterEntry(*entry);
     }
 }
 

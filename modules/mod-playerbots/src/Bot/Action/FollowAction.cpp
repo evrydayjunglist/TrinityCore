@@ -42,7 +42,10 @@ bool FollowAction::IsUseful()
     if (master->HasUnitState(UNIT_STATE_IN_FLIGHT))
         return false;
 
-    if (bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+    // Don't yank the bot mid-cast/mid-channel/mid-autoshot — MoveFollow would interrupt it.
+    // No bot action casts anything yet (melee auto-attack only), so this is a no-op today; kept
+    // ahead of a future casting/rotation gate rather than added reactively once it lands.
+    if (bot->IsNonMeleeSpellCast(false))
         return false;
 
     float const followDistance = Playerbots::GetFollowDistance();
