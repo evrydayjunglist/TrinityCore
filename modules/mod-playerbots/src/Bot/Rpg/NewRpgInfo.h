@@ -108,6 +108,8 @@ struct NewRpgStatistic
     uint32 questAbandoned = 0;
     uint32 questRewarded = 0;
     uint32 questDropped = 0;
+    uint32 itemsLooted = 0;   // quest loot picked up from corpses/objects (LootAction)
+    uint32 objectsUsed = 0;   // quest-objective gameobjects used (UseQuestObjectAction)
 };
 
 #endif

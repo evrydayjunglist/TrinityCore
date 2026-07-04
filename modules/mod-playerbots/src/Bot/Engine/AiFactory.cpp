@@ -21,8 +21,10 @@
 #include "Bot/Action/AttackAnythingAction.h"
 #include "Bot/Action/FollowAction.h"
 #include "Bot/Action/GroupActions.h"
+#include "Bot/Action/LootAction.h"
 #include "Bot/Action/NewRpgActions.h"
 #include "Bot/Action/QuestGiverAction.h"
+#include "Bot/Action/UseQuestObjectAction.h"
 #include "Bot/Action/WanderAction.h"
 #include "Bot/Strategy/CombatStrategy.h"
 #include "Bot/Strategy/FollowMasterStrategy.h"
@@ -52,6 +54,10 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     // Master-alt party join (bot auto-accepts its master's invite). AC drives this off an
     // SMSG_GROUP_INVITE packet trigger; socketless bots poll Player::GetGroupInvite() instead.
     context->RegisterTrigger("group invite", std::make_unique<GroupInviteTrigger>(botAI));
+
+    // Quest loot + object interaction (AC: OpenLootAction/StoreLootAction, InteractWithGameObject).
+    context->RegisterAction("loot", std::make_unique<LootAction>(botAI));
+    context->RegisterAction("use quest object", std::make_unique<UseQuestObjectAction>(botAI));
 
     // Gate 10b — RPG state machine (AC: NewRpgActionContext / NewRpgTriggerContext)
     context->RegisterAction("attack anything", std::make_unique<AttackAnythingAction>(botAI));

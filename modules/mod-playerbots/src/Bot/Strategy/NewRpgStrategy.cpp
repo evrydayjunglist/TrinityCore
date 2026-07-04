@@ -23,10 +23,17 @@
 // SearchQuestGiverAndAcceptOrReward inside every RPG action) and "attack anything" (the kill
 // role AC's always-on grind strategy provides) outrank the status machine so they preempt
 // travel legs whenever they actually have something to do.
+//
+// "use quest object" and "loot" join the same always-on interact band (AC runs its object-use and
+// loot behaviours alongside the RPG loop the same way). Both bail out of combat via IsUseful, so
+// their ordering vs "attack anything" only matters out of combat — there we want the bot to use a
+// nearby quest object and pick up quest drops before it wanders off, so they outrank the kill role.
 std::vector<NextAction> NewRpgStrategy::GetDefaultActions()
 {
     return {
         NextAction("quest giver", 30.0f),
+        NextAction("use quest object", 25.0f),
+        NextAction("loot", 22.0f),
         NextAction("attack anything", 20.0f),
         NextAction("new rpg status update", 11.0f)
     };

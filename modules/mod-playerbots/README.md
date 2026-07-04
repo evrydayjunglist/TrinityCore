@@ -286,6 +286,35 @@ opportunistic nearby pickup.
 
 Closeout: [`playerbots-gate-10b-do-quest-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-gate-10b-do-quest-handoff.md).
 
+## Quest loot + object interaction
+
+RPG bots pick up quest drops and use quest-objective gameobjects while questing/grinding. Both go
+straight through the core's own APIs — **packetless** (a socketless bot session has no inbound
+packet queue) — and lean on the core for every ownership/anti-ninja rule.
+
+- `Bot/Action/LootAction` (`"loot"`) — AC's `OpenLootAction`/`StoreLootAction` shape, TC-native:
+  live grid scan for the nearest dead creature the bot `Player::isAllowedToLoot`s that holds a
+  wanted item, `Player::SendLoot` to open it, then `Player::StoreLootItem` for each slot that
+  `LootItem::GetUiTypeForPlayer` says is takeable. It also drains any already-open loot window
+  (`Player::GetAELootView`), which is how loot from a gameobject the object-use action opened gets
+  stored. Default filter is quest-relevant items only (AC's `IsLootAllowed` quest core:
+  `ItemTemplate::GetStartQuest` + incomplete `QUEST_OBJECTIVE_ITEM` match) — `Playerbots.LootDistance`,
+  `Playerbots.LootQuestItemsOnly`, `Playerbots.LootMoney`.
+- `Bot/Action/UseQuestObjectAction` (`"use quest object"`) — finds a spawned GO matching an
+  incomplete `QUEST_OBJECTIVE_GAMEOBJECT` in the bot's log (`GO_STATE_READY`, not
+  `GO_FLAG_INTERACT_COND`/`GO_FLAG_NOT_SELECTABLE`), approaches via the `SafeMovement` contract, then
+  replays the client's exact gate (`Player::GetGameObjectIfCanInteractWith` → `GameObject::Use`).
+  `GameObject::Use` fires the real quest credit and, for chest/gathering objectives, opens the loot
+  window that `LootAction` then drains — `Playerbots.QuestObjectUseDistance`.
+- **GO turn-in** needs no new code: TC quest enders are always `GAMEOBJECT_TYPE_QUESTGIVER`, which
+  the existing `QuestGiverAction` already handles (`CanInteractWithQuestGiver`/`PrepareQuestMenu`
+  both accept gameobjects).
+- Relevance (in the always-on interact band, all combat-gated via `IsUseful`): `quest giver` (30) >
+  `use quest object` (25) > `loot` (22) > `attack anything` (20) > `new rpg status update` (11).
+- `.playerbot status` adds `looted`/`objects used` counters (`NewRpgStatistic`).
+
+Closeout: [`playerbots-quest-loot-and-object-interaction-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-quest-loot-and-object-interaction-handoff.md).
+
 ## Review follow-ups (2026-07-03)
 
 Owner-directed AC-likeness review of `track/playerbots` found and closed three small gaps

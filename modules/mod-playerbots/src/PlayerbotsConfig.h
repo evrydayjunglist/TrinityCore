@@ -319,6 +319,42 @@ inline float GetMaxWalkableSlopeDegrees()
     // measured human sustained limit.
     return std::clamp<float>(sConfigMgr->GetFloatDefault("Playerbots.MaxWalkableSlopeDegrees", 35.0f), 1.0f, 55.0f);
 }
+
+// Quest loot + object interaction (playerbots-quest-loot-and-object-interaction-handoff.md).
+// AC reference: mod-playerbots-master lootDistance / the OpenLootAction anti-ninja + IsLootAllowed
+// quest filter — reimplemented TC-native and packetless (Player::SendLoot/StoreLootItem,
+// GameObject::Use directly, no synthetic CMSG). All bounded so a bot never drifts into Gate 18
+// gear/vendor economy: V1 loots quest-relevant items only by default.
+
+// How far a bot will look for a lootable corpse / usable quest object (yd). Matches the core's
+// own AELootCreatureCheck::LootDistance (30yd) so the bot's reach mirrors a real looting player.
+inline float GetLootDistance()
+{
+    return std::clamp<float>(sConfigMgr->GetFloatDefault("Playerbots.LootDistance", 30.0f), 5.0f, 100.0f);
+}
+
+// V1 guardrail: when true (default) a bot only stores loot that starts a quest or satisfies an
+// item objective in its own log (AC's StoreLootAction::IsLootAllowed quest core). Turn it off to
+// let bots grab everything they're allowed to — kept off the default path so looting never turns
+// into the gear/vendor economy that's Gate 18's scope.
+inline bool GetLootQuestItemsOnly()
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.LootQuestItemsOnly", true);
+}
+
+// Whether bots pick up coin from corpses/objects they loot (retail bots do; harmless to bags).
+inline bool GetLootMoney()
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.LootMoney", true);
+}
+
+// Reach for using a quest-objective gameobject (yd). The core's interaction check
+// (GetGameObjectIfCanInteractWith) enforces the real ~INTERACTION_DISTANCE ceiling regardless;
+// this only decides how close the bot walks before it tries, so keep it at/below that.
+inline float GetQuestObjectUseDistance()
+{
+    return std::clamp<float>(sConfigMgr->GetFloatDefault("Playerbots.QuestObjectUseDistance", 5.0f), 1.0f, 10.0f);
+}
 }
 
 #endif

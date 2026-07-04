@@ -101,10 +101,11 @@ public:
                     if (BotPlayerbotAI* botAI = sPlayerbotsMgr->GetPlayerbotAI(bot))
                     {
                         NewRpgStatistic const& stats = botAI->GetRpgStatistics();
-                        handler->PSendSysMessage("  - %s | %s | quests accepted %u rewarded %u completed %u abandoned %u dropped %u",
+                        handler->PSendSysMessage("  - %s | %s | quests accepted %u rewarded %u completed %u abandoned %u dropped %u | looted %u objects used %u",
                             bot->GetName().c_str(), botAI->GetRpgInfo().ToString().c_str(),
                             stats.questAccepted, stats.questRewarded, stats.questCompleted,
-                            stats.questAbandoned, stats.questDropped);
+                            stats.questAbandoned, stats.questDropped,
+                            stats.itemsLooted, stats.objectsUsed);
                     }
                     else
                         handler->PSendSysMessage("  - %s", bot->GetName().c_str());

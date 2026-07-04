@@ -161,3 +161,34 @@ Playerbots.RpgPoiStayTime = 300
 # edge of the slope, not actually ascending it), whereas an unchecked bot walked a 41 degree pitch.
 #
 Playerbots.MaxWalkableSlopeDegrees = 35.0
+
+#
+# Quest loot + object interaction (playerbots-quest-loot-and-object-interaction-handoff.md).
+# RPG bots pick up quest drops from corpses and use quest-objective gameobjects, using the core's
+# own loot/interaction APIs directly (packetless). Ownership and anti-ninja are enforced by the
+# core exactly as for a real player: a bot only loots corpses it is allowed to loot, and only slots
+# a real looter could take.
+#
+
+#
+# How far (yards) a bot looks for a lootable corpse. Matches the core's own AE-loot reach (30yd).
+#
+Playerbots.LootDistance = 30.0
+
+#
+# When true (default), bots only store loot that starts a quest or fills an item objective in
+# their own log — keeps looting to quest needs and out of the gear/vendor economy. Set to 0 to
+# let bots take everything they're allowed to.
+#
+Playerbots.LootQuestItemsOnly = 1
+
+#
+# Whether bots pick up coin from what they loot (retail bots do; it doesn't fill bags).
+#
+Playerbots.LootMoney = 1
+
+#
+# How close (yards) a bot walks before trying to use a quest-objective gameobject. The core's
+# interaction check enforces the real reach regardless; keep this at or below ~5.
+#
+Playerbots.QuestObjectUseDistance = 5.0
