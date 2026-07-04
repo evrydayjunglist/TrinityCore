@@ -72,22 +72,38 @@ bool HasWalkableSlope(Movement::PointsArray const& points)
 
 namespace
 {
-// Shared body for both entry points: full contract (acceptable path type, per-segment slope,
-// no-water endpoint), plus an optional minimum-progress requirement used by far travel —
-// pathological PATHFIND_INCOMPLETE results can put the reachable endpoint right under the
-// bot's feet, and committing that "move" would just burn the tick without closing any gap.
+// Shared path/slope gate for every entry point below: reject a disconnected/shortcut route or
+// one whose corridor is steeper than the configured ceiling. Returns the validated (possibly
+// partial-route) end position on success so callers that also commit a MovePoint don't have to
+// recompute the path a second time.
+bool ValidatePathAndSlope(Player* bot, float x, float y, float z, PathGenerator& outPath)
+{
+    if (!bot)
+        return false;
+
+    outPath.CalculatePath(x, y, z);
+    if (outPath.GetPathType() & ~PATH_TYPE_ACCEPTABLE)
+        return false; // no real mmap route — refuse rather than walk straight through terrain
+
+    if (!HasWalkableSlope(outPath.GetPath()))
+        return false; // technically-connected but too steep to be a real player-climbable incline
+
+    return true;
+}
+
+// Shared body for both one-shot MovePoint entry points: full contract (acceptable path type,
+// per-segment slope, no-water endpoint), plus an optional minimum-progress requirement used by
+// far travel — pathological PATHFIND_INCOMPLETE results can put the reachable endpoint right
+// under the bot's feet, and committing that "move" would just burn the tick without closing any
+// gap.
 bool TryMoveValidated(Player* bot, float x, float y, float z, float minProgress)
 {
     if (!bot)
         return false;
 
     PathGenerator path(bot);
-    path.CalculatePath(x, y, z);
-    if (path.GetPathType() & ~PATH_TYPE_ACCEPTABLE)
-        return false; // no real mmap route — refuse rather than walk straight through terrain
-
-    if (!HasWalkableSlope(path.GetPath()))
-        return false; // technically-connected but too steep to be a real player-climbable incline
+    if (!ValidatePathAndSlope(bot, x, y, z, path))
+        return false;
 
     G3D::Vector3 const& end = path.GetActualEndPosition();
     if (bot->GetMap()->IsInWater(bot->GetPhaseShift(), end.x, end.y, end.z))
@@ -114,4 +130,13 @@ bool TryMoveToValidatedPoint(Player* bot, float x, float y, float z)
 bool TryMoveTowardValidatedPoint(Player* bot, float x, float y, float z, float minProgress)
 {
     return TryMoveValidated(bot, x, y, z, minProgress);
+}
+
+bool IsApproachPathWalkable(Player* bot, float x, float y, float z)
+{
+    if (!bot)
+        return false;
+
+    PathGenerator path(bot);
+    return ValidatePathAndSlope(bot, x, y, z, path);
 }

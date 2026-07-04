@@ -20,6 +20,7 @@
 #include "BotPlayerbotAI.h"
 #include "MotionMaster.h"
 #include "Player.h"
+#include "SafeMovement.h"
 #include "Unit.h"
 
 namespace
@@ -78,7 +79,14 @@ bool AttackAnythingAction::Execute(Event /*event*/)
 
     // Close to melee range and stay on the target (core ChaseMovementGenerator, same
     // target-relative movement family FollowAction already uses via MoveFollow) — without this
-    // a bot only ever lands hits when the mob walks into it.
-    bot->GetMotionMaster()->MoveChase(target);
+    // a bot only ever lands hits when the mob walks into it. ChaseMovementGenerator builds its
+    // own PathGenerator with only the engine's default (55-degree) slope filter, so gate it on
+    // SafeMovement's stricter check first — already in melee range needs no chase movement at
+    // all and is never blocked by terrain. See SafeMovement.h and
+    // playerbots-bot-wander-ground-clip-handoff.md §6.
+    if (bot->IsWithinMeleeRange(target) ||
+        IsApproachPathWalkable(bot, target->GetPositionX(), target->GetPositionY(), target->GetPositionZ()))
+        bot->GetMotionMaster()->MoveChase(target);
+
     return true;
 }

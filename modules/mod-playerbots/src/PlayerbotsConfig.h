@@ -312,7 +312,12 @@ inline uint32 GetRpgPoiStayTimeMs()
 // legitimate terrain too often.
 inline float GetMaxWalkableSlopeDegrees()
 {
-    return std::clamp<float>(sConfigMgr->GetFloatDefault("Playerbots.MaxWalkableSlopeDegrees", 45.0f), 1.0f, 55.0f);
+    // Default 35 degrees: derived from a local player slope-walk sniff (2026-07-03,
+    // playerbots-bot-wander-ground-clip-handoff.md §7) — a human's steepest *sustained* head-on
+    // climb on the same terrain was ~35-37 degrees (steeper isolated readings were edge-skirting,
+    // not a real ascent), while an unchecked bot walked a 41 degree pitch. 35 sits just under the
+    // measured human sustained limit.
+    return std::clamp<float>(sConfigMgr->GetFloatDefault("Playerbots.MaxWalkableSlopeDegrees", 35.0f), 1.0f, 55.0f);
 }
 }
 

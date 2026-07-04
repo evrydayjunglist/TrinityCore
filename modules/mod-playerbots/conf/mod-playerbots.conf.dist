@@ -155,4 +155,9 @@ Playerbots.RpgPoiStayTime = 300
 # Lower it if bots still look like they're climbing too much; raise it (up to 55) if they refuse
 # reasonable terrain too often.
 #
-Playerbots.MaxWalkableSlopeDegrees = 45.0
+# Default 35: evidence-grounded from a local player slope-walk sniff (see
+# playerbots-bot-wander-ground-clip-handoff.md section 7). A human's steepest *sustained* head-on
+# climb on the same hill was ~35-37 degrees (steeper isolated readings were the player skirting the
+# edge of the slope, not actually ascending it), whereas an unchecked bot walked a 41 degree pitch.
+#
+Playerbots.MaxWalkableSlopeDegrees = 35.0

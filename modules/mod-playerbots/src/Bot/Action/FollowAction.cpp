@@ -21,6 +21,7 @@
 #include "MotionMaster.h"
 #include "Player.h"
 #include "PlayerbotsConfig.h"
+#include "SafeMovement.h"
 #include "Unit.h"
 
 bool FollowAction::IsUseful()
@@ -60,6 +61,14 @@ bool FollowAction::Execute(Event /*event*/)
 
     Player* master = _botAI->GetMaster();
     if (!master || !master->IsInWorld() || bot->GetMapId() != master->GetMapId())
+        return false;
+
+    // FollowMovementGenerator builds its own PathGenerator with only the engine's default
+    // slope filter, same gap as combat chase (SafeMovement.h) — refuse to follow across an
+    // incline a real player couldn't walk rather than climbing to keep up. IsUseful() re-checks
+    // the distance every tick, so this naturally re-tries once the master (or the bot, catching
+    // up a different way) clears the terrain.
+    if (!IsApproachPathWalkable(bot, master->GetPositionX(), master->GetPositionY(), master->GetPositionZ()))
         return false;
 
     float const followDistance = Playerbots::GetFollowDistance();
