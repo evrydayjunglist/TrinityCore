@@ -25,6 +25,8 @@ modules/mod-playerbots/src/
     mod_playerbots_player_script.cpp
     mod_playerbots_world_script.cpp # Gate 9 world tick
   Bot/
+    Factory/
+      RandomPlayerbotFactory.h/.cpp # AC-shaped random-bot generation: account + level-1 char provisioning
     Engine/                         # Gate 6 Engine skeleton
       Engine.h/.cpp
       AiObjectContext.h/.cpp
@@ -80,7 +82,17 @@ cmake --build "D:/WOWEmulation/Emulators/Builds/TrinityCore-evry" `
       --config RelWithDebInfo --target worldserver modules
 ```
 
-Default path (`MODULES=none`) does not link this module.
+This module is part of the **validation baseline** — the project builds/boots and tests
+human login with all modules enabled (`MODULES=static`). `MODULES=none` (the CMake default)
+does not link this module and is kept only as a secondary "core still compiles" check.
+
+> **Sticky cache gotcha (2026-07-04):** `-DMODULE_MOD_PLAYERBOTS` persists in the CMake
+> cache. If a prior `MODULES=none` build left it `disabled`, a plain
+> `.\scripts\build-trinitycore-master.ps1 -Modules static` will **not** re-enable it (the
+> script doesn't pass the per-module flag), silently shipping a worldserver with the module
+> compiled out while `mod-playerbots.conf` still loads. Pass `-DMODULE_MOD_PLAYERBOTS=static`
+> explicitly (as above) or wipe the cache, and confirm the generated `ModulesLoader.cpp`
+> calls `Addmod_playerbotsScripts()`.
 
 ## Runtime config
 
@@ -104,8 +116,24 @@ to avoid this section drifting out of sync with the shipped defaults.
 - `Playerbots.MinRandomBots` / `Playerbots.MaxRandomBots` — default `0` (feature off when `MaxRandomBots=0`)
 - `Playerbots.RandomBotAutologin` — scheduler autologin when `1`
 - `Playerbots.DisabledWithoutRealPlayer` — default `1`; no random bots when no humans online
-- `Playerbots.RandomBotAccounts` — comma-separated reserved account ids; **repeat an id to add another character on the same account** (AC parity — see [`playerbots-bot-session-account-cap-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-bot-session-account-cap-handoff.md))
-- `Playerbots.RandomBotCharacterNames` — comma-separated character names, same order/index as `RandomBotAccounts` (one name per roster slot, not per account)
+### Random bot generation (RandomPlayerbotFactory — AC-shaped, TC-native)
+
+When `Playerbots.Enable=1` and `MaxRandomBots>0`, startup auto-provisions reserved bot accounts and level-1 characters, then enumerates the roster from them (no hand-list). See [`playerbots-random-bot-generation-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-random-bot-generation-handoff.md).
+
+- `Playerbots.RandomBotAccountPrefix` — default `rndbot`; bot accounts are named `<prefix><N>` and reserved via this prefix (third reserved-account mode). Empty disables generation + prefix reservation.
+- `Playerbots.RandomBotAccountCount` — `0` = auto (`ceil(MaxRandomBots / CharactersPerAccount)`); a value below the minimum is warned and overridden
+- `Playerbots.RandomBotRandomPassword` — `0` default; `1` gives generated accounts a random password
+- `Playerbots.DeleteRandomBotAccounts` — **loud opt-in teardown**: `1` deletes all bot accounts/characters then stops the server; reset to `0` and restart to regenerate. Off by default
+- `Playerbots.EnableAlliedRaces` — default `1`; when set, generated bots may roll **allied races** (Void Elf, Dark Iron, Vulpera, Earthen, ...), detected data-first via `ChrRacesFlag::IsAlliedRace` + expansion (no id list). `0` = base races only. See [`playerbots-special-races-classes-s1-allied-races-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-special-races-classes-s1-allied-races-handoff.md)
+- `Playerbots.AllowedRaces` — optional curated include-list of race ids (comma-separated); empty (default) = every expansion-allowed race, non-empty restricts to exactly those ids (still masked by expansion / disabled-race / `EnableAlliedRaces`)
+- `Playerbots.EnableHeroClasses` — default `0`; **Session 2 seam** for DK/DH/Evoker (they start in instanced scenarios with no world relocation yet). Enabling before Session 2 lands creates hero bots stuck in their starting scenario
+- Generated characters start at the **core-correct level** with a valid random race/class/gender + DB2-derived appearance — base races level 1, **allied races level 10** (`Player::Create` applies `CONFIG_START_ALLIED_RACE_LEVEL`). Hero classes and non-allied scenario-start races (Dracthyr) are Session 2; loadout/gear/talents remain out of scope
+- Bot accounts are set to the realm **expansion** at provisioning (allied/special races unlocked) and are **Bnet-linked** at creation so bot sessions resolve a real `battlenetAccountId` (no `battlenet_*` FK growth)
+
+**DEPRECATED** (superseded by generation + DB-enumerated roster; no longer read):
+
+- `Playerbots.RandomBotAccounts` — was a comma-separated reserved account id list
+- `Playerbots.RandomBotCharacterNames` — was a matching character-name list
 
 ## AC contract (do not violate)
 

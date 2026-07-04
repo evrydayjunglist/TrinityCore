@@ -18,10 +18,12 @@
 #ifndef TRINITY_PLAYERBOTS_CONFIG_H
 #define TRINITY_PLAYERBOTS_CONFIG_H
 
+#include "AccountMgr.h"
 #include "Config.h"
 #include "StringConvert.h"
 #include "Util.h"
 #include <algorithm>
+#include <cctype>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -93,6 +95,30 @@ inline std::vector<uint32> GetReservedAccountIds()
     return ids;
 }
 
+// AC-style random-bot account name prefix (RandomPlayerbotFactory). Accounts named
+// "<prefix><N>" are the generated bot accounts. This is also the third reserved-account
+// reservation mode (alongside ReservedAccount.Ids and MinId/MaxId) — see
+// playerbots-random-bot-generation-handoff.md § 6.2. Empty disables prefix mode.
+inline std::string GetRandomBotAccountPrefix()
+{
+    return sConfigMgr->GetStringDefault("Playerbots.RandomBotAccountPrefix", "rndbot");
+}
+
+// Case-insensitive prefix test against a game-account username (usernames are stored
+// upper-cased, so callers may pass either case).
+inline bool IsReservedAccountName(std::string_view username)
+{
+    std::string const prefix = GetRandomBotAccountPrefix();
+    if (prefix.empty() || username.size() < prefix.size())
+        return false;
+
+    return std::equal(prefix.begin(), prefix.end(), username.begin(),
+        [](char a, char b)
+        {
+            return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
+        });
+}
+
 inline bool IsReservedAccountPolicyConfigured()
 {
     if (!GetReservedAccountIds().empty())
@@ -100,7 +126,10 @@ inline bool IsReservedAccountPolicyConfigured()
 
     uint32 const minId = GetReservedAccountMinId();
     uint32 const maxId = GetReservedAccountMaxId();
-    return minId != 0 && maxId != 0 && minId <= maxId;
+    if (minId != 0 && maxId != 0 && minId <= maxId)
+        return true;
+
+    return !GetRandomBotAccountPrefix().empty();
 }
 
 inline bool IsReservedAccount(uint32 accountId)
@@ -108,35 +137,62 @@ inline bool IsReservedAccount(uint32 accountId)
     if (accountId == 0)
         return false;
 
+    // Any configured mode reserves the account (checked as an OR, not first-match-wins) — a
+    // deployment may combine explicit ids / a range with the AC prefix mode.
     std::vector<uint32> const explicitIds = GetReservedAccountIds();
-    if (!explicitIds.empty())
-        return std::ranges::find(explicitIds, accountId) != explicitIds.end();
+    if (!explicitIds.empty() && std::ranges::find(explicitIds, accountId) != explicitIds.end())
+        return true;
 
     uint32 const minId = GetReservedAccountMinId();
     uint32 const maxId = GetReservedAccountMaxId();
-    if (minId != 0 && maxId != 0 && minId <= maxId)
-        return accountId >= minId && accountId <= maxId;
+    if (minId != 0 && maxId != 0 && minId <= maxId && accountId >= minId && accountId <= maxId)
+        return true;
+
+    // Prefix mode: resolve the account username and match the configured prefix. Not a hot path
+    // (bot-login guards + startup roster build), so the AccountMgr::GetName lookup is acceptable.
+    if (!GetRandomBotAccountPrefix().empty())
+    {
+        std::string name;
+        if (AccountMgr::GetName(accountId, name) && IsReservedAccountName(name))
+            return true;
+    }
 
     return false;
 }
 
 inline std::string GetReservedAccountPolicySummary()
 {
+    std::vector<std::string> parts;
+
     std::vector<uint32> const explicitIds = GetReservedAccountIds();
     if (!explicitIds.empty())
     {
         std::string result = "explicit Ids:";
         for (uint32 id : explicitIds)
             result += " " + std::to_string(id);
-        return result;
+        parts.push_back(std::move(result));
     }
 
     uint32 const minId = GetReservedAccountMinId();
     uint32 const maxId = GetReservedAccountMaxId();
     if (minId != 0 && maxId != 0 && minId <= maxId)
-        return "range MinId-MaxId: " + std::to_string(minId) + "-" + std::to_string(maxId);
+        parts.push_back("range MinId-MaxId: " + std::to_string(minId) + "-" + std::to_string(maxId));
 
-    return "not configured";
+    std::string const prefix = GetRandomBotAccountPrefix();
+    if (!prefix.empty())
+        parts.push_back("name prefix: " + prefix);
+
+    if (parts.empty())
+        return "not configured";
+
+    std::string summary;
+    for (size_t i = 0; i < parts.size(); ++i)
+    {
+        if (i)
+            summary += "; ";
+        summary += parts[i];
+    }
+    return summary;
 }
 
 inline bool GetEnableDatabases()
@@ -203,14 +259,74 @@ inline std::vector<std::string> ParseCommaStringList(std::string const& value)
     return items;
 }
 
+// DEPRECATED (playerbots-random-bot-generation-handoff.md § 5 Phase C): the fixed-roster
+// hand-list is superseded by AC-style DB enumeration of characters on the reserved bot
+// accounts (RandomPlayerbotMgr::BuildRoster). Retained only so a legacy deployed conf that
+// still sets these keys doesn't warn; no longer read by the roster builder. Do not extend.
 inline std::vector<uint32> GetRandomBotAccounts()
 {
     return ParseCommaUintList(sConfigMgr->GetStringDefault("Playerbots.RandomBotAccounts", ""));
 }
 
+// DEPRECATED — see GetRandomBotAccounts above.
 inline std::vector<std::string> GetRandomBotCharacterNames()
 {
     return ParseCommaStringList(sConfigMgr->GetStringDefault("Playerbots.RandomBotCharacterNames", ""));
+}
+
+// RandomPlayerbotFactory (generation). Number of reserved bot accounts to provision. 0 = auto:
+// ceil(MaxRandomBots / CONFIG_CHARACTERS_PER_ACCOUNT), AC's CalculateTotalAccountCount shape. A
+// manual value below the calculated minimum is warned about and overridden.
+inline uint32 GetRandomBotAccountCount()
+{
+    return sConfigMgr->GetIntDefault("Playerbots.RandomBotAccountCount", 0);
+}
+
+// When true, generated bot accounts get a random 10-char password instead of the account name
+// (AC's randomBotRandomPassword). Bots log in socketlessly, so this is purely defense-in-depth.
+inline bool GetRandomBotRandomPassword()
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.RandomBotRandomPassword", false);
+}
+
+// AC's deleteRandomBotAccounts analog — the loud, opt-in "regenerate from scratch" switch. When
+// true, startup deletes every generated bot-account character (and the bot accounts), logs
+// loudly, and stops the server so the operator can reset this flag. Off by default; never a
+// silent action. See playerbots-random-bot-generation-handoff.md § 5 Phase C.
+inline bool GetDeleteRandomBotAccounts()
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.DeleteRandomBotAccounts", false);
+}
+
+// Session 1 — special races (playerbots-special-races-classes-s1-allied-races-handoff.md).
+// When true (default), generated random bots may roll allied races (Void Elf, Dark Iron, Vulpera,
+// Earthen, ...) — detected data-first via ChrRacesFlag::IsAlliedRace + expansion, never a hardcoded
+// id list. Set to 0 to restrict generation to base races only. AC (WotLK) has no allied races, so
+// this is a TC-native but AC-minded (config-driven) toggle.
+inline bool GetEnableAlliedRaces()
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.EnableAlliedRaces", true);
+}
+
+// Optional curated include-list of race ids a generated bot may roll (comma-separated). Empty
+// (default) = every race the realm's expansion allows (base + allied per EnableAlliedRaces).
+// Non-empty restricts generation to exactly these race ids (still intersected with the expansion /
+// disabled-race masks and EnableAlliedRaces). Data-first knob; not a substitute for flag-based
+// allied detection.
+inline std::vector<uint32> GetAllowedRaces()
+{
+    return ParseCommaUintList(sConfigMgr->GetStringDefault("Playerbots.AllowedRaces", ""));
+}
+
+// Session 2 seam (playerbots-special-races-classes-s2-hero-classes-handoff.md): hero classes
+// (Death Knight / Demon Hunter / Evoker) start in instanced scenarios the wander strategy cannot
+// path out of, with no world relocation yet, so generation keeps them excluded until Session 2
+// implements the create-time open-world override. Default off. This is the clean config-gated
+// extension point Session 2 flips on — not a hardcoded "hero excluded". Enabling it before
+// Session 2 lands will create hero bots stuck in their starting scenario.
+inline bool GetEnableHeroClasses()
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.EnableHeroClasses", false);
 }
 
 // Review follow-up C1 (playerbots-review-c-followups-handoff.md): periodic DB flush for active
