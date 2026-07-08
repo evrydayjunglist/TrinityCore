@@ -566,6 +566,22 @@ inline float GetQuestTalkToDistance()
 {
     return std::clamp<float>(sConfigMgr->GetFloatDefault("Playerbots.QuestTalkToDistance", 5.0f), 1.0f, 10.0f);
 }
+
+// Bot death handling V1 (the corpse run). Pause after death before a bot releases its spirit, so
+// the release reads lifelike rather than instant (0 = release immediately). The core reclaim-delay
+// window is intentionally left to Player::GetCorpseReclaimDelay — no knob undercuts it.
+inline uint32 GetRpgDeathReleaseDelaySeconds()
+{
+    return std::clamp<uint32>(sConfigMgr->GetIntDefault("Playerbots.RpgDeathReleaseDelaySeconds", 3), 0, 60);
+}
+
+// How long a released ghost tries to *walk* back to its corpse before the one-shot
+// teleport-to-corpse stranding fallback fires (corpse across genuinely unwalkable terrain/water).
+// Walking is the primary path; this only prevents a permanently-stranded ghost.
+inline uint32 GetRpgDeathCorpseRunTimeoutSeconds()
+{
+    return std::clamp<uint32>(sConfigMgr->GetIntDefault("Playerbots.RpgDeathCorpseRunTimeoutSeconds", 600), 60, 1800);
+}
 }
 
 #endif

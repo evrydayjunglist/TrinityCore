@@ -19,6 +19,7 @@
 #include "AiObjectContext.h"
 #include "Bot/Action/AttackAction.h"
 #include "Bot/Action/AttackAnythingAction.h"
+#include "Bot/Action/DeathActions.h"
 #include "Bot/Action/FollowAction.h"
 #include "Bot/Action/GroupActions.h"
 #include "Bot/Action/LootAction.h"
@@ -60,6 +61,14 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));
     context->RegisterAction("use quest object", std::make_unique<UseQuestObjectAction>(botAI));
     context->RegisterAction("talk to quest npc", std::make_unique<TalkToQuestNpcAction>(botAI));
+
+    // Bot death handling V1 — the corpse run (AC: DeadStrategy / ReleaseSpiritAction /
+    // ReviveFromCorpseAction). Death-state-gated actions in the always-on band above the interact
+    // band; packetless replication of HandleRepopRequest / HandleReclaimCorpse. Solo random bots
+    // only (master-alt death is NYI — see playerbots-bot-death-corpse-run-handoff.md §2).
+    context->RegisterAction("release spirit", std::make_unique<ReleaseSpiritAction>(botAI));
+    context->RegisterAction("run to corpse", std::make_unique<RunToCorpseAction>(botAI));
+    context->RegisterAction("reclaim corpse", std::make_unique<ReclaimCorpseAction>(botAI));
 
     // Gate 10b — RPG state machine (AC: NewRpgActionContext / NewRpgTriggerContext)
     context->RegisterAction("attack anything", std::make_unique<AttackAnythingAction>(botAI));

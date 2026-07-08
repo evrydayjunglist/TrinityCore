@@ -47,6 +47,7 @@ modules/mod-playerbots/src/
       AttackAction.h/.cpp           # Gate 8 attack my target; Gate 8 follow-ups (B1) chase
       AttackAnythingAction.h/.cpp   # Gate 10b always-on kill role (random/newrpg bots)
       AttackValidity.h/.cpp         # Gate 10 shared hostility/LOS check (extracted from AttackAction)
+      DeathActions.h/.cpp           # Bot death V1: release spirit / run to corpse / reclaim (corpse run)
       GroupActions.h/.cpp           # Gate 8 follow-ups (B2) master-alt auto-accept party invite
       WanderAction.h/.cpp           # Gate 10 idle random-offset movement (validated via SafeMovement)
       NewRpgBaseAction.h/.cpp       # Gate 10b shared RPG helpers (quest filters, POI resolve, MoveFarTo)
@@ -340,6 +341,36 @@ opportunistic nearby pickup.
   `[ignored]`/`[low-prio]` flags, so questing state is grounded in facts, not a session counter
 
 Closeout: [`playerbots-gate-10b-do-quest-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-gate-10b-do-quest-handoff.md).
+
+## Bot death handling (V1 — the corpse run)
+
+A dead random/newrpg bot now brings itself back instead of lying dead forever. `Bot/Action/DeathActions`
+adds three death-state-gated actions to `NewRpgStrategy`'s always-on band **above** the interact band
+(relevance `release spirit` 55 > `run to corpse` 54 > `reclaim corpse` 53 > `quest giver` 30). Each is
+`IsUseful()` only in its matching death phase, so exactly one is live at a time and only while the bot is
+dead — a live bot is completely unaffected. Mirrors AC's `DeadStrategy` → `ReleaseSpiritAction` /
+`ReviveFromCorpseAction` **shape**, but is TC-native and **packetless**: instead of AC's synthetic
+`CMSG_REPOP_REQUEST` / `CMSG_RECLAIM_CORPSE`, each action replicates the guard set of the modern core
+handler (`WorldSession::HandleRepopRequest` / `HandleReclaimCorpse`) and calls the public `Player`
+methods those thin handlers wrap — same precedent as `TalkToQuestNpcAction` / `LootAction`.
+
+- `ReleaseSpiritAction` (`"release spirit"`) — dead, not yet a ghost, no `SPELL_AURA_PREVENT_RESURRECTION`:
+  after a lifelike `Playerbots.RpgDeathReleaseDelaySeconds` pause it runs the `HandleRepopRequest` body
+  (`RemovePet` → `BuildPlayerRepop` → `RepopAtGraveyard` — the graveyard is the core's own data-first pick).
+- `RunToCorpseAction` (`"run to corpse"`) — released ghost whose corpse is beyond the reclaim radius:
+  walks back to `Player::GetCorpseLocation()` via the `SafeMovement` validated-path contract (slope/path
+  gate honoured). Bounded stranding fallback: if it can't walk back within
+  `Playerbots.RpgDeathCorpseRunTimeoutSeconds` it teleports to the corpse once (the only non-walking path).
+- `ReclaimCorpseAction` (`"reclaim corpse"`) — released ghost on its corpse past the core reclaim delay:
+  replicates every `HandleReclaimCorpse` guard (incl. `GetCorpseReclaimDelay`, so it never spams during
+  the ~30s window) then `ResurrectPlayer(0.5f)` + `SpawnCorpseBones()`. `.playerbot status` shows
+  per-session `deaths` / `revived` counters.
+
+Solo random bots only. Master-alt bots run `follow`/`attack` (never `newrpg`), so the death band can't reach
+them, and every action additionally short-circuits on `HasMaster()`. Spirit-healer res (penalties),
+other-bot/player res, self-res (soulstone/reincarnation), death-count teleport and master-alt/group death
+are all **NYI** — see
+[`playerbots-bot-death-corpse-run-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-bot-death-corpse-run-handoff.md).
 
 ## Quest loot + object interaction
 

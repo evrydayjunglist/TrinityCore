@@ -152,6 +152,8 @@ struct NewRpgStatistic
     uint32 itemsLooted = 0;   // quest loot picked up from corpses/objects (LootAction)
     uint32 objectsUsed = 0;   // quest-objective gameobjects used (UseQuestObjectAction)
     uint32 questNpcsTalkedTo = 0;  // QUEST_OBJECTIVE_TALKTO objectives credited (TalkToQuestNpcAction)
+    uint32 deaths = 0;    // times the bot released its spirit after dying (ReleaseSpiritAction)
+    uint32 revived = 0;   // times the bot reclaimed its corpse and stood up alive (ReclaimCorpseAction)
 };
 
 #endif

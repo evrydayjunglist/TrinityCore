@@ -250,11 +250,12 @@ public:
                 NewRpgStatistic const& stats = botAI->GetRpgStatistics();
                 // Counters are per-session (reset each login) — labelled so "accepted 0" is never
                 // misread as "never quests" (the exact confusion the handoff §1 diagnosed).
-                handler->PSendSysMessage("  - %s | %s | this session: accepted %u rewarded %u completed %u abandoned %u dropped %u | looted %u objects used %u talked %u",
+                handler->PSendSysMessage("  - %s | %s | this session: accepted %u rewarded %u completed %u abandoned %u dropped %u | looted %u objects used %u talked %u | deaths %u revived %u",
                     bot->GetName().c_str(), botAI->GetRpgInfo().ToString().c_str(),
                     stats.questAccepted, stats.questRewarded, stats.questCompleted,
                     stats.questAbandoned, stats.questDropped,
-                    stats.itemsLooted, stats.objectsUsed, stats.questNpcsTalkedTo);
+                    stats.itemsLooted, stats.objectsUsed, stats.questNpcsTalkedTo,
+                    stats.deaths, stats.revived);
 
                 // Single-bot view only: dump the real quest log + identity (never in the terse
                 // all-bots roster, which can be hundreds of lines).

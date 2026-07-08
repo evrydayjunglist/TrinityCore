@@ -31,9 +31,20 @@
 // before it wanders off, so they outrank the kill role. TALKTO is the dominant objective type in
 // low-level chains (the whole orc/troll Valley of Trials intro), so this is the unlock that lets a
 // freshly-questing bot actually progress instead of standing at the POI making no progress.
+//
+// The "release spirit" / "run to corpse" / "reclaim corpse" death band sits ABOVE the interact band
+// (relevance 55/54/53 > "quest giver" 30) — bot death handling V1, the corpse run. Each is
+// IsUseful() only in its matching death phase (dead-not-ghost / ghost-far-from-corpse /
+// ghost-on-corpse-past-reclaim-delay), so exactly one is live at a time and only while the bot is
+// dead; a live bot is completely unaffected (interact-band actions already bail when the bot is
+// dead, and every death action bails when it's alive). Mirrors AC's DeadStrategy shape,
+// TC-native/packetless — see playerbots-bot-death-corpse-run-handoff.md.
 std::vector<NextAction> NewRpgStrategy::GetDefaultActions()
 {
     return {
+        NextAction("release spirit", 55.0f),
+        NextAction("run to corpse", 54.0f),
+        NextAction("reclaim corpse", 53.0f),
         NextAction("quest giver", 30.0f),
         NextAction("use quest object", 25.0f),
         NextAction("talk to quest npc", 24.0f),

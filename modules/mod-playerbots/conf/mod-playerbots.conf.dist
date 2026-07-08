@@ -304,3 +304,23 @@ Playerbots.QuestObjectUseDistance = 5.0
 # the core credit path (Player::TalkedToCreature) enforces no reach itself, so keep this near ~5.
 #
 Playerbots.QuestTalkToDistance = 5.0
+
+#
+# Bot death handling V1 — the corpse run. A dead random/newrpg bot releases its spirit, ghosts to
+# the nearest graveyard, walks back to its own corpse, and reclaims it (50% HP, no sickness), all
+# via the same public Player methods the core repop/reclaim handlers use. Solo random bots only
+# (master-alt/group death, spirit-healer res, other-bot res and self-res are not yet implemented).
+#
+# Seconds to pause after death before releasing the spirit, so the release reads lifelike rather
+# than instant. 0 releases immediately. Bounded [0, 60]. Default 3.
+#
+Playerbots.RpgDeathReleaseDelaySeconds = 3
+
+#
+# How long (seconds) a released ghost tries to *walk* back to its corpse before a one-shot
+# teleport-to-corpse fallback fires (for a corpse across genuinely unwalkable terrain/water).
+# Walking is always the primary path; this only prevents a permanently-stranded ghost. The core
+# ~30s reclaim delay is separate and intentionally not overridable here. Bounded [60, 1800].
+# Default 600.
+#
+Playerbots.RpgDeathCorpseRunTimeoutSeconds = 600
