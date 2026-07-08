@@ -49,6 +49,14 @@ public:
     NewRpgStatistic& GetRpgStatistics() { return _rpgStatistic; }
     std::unordered_set<uint32>& GetLowPriorityQuests() { return _lowPriorityQuest; }
 
+    // Quests proven impossible to complete for ANY player (a COMPLETE quest with no ender
+    // anywhere in world data, e.g. the auto-granted junk 55660 "Time Trials"). Distinct from
+    // the low-priority set (that = "tried a POI, stalled"; this = "provably unactionable").
+    // In-memory only (owner directive: never DropQuest/AbandonQuest/DB-touch); per-session, so
+    // it starts empty each login and a later data fix or new objective handler re-includes the
+    // quest automatically. See playerbots-rpg-active-questgiver-seeking-handoff.md §4.
+    std::unordered_set<uint32>& GetUnactionableQuests() { return _unactionableQuest; }
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -59,6 +67,7 @@ private:
     NewRpgInfo _rpgInfo;
     NewRpgStatistic _rpgStatistic;
     std::unordered_set<uint32> _lowPriorityQuest;
+    std::unordered_set<uint32> _unactionableQuest;
 };
 
 #endif

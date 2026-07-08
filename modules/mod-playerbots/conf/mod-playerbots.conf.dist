@@ -187,11 +187,52 @@ Playerbots.RpgStatusProbWeight.GoGrind = 15
 Playerbots.RpgStatusProbWeight.DoQuest = 60
 
 #
+# GoCamp = travel to a distant NPC hub (a cluster of >= 3 quest givers, from the creature spawn
+# data) then mingle there via WanderNpc. This is what lets a bot stranded in a giver-less pocket
+# reach a town and pick up new quests (removes WanderNpc's local ~200yd ceiling). AC weight 15.
+# Weight 0 disables hub travel.
+#
+Playerbots.RpgStatusProbWeight.GoCamp = 15
+
+#
+# WanderNpc = lifelike hub mingling: the bot walks up to nearby service NPCs (innkeeper / vendor /
+# trainer / flightmaster / quest giver / …), dwelling briefly at each. It prefers an actionable
+# quest giver as the target (quest acquisition stays the priority — the always-on quest-giver
+# pickup transacts whenever the bot passes within 80yd), so it also un-strands bots whose log holds
+# nothing actionable (e.g. only the un-turn-in-able junk quest 55660). Weight 0 disables it.
+#
+Playerbots.RpgStatusProbWeight.WanderNpc = 30
+
+#
+# Rest = AC's timed sit: the bot sits down for a short while. Also the fallback when nothing else is
+# available, so it reads as "sitting down when there's nothing to do" instead of aimless wandering.
+# Weight 0 removes it from the idle roll (it is still the empty-availability fallback).
+#
+Playerbots.RpgStatusProbWeight.Rest = 10
+
+#
+# How far (yards) a bot scans for hub NPCs / quest givers when it mingles (WanderNpc). Deliberately
+# wider than the 80yd opportunistic-pickup radius — the point is to reach NPCs that aren't already
+# adjacent, both to seek a giver and to find a >= 3-NPC hub. Bounded [80, 500] so the per-idle grid
+# scan stays cheap at fleet scale.
+#
+Playerbots.RpgWanderNpcRadius = 200.0
+
+#
+# How long (seconds) a bot dwells at each hub NPC before cycling to the next while mingling
+# (WanderNpc) — AC's npcStayTime, default 8.
+#
+Playerbots.RpgWanderNpcStayTime = 8
+
+#
 # How long (seconds) a bot stays in a status before going idle again (AC constants, config
-# keys on this fork): WanderRandom default 300 (5 min), DoQuest default 1800 (30 min).
+# keys on this fork): WanderRandom default 300 (5 min), DoQuest default 1800 (30 min),
+# WanderNpc default 300 (5 min mingling), Rest default 30 (sit).
 #
 Playerbots.RpgStatusDuration.WanderRandom = 300
 Playerbots.RpgStatusDuration.DoQuest = 1800
+Playerbots.RpgStatusDuration.WanderNpc = 300
+Playerbots.RpgStatusDuration.Rest = 30
 
 #
 # How long (seconds) a bot holds at a quest POI with zero objective progress before it marks
@@ -247,3 +288,10 @@ Playerbots.LootMoney = 1
 # interaction check enforces the real reach regardless; keep this at or below ~5.
 #
 Playerbots.QuestObjectUseDistance = 5.0
+
+#
+# How close (yards) a bot walks before completing a QUEST_OBJECTIVE_TALKTO objective (the "report
+# to / speak with NPC" step that dominates low-level quest chains). Mirrors QuestObjectUseDistance;
+# the core credit path (Player::TalkedToCreature) enforces no reach itself, so keep this near ~5.
+#
+Playerbots.QuestTalkToDistance = 5.0

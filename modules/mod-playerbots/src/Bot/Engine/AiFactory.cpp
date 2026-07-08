@@ -24,6 +24,7 @@
 #include "Bot/Action/LootAction.h"
 #include "Bot/Action/NewRpgActions.h"
 #include "Bot/Action/QuestGiverAction.h"
+#include "Bot/Action/TalkToQuestNpcAction.h"
 #include "Bot/Action/UseQuestObjectAction.h"
 #include "Bot/Action/WanderAction.h"
 #include "Bot/Strategy/CombatStrategy.h"
@@ -58,15 +59,20 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     // Quest loot + object interaction (AC: OpenLootAction/StoreLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));
     context->RegisterAction("use quest object", std::make_unique<UseQuestObjectAction>(botAI));
+    context->RegisterAction("talk to quest npc", std::make_unique<TalkToQuestNpcAction>(botAI));
 
     // Gate 10b — RPG state machine (AC: NewRpgActionContext / NewRpgTriggerContext)
     context->RegisterAction("attack anything", std::make_unique<AttackAnythingAction>(botAI));
     context->RegisterAction("new rpg status update", std::make_unique<NewRpgStatusUpdateAction>(botAI));
     context->RegisterAction("new rpg go grind", std::make_unique<NewRpgGoGrindAction>(botAI));
+    context->RegisterAction("new rpg go camp", std::make_unique<NewRpgGoCampAction>(botAI));
     context->RegisterAction("new rpg do quest", std::make_unique<NewRpgDoQuestAction>(botAI));
+    context->RegisterAction("new rpg wander npc", std::make_unique<NewRpgWanderNpcAction>(botAI));
     context->RegisterTrigger("go grind status", std::make_unique<NewRpgStatusTrigger>(botAI, RPG_GO_GRIND));
+    context->RegisterTrigger("go camp status", std::make_unique<NewRpgStatusTrigger>(botAI, RPG_GO_CAMP));
     context->RegisterTrigger("wander random status", std::make_unique<NewRpgStatusTrigger>(botAI, RPG_WANDER_RANDOM));
     context->RegisterTrigger("do quest status", std::make_unique<NewRpgStatusTrigger>(botAI, RPG_DO_QUEST));
+    context->RegisterTrigger("wander npc status", std::make_unique<NewRpgStatusTrigger>(botAI, RPG_WANDER_NPC));
 
     if (Playerbots::GetLogLevel() >= 1 && player)
     {

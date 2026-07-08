@@ -55,6 +55,7 @@ modules/mod-playerbots/src/
       SafeMovement.h/.cpp           # Gate 10 ground-clip fix: validated-path + slope-checked moves
     Rpg/
       GrindLocationCache.h/.cpp     # Gate 10 Layer 1: lazy per-map SQL-scan grind spot cache
+      HubLocationCache.h/.cpp       # RPG GO_CAMP: lazy per-map cache of NPC-hub (quest-giver cluster) centroids
       NewRpgInfo.h/.cpp             # Gate 10b per-bot RPG state machine + statistics
     BotPlayerbotAI.h/.cpp           # Gate 5–10b bot AI
   Mgr/
@@ -299,9 +300,26 @@ the objective's POI, make kill/collect progress, walk back, and turn it in — n
 opportunistic nearby pickup.
 
 - `Bot/Rpg/NewRpgInfo` — per-bot `std::variant` state machine (`Idle`/`WanderRandom`/`GoGrind`/
-  `DoQuest`), reset whenever `newrpg` is (re)applied in `ResetStrategies()`
+  `GoCamp`/`DoQuest`/`WanderNpc`/`Rest`), reset whenever `newrpg` is (re)applied in `ResetStrategies()`
 - `NewRpgStatusUpdateAction` — weighted status transitions (`Playerbots.RpgStatusProbWeight*`),
   duration-gated exits (`Playerbots.RpgStatusDuration*Ms`)
+- `NewRpgGoCampAction` (`"new rpg go camp"`) — travels (`MoveFarTo`) to the nearest same-zone NPC
+  hub from `Bot/Rpg/HubLocationCache` (a cluster of >= 3 quest givers, built from creature spawn
+  data), then hands off to `WANDER_NPC` on arrival to mingle. Lets a bot stranded in a giver-less
+  pocket reach a town and pick up new quests. Weight `Playerbots.RpgStatusProbWeight.GoCamp`.
+- `NewRpgWanderNpcAction` (`"new rpg wander npc"`) — AC's lifelike hub mingling (`RPG_WANDER_NPC`):
+  a grid scan (`Playerbots.RpgWanderNpcRadius`) picks the next NPC to visit — an actionable quest
+  giver first (quest acquisition stays the priority; the always-on `QuestGiverAction` accepts within
+  its 80yd radius), else a not-recently-visited allowed-flag hub NPC — walks up to it, dwells
+  `Playerbots.RpgWanderNpcStayTime`, then cycles to the next. Un-strands bots whose log holds
+  nothing actionable. Available when a giver or a >= 3-NPC hub is in range. Weight
+  `Playerbots.RpgStatusProbWeight.WanderNpc`.
+- `RPG_REST` — AC-parity timed sit (no trigger/action): the bot sits (`SetStandState(SIT)`) and
+  returns to idle after `Playerbots.RpgStatusDuration.Rest`. Also the empty-availability fallback
+  (sits instead of wandering aimlessly). Weight `Playerbots.RpgStatusProbWeight.Rest`.
+- `NewRpgBaseAction::IsQuestUnactionable` — a COMPLETE quest with no ender anywhere in world data
+  (e.g. junk `55660`) is added to an **in-memory, per-session** ignore set so quest selection stops
+  treating it as pursuable — **never** `DropQuest`/DB-touch (owner directive), self-heals on relog
 - `NewRpgDoQuestAction` — typed `QuestObjective` progress tracking (modern objective IDs, not
   WotLK fixed-array index math), `GetQuestPOIPosAndObjective` blob resolution, POI-stay timeout
   → abandon-set (`Playerbots.RpgPoiStayTimeMs`)
@@ -311,8 +329,10 @@ opportunistic nearby pickup.
 - `OrganizeQuestLog` — drops greyed-out/incapable/failed quests when the log is nearly full,
   same 3-pass AC contract
 - `.playerbot status` surfaces each bot's live RPG status string + quest accept/reward/complete/
-  abandon/drop counters (`NewRpgStatistic`) — fork replacement for AC's whisper-based
-  `TellRpgStatusAction`
+  abandon/drop counters (`NewRpgStatistic`, labelled *this session*) — fork replacement for AC's
+  whisper-based `TellRpgStatusAction`. Filtered to one bot (`.playerbot status <name>` or target a
+  bot) it additionally dumps identity + the real quest log with per-objective progress and
+  `[ignored]`/`[low-prio]` flags, so questing state is grounded in facts, not a session counter
 
 Closeout: [`playerbots-gate-10b-do-quest-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-gate-10b-do-quest-handoff.md).
 

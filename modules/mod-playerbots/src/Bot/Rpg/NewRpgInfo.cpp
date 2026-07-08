@@ -28,10 +28,22 @@ void NewRpgInfo::ChangeToGoGrind(Position pos)
     data = GoGrind{ pos };
 }
 
+void NewRpgInfo::ChangeToGoCamp(Position pos)
+{
+    startT = getMSTime();
+    data = GoCamp{ pos };
+}
+
 void NewRpgInfo::ChangeToWanderRandom()
 {
     startT = getMSTime();
     data = WanderRandom{};
+}
+
+void NewRpgInfo::ChangeToRest()
+{
+    startT = getMSTime();
+    data = Rest{};
 }
 
 void NewRpgInfo::ChangeToDoQuest(uint32 questId, Quest const* quest)
@@ -41,6 +53,12 @@ void NewRpgInfo::ChangeToDoQuest(uint32 questId, Quest const* quest)
     doQuest.questId = questId;
     doQuest.quest = quest;
     data = doQuest;
+}
+
+void NewRpgInfo::ChangeToWanderNpc()
+{
+    startT = getMSTime();
+    data = WanderNpc{};
 }
 
 void NewRpgInfo::ChangeToIdle()
@@ -75,10 +93,16 @@ NewRpgStatus NewRpgInfo::GetStatus() const
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, GoGrind>)
             return RPG_GO_GRIND;
+        if constexpr (std::is_same_v<T, GoCamp>)
+            return RPG_GO_CAMP;
         if constexpr (std::is_same_v<T, WanderRandom>)
             return RPG_WANDER_RANDOM;
+        if constexpr (std::is_same_v<T, Rest>)
+            return RPG_REST;
         if constexpr (std::is_same_v<T, DoQuest>)
             return RPG_DO_QUEST;
+        if constexpr (std::is_same_v<T, WanderNpc>)
+            return RPG_WANDER_NPC;
         return RPG_IDLE;
     }, data);
 }
@@ -101,8 +125,16 @@ std::string NewRpgInfo::ToString() const
             out << " GrindPos: " << arg.pos.GetPositionX() << " " << arg.pos.GetPositionY()
                 << " " << arg.pos.GetPositionZ();
         }
+        else if constexpr (std::is_same_v<T, GoCamp>)
+        {
+            out << "GO_CAMP";
+            out << " CampPos: " << arg.pos.GetPositionX() << " " << arg.pos.GetPositionY()
+                << " " << arg.pos.GetPositionZ();
+        }
         else if constexpr (std::is_same_v<T, WanderRandom>)
             out << "WANDER_RANDOM";
+        else if constexpr (std::is_same_v<T, Rest>)
+            out << "REST";
         else if constexpr (std::is_same_v<T, DoQuest>)
         {
             out << "DO_QUEST";
@@ -114,6 +146,13 @@ std::string NewRpgInfo::ToString() const
                     << " " << arg.pos.GetPositionZ();
             }
             out << " lastReachPOI: " << (arg.lastReachPOI ? GetMSTimeDiffToNow(arg.lastReachPOI) : 0);
+        }
+        else if constexpr (std::is_same_v<T, WanderNpc>)
+        {
+            // Just the guid here (no world access in this const helper). The single-bot
+            // .playerbot status view resolves it to a name + distance (item C).
+            out << "WANDER_NPC";
+            out << " target: " << arg.target.ToString();
         }
         else
             out << "IDLE";

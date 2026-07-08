@@ -418,9 +418,51 @@ inline uint32 GetRpgStatusProbWeightGoGrind()
     return sConfigMgr->GetIntDefault("Playerbots.RpgStatusProbWeight.GoGrind", 15);
 }
 
+// GO_CAMP = travel to a distant NPC hub (HubLocationCache) then mingle there via WANDER_NPC. AC
+// default weight 15 (mod-playerbots PlayerbotAIConfig). This is what lets a bot stranded in a
+// giver-less pocket reach a town and pick up new quests. Weight 0 disables hub travel.
+inline uint32 GetRpgStatusProbWeightGoCamp()
+{
+    return sConfigMgr->GetIntDefault("Playerbots.RpgStatusProbWeight.GoCamp", 15);
+}
+
 inline uint32 GetRpgStatusProbWeightDoQuest()
 {
     return sConfigMgr->GetIntDefault("Playerbots.RpgStatusProbWeight.DoQuest", 60);
+}
+
+// Active quest-giver seeking (playerbots-rpg-active-questgiver-seeking-handoff.md §3). AC's
+// RPG_WANDER_NPC has no direct AiPlayerbot weight — it lives inside AC's precomputed target
+// context; here it's a first-class idle candidate, so give it a solid default weight so a bot
+// stranded on junk/finished quests reliably rolls "go find the next quest giver" rather than
+// idling. Weight-0 disables seeking (bots fall back to wander/grind, pre-handoff behaviour).
+inline uint32 GetRpgStatusProbWeightWanderNpc()
+{
+    return sConfigMgr->GetIntDefault("Playerbots.RpgStatusProbWeight.WanderNpc", 30);
+}
+
+// REST = AC's timed sit (idle filler). AC has no explicit weight for it (it's the fallback), so a
+// modest default keeps bots from sitting too often while still adding lifelike pauses. It is also
+// the empty-availability fallback regardless of this weight. Weight 0 removes it from the roll.
+inline uint32 GetRpgStatusProbWeightRest()
+{
+    return sConfigMgr->GetIntDefault("Playerbots.RpgStatusProbWeight.Rest", 10);
+}
+
+// How far (yd) a bot scans for hub NPCs / quest givers when it enters WANDER_NPC (mingling). Wider
+// than QuestGiverAction's 80yd opportunistic-pickup radius — the point is to reach NPCs that aren't
+// already adjacent, both to seek a giver and to find a >= 3-NPC hub. Bounded so the per-roll grid
+// scan stays cheap at fleet scale (a per-zone cached target value is the scale-up if profiling
+// flags it, not a bigger live scan).
+inline float GetRpgWanderNpcRadius()
+{
+    return std::clamp<float>(sConfigMgr->GetFloatDefault("Playerbots.RpgWanderNpcRadius", 200.0f), 80.0f, 500.0f);
+}
+
+// How long (ms) a bot dwells at each hub NPC before cycling to the next (AC's npcStayTime, 8s).
+inline uint32 GetRpgWanderNpcStayTimeMs()
+{
+    return std::max<uint32>(sConfigMgr->GetIntDefault("Playerbots.RpgWanderNpcStayTime", 8), 1u) * 1000;
 }
 
 inline uint32 GetRpgStatusWanderRandomDurationMs()
@@ -431,6 +473,18 @@ inline uint32 GetRpgStatusWanderRandomDurationMs()
 inline uint32 GetRpgStatusDoQuestDurationMs()
 {
     return std::max<uint32>(sConfigMgr->GetIntDefault("Playerbots.RpgStatusDuration.DoQuest", 1800), 1u) * 1000;
+}
+
+// AC constants (config keys here): statusWanderNpcDuration 5 min (how long a bot mingles a hub
+// before returning to idle), statusRestDuration 30 s (how long a bot sits).
+inline uint32 GetRpgStatusWanderNpcDurationMs()
+{
+    return std::max<uint32>(sConfigMgr->GetIntDefault("Playerbots.RpgStatusDuration.WanderNpc", 300), 1u) * 1000;
+}
+
+inline uint32 GetRpgStatusRestDurationMs()
+{
+    return std::max<uint32>(sConfigMgr->GetIntDefault("Playerbots.RpgStatusDuration.Rest", 30), 1u) * 1000;
 }
 
 // AC: NewRpgAction.h poiStayTime (5 min) — how long a bot holds at a quest POI with zero
@@ -493,6 +547,13 @@ inline bool GetLootMoney()
 inline float GetQuestObjectUseDistance()
 {
     return std::clamp<float>(sConfigMgr->GetFloatDefault("Playerbots.QuestObjectUseDistance", 5.0f), 1.0f, 10.0f);
+}
+
+// Interaction range for completing a QUEST_OBJECTIVE_TALKTO objective (TalkToQuestNpcAction). Same
+// default/clamp as the quest-object use distance — both mirror the core's ~5yd interaction range.
+inline float GetQuestTalkToDistance()
+{
+    return std::clamp<float>(sConfigMgr->GetFloatDefault("Playerbots.QuestTalkToDistance", 5.0f), 1.0f, 10.0f);
 }
 }
 

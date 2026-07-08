@@ -20,11 +20,14 @@
 
 #include "Action.h"
 #include "Bot/Rpg/NewRpgInfo.h"
+#include "ObjectGuid.h"
 #include "Position.h"
+#include <unordered_set>
 #include <vector>
 
 class BotPlayerbotAI;
 class Quest;
+class WorldObject;
 
 // One quest-POI travel candidate. AC reference: NewRpgBaseAction.h POIInfo {G3D::Vector2 pos,
 // int32 objectiveIdx} — TC adaptations: full Position (modern QuestPOIBlobPoint carries a real
@@ -58,6 +61,30 @@ protected:
     bool IsQuestWorthDoing(Quest const* quest) const;
     bool IsQuestCapableDoing(Quest const* quest) const;
 
+    // True iff this quest giver has at least one quest the bot could actually transact right now —
+    // a COMPLETE quest it can be rewarded for, or a NONE quest it can take and that passes the
+    // worth/capable filters. AC parity: NewRpgBaseAction::HasQuestToAcceptOrReward. Used by the
+    // seek scan so a bot only travels to a giver it would really do business with (vs
+    // QuestGiverAction's looser menu-non-empty check, fine for adjacent opportunistic pickup).
+    bool HasQuestToAcceptOrReward(WorldObject* questGiver) const;
+
+    // A quest proven impossible for ANY player to finish: COMPLETE with no quest-ender in either
+    // the creature or gameobject involved-relation data (e.g. auto-granted junk 55660). Safe to
+    // ignore (never removed) — see handoff §4. Records the id in the per-session unactionable set.
+    bool IsQuestUnactionable(uint32 questId) const;
+
+    // --- lifelike hub mingling (AC: ChooseNpcOrGameObjectToInteract, RPG_WANDER_NPC) ---
+    // Picks the next NPC for a WANDER_NPC cycle from a live grid scan (RpgWanderNpcRadius): an
+    // actionable quest giver first (quest acquisition stays the priority), else a not-recently-
+    // visited allowed-flag hub NPC (AC's allowedNpcFlags set). Returns false when there's neither a
+    // giver nor a genuine hub (>= 3 allowed-flag NPCs) in range. No hardcoded ids, no cache (V1).
+    bool SelectRandomNpcToInteract(ObjectGuid& targetOut, std::unordered_set<ObjectGuid> const& visited);
+
+    // --- distant hub travel (AC: SelectRandomCampPos, RPG_GO_CAMP) ---
+    // Picks the nearest same-zone HubLocationCache centroid that's worth traveling to (beyond ~50yd,
+    // within the level-scaled range). Returns false when no such hub exists on this map/zone.
+    bool SelectRandomHubPos(Position& destOut);
+
     // --- quest log hygiene (AC: OrganizeQuestLog) ---
     bool OrganizeQuestLog();
 
@@ -74,7 +101,16 @@ protected:
     static constexpr float PATH_FINDER_DIS = 70.0f;
     static constexpr uint32 STUCK_TIME_MS = 90 * 1000;
 
+    // Minimum allowed-flag NPCs in range for a spot to count as a genuine hub (AC's WANDER_NPC
+    // ">= 3 possible targets" availability rule; matches HubLocationCache's HUB_CELL_MIN_SPAWNS).
+    static constexpr size_t HUB_MIN_NPCS = 3;
+
 private:
+    // One shared grid scan (RpgWanderNpcRadius) feeding both WANDER_NPC availability and target
+    // selection: the nearest actionable quest giver (empty if none) and the allowed-flag hub NPCs
+    // in range, sorted nearest-first (spirit healers / hostiles / players excluded, AC's AcceptUnit).
+    void ScanWanderNpcTargets(ObjectGuid& nearestGiverOut, std::vector<ObjectGuid>& hubNpcsOut);
+
     // TC replacement for AC's synthetic CMSG_QUESTLOG_REMOVE_QUEST packet — mirrors the
     // essential body of WorldSession::HandleQuestLogRemoveQuest via public Player APIs.
     void DropQuest(uint32 questId);
