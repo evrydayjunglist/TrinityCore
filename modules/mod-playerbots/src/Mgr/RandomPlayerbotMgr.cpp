@@ -29,7 +29,9 @@
 #include "World.h"
 #include "WorldSession.h"
 
+#include <chrono>
 #include <set>
+#include <thread>
 
 namespace
 {
@@ -64,15 +66,39 @@ void RandomPlayerbotMgr::Init()
     _schedulerPaused = !Playerbots::GetRandomBotAutologin();
 
     // Phase A/B: provision reserved bot accounts + level-1 characters (or run the teardown switch).
-    // Idempotent and a no-op unless the random-bot feature is enabled; runs before BuildRoster so
-    // freshly generated characters are enumerated into the roster this same startup.
-    RandomPlayerbotFactory::GenerateRandomBots();
+    // Idempotent and a no-op unless the random-bot feature is enabled. Returns how many NEW
+    // characters were created this run.
+    uint32 const generated = RandomPlayerbotFactory::GenerateRandomBots();
 
     if (!IsSchedulerEnabled())
         return;
 
     if (Playerbots::GetEnableDatabases() && !sPlayerbotsDatabaseMgr->CheckVersion())
         TC_LOG_WARN("server.loading", "Playerbots: random bot DB enabled but version check failed — scheduler may be limited.");
+
+    // Player::SaveToDB (used by generation) enqueues an ASYNC CharacterDatabase commit, so a
+    // synchronous read issued right after — BuildRoster's SELECT — races the uncommitted INSERTs
+    // and under-counts the roster (and a subsequent login would fail to load the char). When we
+    // just generated characters, drain the async queue first, exactly as AC's RandomPlayerbotFactory
+    // does before its dependent reads. Bounded so a stuck queue can't hang startup; logged either
+    // way (never a silent cap).
+    if (generated > 0)
+    {
+        uint32 const maxWaitMs = 30000;
+        uint32 waited = 0;
+        while (CharacterDatabase.QueueSize() > 0 && waited < maxWaitMs)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            waited += 50;
+        }
+        // QueueSize() == 0 means the last op has been dequeued; a short final sleep lets the worker
+        // finish executing it (AC uses the same 100 ms margin).
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        if (CharacterDatabase.QueueSize() > 0)
+            TC_LOG_WARN("server.loading", "Playerbots: CharacterDatabase still draining after {}ms while building the random-bot roster ({} char(s) just generated) — roster may under-count until next restart.", maxWaitMs, generated);
+        else
+            TC_LOG_INFO("server.loading", "Playerbots: drained CharacterDatabase queue in ~{}ms after generating {} bot character(s) — building roster.", waited, generated);
+    }
 
     BuildRoster();
 }

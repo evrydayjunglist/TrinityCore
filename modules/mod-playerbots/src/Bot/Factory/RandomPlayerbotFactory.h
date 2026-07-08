@@ -34,7 +34,11 @@ public:
     // Playerbots.MaxRandomBots > 0). Idempotent: only the shortfall of accounts/characters is
     // created on each run. If Playerbots.DeleteRandomBotAccounts is set, runs the teardown path
     // instead (deletes bot data and stops the server for a clean regenerate).
-    static void GenerateRandomBots();
+    // Provisions reserved bot accounts + characters up to MaxRandomBots (idempotent shortfall only).
+    // Returns the number of NEW characters created this run (0 if none / feature off / teardown).
+    // NB: character persistence is an ASYNC CharacterDatabase commit — callers reading the rows back
+    // must drain the queue first (RandomPlayerbotMgr::Init does this when the return value is > 0).
+    static uint32 GenerateRandomBots();
 };
 
 #endif

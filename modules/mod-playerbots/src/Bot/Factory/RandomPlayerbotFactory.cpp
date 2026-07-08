@@ -342,7 +342,10 @@ bool CreateBotCharacter(WorldSession* session, uint32 accountId, bool preferAlli
     bot->setCinematic(2);              // never play the intro cinematic
     bot->SetAtLoginFlag(AT_LOGIN_NONE);
 
-    bot->SaveToDB(true);              // synchronous create-commit
+    bot->SaveToDB(true);              // create-save — NOTE: the arg is the create flag, not "sync";
+                                      // Player::SaveToDB enqueues an ASYNC CharacterDatabase commit, so
+                                      // callers that read these rows back (RandomPlayerbotMgr::BuildRoster)
+                                      // must drain the queue first (see RandomPlayerbotMgr::Init).
     sCharacterCache->AddCharacterCacheEntry(bot->GetGUID(), accountId, bot->GetName(), bot->GetNativeGender(),
         bot->GetRace(), bot->GetClass(), bot->GetLevel(), false);
 
@@ -470,24 +473,24 @@ void RunTeardown()
 }
 }  // namespace
 
-void RandomPlayerbotFactory::GenerateRandomBots()
+uint32 RandomPlayerbotFactory::GenerateRandomBots()
 {
     if (!Playerbots::IsEnabled())
-        return;
+        return 0;
 
     if (Playerbots::GetDeleteRandomBotAccounts())
     {
         RunTeardown();
-        return;
+        return 0;
     }
 
     if (!Playerbots::IsRandomBotFeatureEnabled())
-        return;
+        return 0;
 
     if (Playerbots::GetRandomBotAccountPrefix().empty())
     {
         TC_LOG_ERROR("server.loading", "RandomPlayerbotFactory: random-bot generation requires Playerbots.RandomBotAccountPrefix — skipping generation.");
-        return;
+        return 0;
     }
 
     uint32 const target = Playerbots::GetMaxRandomBots();
@@ -524,7 +527,7 @@ void RandomPlayerbotFactory::GenerateRandomBots()
     if (accountIds.empty())
     {
         TC_LOG_ERROR("server.loading", "RandomPlayerbotFactory: no bot accounts available — generation aborted.");
-        return;
+        return 0;
     }
 
     // ---- Phase B: ensure enough bot characters exist (idempotent shortfall only) ----
@@ -536,7 +539,7 @@ void RandomPlayerbotFactory::GenerateRandomBots()
     {
         TC_LOG_INFO("server.loading", "RandomPlayerbotFactory: {} bot account(s), {} existing bot character(s) (>= target {}) — nothing to generate.",
             accountIds.size(), existing, target);
-        return;
+        return 0;
     }
 
     std::vector<std::pair<uint8, uint8>> allianceCombos;
@@ -545,7 +548,7 @@ void RandomPlayerbotFactory::GenerateRandomBots()
     if (allianceCombos.empty() && hordeCombos.empty())
     {
         TC_LOG_ERROR("server.loading", "RandomPlayerbotFactory: no generatable race/class combinations found — generation aborted.");
-        return;
+        return 0;
     }
 
     uint32 toCreate = target - existing;
@@ -589,4 +592,6 @@ void RandomPlayerbotFactory::GenerateRandomBots()
 
     TC_LOG_INFO("server.loading", "RandomPlayerbotFactory: generation complete — {} new account(s), {} new character(s); pool now {} character(s) across {} bot account(s).",
         createdAccounts, createdChars, existing + createdChars, accountIds.size());
+
+    return createdChars;
 }
