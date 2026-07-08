@@ -20,6 +20,7 @@
 #include "BotPlayerbotAI.h"
 #include "MotionMaster.h"
 #include "Player.h"
+#include "PlayerbotsConfig.h"
 #include "SafeMovement.h"
 #include "Unit.h"
 
@@ -40,7 +41,12 @@ bool AttackAnythingAction::IsUseful()
     if (bot->IsInCombat())
         return bot->GetVictim() == nullptr;
 
-    return FindNearbyAttackableUnit(bot, ATTACK_SEARCH_RADIUS) != nullptr;
+    // Out of combat: engage a nearby hostile, OR a nearby *neutral* creature that a live quest
+    // kill objective wants dead (the narrow widening — see the quest-kill searcher). Neutral
+    // inclusion is gated entirely on the objective, so a bot with no matching kill quest still
+    // behaves exactly as before (hostile-only) and never griefs neutral wildlife.
+    return FindNearbyAttackableUnit(bot, ATTACK_SEARCH_RADIUS) != nullptr ||
+        FindNearbyQuestKillTarget(bot, Playerbots::GetRpgQuestKillSearchRadius()) != nullptr;
 }
 
 bool AttackAnythingAction::Execute(Event /*event*/)
@@ -64,8 +70,12 @@ bool AttackAnythingAction::Execute(Event /*event*/)
         }
     }
 
+    // Prefer a nearby hostile; fall back to a neutral creature a quest kill objective wants dead.
     if (!target)
         target = FindNearbyAttackableUnit(bot, ATTACK_SEARCH_RADIUS);
+
+    if (!target)
+        target = FindNearbyQuestKillTarget(bot, Playerbots::GetRpgQuestKillSearchRadius());
 
     if (!IsValidAttackTarget(bot, target))
         return false;

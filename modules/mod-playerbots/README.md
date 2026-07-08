@@ -323,6 +323,11 @@ opportunistic nearby pickup.
 - `NewRpgDoQuestAction` — typed `QuestObjective` progress tracking (modern objective IDs, not
   WotLK fixed-array index math), `GetQuestPOIPosAndObjective` blob resolution, POI-stay timeout
   → abandon-set (`Playerbots.RpgPoiStayTimeMs`)
+- `AttackAnythingAction` also kills **neutral** creatures a live `QUEST_OBJECTIVE_MONSTER` objective
+  wants dead (e.g. mottled boars for "Cutting Teeth") via a data-first quest-kill target searcher
+  (`AttackValidity::CollectQuestKillEntries`/`FindNearbyQuestKillTarget`, from the bot's own quest
+  log) — its always-on hostile search stays hostile-only, so bots never grief neutral wildlife they
+  have no quest for. `Playerbots.RpgQuestKillSearchRadius`
 - `NewRpgBaseAction::MoveFarTo` — long-distance travel on top of `SafeMovement`'s validated-path
   contract, with stuck-detection teleport recovery (depends on the bot-session teleport self-ack
   fix)

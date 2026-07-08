@@ -241,6 +241,15 @@ Playerbots.RpgStatusDuration.Rest = 30
 Playerbots.RpgPoiStayTime = 300
 
 #
+# How close (yards) a *neutral* quest kill target must be for a bot to engage it. The always-on
+# "attack anything" behavior is hostile-only by design (so bots don't grief town wildlife); this
+# additionally lets a bot kill a neutral creature ONLY when a live quest objective wants it dead
+# (e.g. the mottled boars for "Cutting Teeth"). Slightly wider than the 30yd hostile reach so a
+# bot on its objective POI closes on its quest mobs. Bounded [10, 80]. Default 40.
+#
+Playerbots.RpgQuestKillSearchRadius = 40.0
+
+#
 # Maximum incline (degrees, rise over run) a bot will voluntarily walk up while wandering/
 # grinding/approaching a quest giver. Fork-native, not from AC — AC has no equivalent check.
 # The mmap navmesh's own "normal ground" cutoff is 55 degrees (steeper terrain, 55-70 degrees,

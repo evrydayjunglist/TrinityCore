@@ -465,6 +465,17 @@ inline uint32 GetRpgWanderNpcStayTimeMs()
     return std::max<uint32>(sConfigMgr->GetIntDefault("Playerbots.RpgWanderNpcStayTime", 8), 1u) * 1000;
 }
 
+// RPG combat/objective completion V1 (playerbots-rpg-combat-objective-completion-handoff.md § 6):
+// how close (yd) a *neutral* quest kill target (e.g. mottled boars for "Cutting Teeth") must be for
+// AttackAnythingAction to engage it. A touch wider than the 30yd hostile ATTACK_SEARCH_RADIUS so a
+// bot planted on its objective POI is a little more eager to close on its quest mobs. Bounded so the
+// per-tick grid scan stays cheap at fleet scale (only runs while the bot holds an incomplete
+// QUEST_OBJECTIVE_MONSTER objective and is out of combat).
+inline float GetRpgQuestKillSearchRadius()
+{
+    return std::clamp<float>(sConfigMgr->GetFloatDefault("Playerbots.RpgQuestKillSearchRadius", 40.0f), 10.0f, 80.0f);
+}
+
 inline uint32 GetRpgStatusWanderRandomDurationMs()
 {
     return std::max<uint32>(sConfigMgr->GetIntDefault("Playerbots.RpgStatusDuration.WanderRandom", 300), 1u) * 1000;

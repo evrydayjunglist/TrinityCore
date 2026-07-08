@@ -18,6 +18,9 @@
 #ifndef TRINITY_PLAYERBOT_ATTACK_VALIDITY_H
 #define TRINITY_PLAYERBOT_ATTACK_VALIDITY_H
 
+#include <cstdint>
+#include <unordered_set>
+
 class Player;
 class Unit;
 
@@ -32,5 +35,18 @@ bool IsValidAttackTarget(Player* bot, Unit* target);
 // namespace in Gate 10b so the always-on "attack anything" action (AC's grind-strategy kill role)
 // and the RPG status-availability check can share it.
 Unit* FindNearbyAttackableUnit(Player* bot, float radius);
+
+// RPG combat/objective completion V1 (playerbots-rpg-combat-objective-completion-handoff.md).
+// Creature entries the bot still needs to *kill* for an incomplete QUEST_OBJECTIVE_MONSTER
+// objective in its own quest log — data-first, no hardcoded ids. Mirrors
+// TalkToQuestNpcAction::CollectQuestTalkToEntries exactly, MONSTER instead of TALKTO.
+void CollectQuestKillEntries(Player* bot, std::unordered_set<uint32_t>& entries);
+
+// Nearest living creature whose entry is a current quest kill target (CollectQuestKillEntries)
+// AND passes IsValidAttackTarget — which, unlike FindNearbyAttackableUnit's hostile-only core
+// search, accepts *neutral* creatures. This is the narrow widening that lets bots kill neutral
+// quest mobs (e.g. mottled boars) without griefing generic neutral wildlife: inclusion is gated
+// entirely on "this entry is a live quest kill objective".
+Unit* FindNearbyQuestKillTarget(Player* bot, float radius);
 
 #endif
