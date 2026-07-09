@@ -23,6 +23,7 @@ modules/mod-playerbots/src/
     mod_playerbots_loader.cpp
     PlayerbotCommandScript.cpp    # .playerbot commands
     mod_playerbots_player_script.cpp
+    mod_playerbots_server_script.cpp # Bot outbound-packet (SMSG) observer -> signal layer
     mod_playerbots_world_script.cpp # Gate 9 world tick
   Bot/
     Factory/
@@ -42,6 +43,7 @@ modules/mod-playerbots/src/
     Trigger/
       GroupTriggers.h/.cpp          # Gate 8 follow-ups (B2) master group-invite poll
       NewRpgTriggers.h/.cpp         # Gate 10b RPG status-machine triggers
+      SignalTrigger.h/.cpp          # Packet-observation: consume-on-read externally-fired trigger
     Action/
       FollowAction.h/.cpp           # Gate 8 MoveFollow
       AttackAction.h/.cpp           # Gate 8 attack my target; Gate 8 follow-ups (B1) chase
@@ -476,6 +478,37 @@ folded into the Gate 8 section above), and **C1/C2** (periodic random-bot DB sav
 engine-selection documentation note, see the `RandomPlayerbotMgr`/`Engine` bullets above).
 Full detail: [`playerbots-master-alt-followups-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-master-alt-followups-handoff.md),
 [`playerbots-review-c-followups-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-review-c-followups-handoff.md).
-Remaining known AC-likeness gaps (per-class rotations, talent/gear/security/text subsystems,
-bot outbound-packet observation) are tracked, not silently dropped — see
+Remaining known AC-likeness gaps (per-class rotations, talent/gear/security/text subsystems)
+are tracked, not silently dropped — see
 [`playerbots-future-gates-roadmap.md` § Beyond Gate 10](../../docs/midnight-assessment/playerbots/playerbots-future-gates-roadmap.md#beyond-gate-10-not-numbered-here).
+
+## Bot outbound-packet observation (SMSG signal layer)
+
+Bot sessions are socketless, so every packet the server would send them is dropped in
+`WorldSession::SendPacket`'s bot branch. That branch now first fires TC's **existing**
+`ServerScript::OnPacketSend` hook — the fork's single `src/` change for this feature (one added
+line, the same hook real-player sends already fire; `IsBotSession()`-scoped, no human-path change,
+inert under `MODULES=none`). `mod_playerbots_server_script` observes that hook and routes bot
+packets to `BotPlayerbotAI::HandleBotOutgoingPacket`, which mirrors AC's `botOutgoingPacketHandlers`
+shape: a static **opcode → trigger-name** registry (`LookupPacketSignal` in `BotPlayerbotAI.cpp`)
+whose hits are pushed onto a bounded, mutex-guarded per-bot queue. The queue is swapped out on the
+bot's own AI tick into a per-tick fired set, and a consume-on-read `SignalTrigger` turns a delivered
+signal into a normal engine trigger — the triggered *action* then reads live server state through
+public core APIs.
+
+**THE design rule — opcode-as-signal ONLY; never parse packet payloads.** A captured packet is a
+wake-up signal keyed by its opcode and nothing else — no `packet >>` decode anywhere in module code.
+AC can parse payloads because WotLK 3.3.5's wire format is frozen; this fork tracks Midnight, where
+wire formats churn every build, so payload parsing would reintroduce exactly the standing merge
+liability the socketless/packetless design exists to avoid. Any future feature that genuinely needs
+payload data is a **separate owner decision**, not a drive-by extension. Because a signal can be
+lost (bounded queue, logout race), every signal-driven feature must also stay correct if the signal
+never arrives.
+
+Threading: `OnPacketSend` runs on arbitrary map/World sender threads, so the observer does nothing
+but a registry test + guarded enqueue; **all reaction happens single-threaded on the bot's tick.**
+
+V1 registers **one** entry — `SMSG_PARTY_INVITE → "group invite signal"` — wired to the existing
+master-alt `accept invitation` action. The original `GetGroupInvite()` poll is kept as a fallback
+(accept is idempotent, so double-handling is benign). Master toggle: `Playerbots.PacketObservation.Enable`
+(default on). Full design: [`playerbots-bot-packet-observation-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-bot-packet-observation-handoff.md).

@@ -15,15 +15,24 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-void AddPlayerbotsCommandscripts();
-void AddSC_mod_playerbots_player_script();
-void AddSC_mod_playerbots_server_script();
-void AddSC_mod_playerbots_world_script();
+#include "SignalTrigger.h"
+#include "BotPlayerbotAI.h"
+#include "Log.h"
+#include "Player.h"
+#include "PlayerbotsConfig.h"
 
-void Addmod_playerbotsScripts()
+bool SignalTrigger::IsActive()
 {
-    AddPlayerbotsCommandscripts();
-    AddSC_mod_playerbots_player_script();
-    AddSC_mod_playerbots_server_script();
-    AddSC_mod_playerbots_world_script();
+    if (!_botAI)
+        return false;
+
+    if (!_botAI->ConsumeSignal(GetName()))
+        return false;
+
+    // Logged so a playtest can confirm the SIGNAL path (not the poll) reacted first (handoff § 8).
+    if (Playerbots::GetLogLevel() >= 1)
+        TC_LOG_DEBUG("playerbots", "SignalTrigger '{}' fired for bot {}",
+            GetName(), _botAI->GetBot() ? _botAI->GetBot()->GetName() : "?");
+
+    return true;
 }

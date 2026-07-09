@@ -23,10 +23,14 @@
 #include "Engine.h"
 #include "PlayerbotAIBase.h"
 #include <memory>
+#include <mutex>
+#include <string>
 #include <unordered_set>
+#include <vector>
 
 class AiObjectContext;
 class Engine;
+class WorldPacket;
 
 // Gate 6: bot AI with AC-shaped Engine + passive strategy.
 class BotPlayerbotAI : public PlayerbotAIBase
@@ -57,6 +61,18 @@ public:
     // quest automatically. See playerbots-rpg-active-questgiver-seeking-handoff.md §4.
     std::unordered_set<uint32>& GetUnactionableQuests() { return _unactionableQuest; }
 
+    // Packet-observation signal layer (playerbots-bot-packet-observation-handoff.md § 5). AC's
+    // PlayerbotAI::HandleBotOutgoingPacket analog. Called from the module's ServerScript observer
+    // on ARBITRARY map/World sender threads (WorldSession::SendPacket runs there) — so it does
+    // nothing but a static opcode->trigger-name registry test and, on a hit, a cheap bounded
+    // enqueue under _signalMutex. Opcode-as-signal ONLY: the packet payload is never read (§ 0).
+    // All reaction happens single-threaded on the bot's own tick (the UpdateAIInternal drain).
+    void HandleBotOutgoingPacket(WorldPacket const& packet);
+
+    // Consume-on-read: tick-thread only (SignalTrigger::IsActive during Engine::DoNextAction). The
+    // first trigger to test its signal name this tick claims it; returns false once consumed.
+    bool ConsumeSignal(std::string const& name);
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -68,6 +84,14 @@ private:
     NewRpgStatistic _rpgStatistic;
     std::unordered_set<uint32> _lowPriorityQuest;
     std::unordered_set<uint32> _unactionableQuest;
+
+    // Cross-thread signal handoff. _signalQueue is written by HandleBotOutgoingPacket on sender
+    // threads and drained (swapped out) at the top of each tick under _signalMutex; _firedSignals
+    // is the per-tick fired set, only ever touched on the bot's own tick thread (drain + consume),
+    // so it needs no lock of its own.
+    std::mutex _signalMutex;
+    std::vector<std::string> _signalQueue;
+    std::unordered_set<std::string> _firedSignals;
 };
 
 #endif

@@ -594,6 +594,18 @@ inline uint32 GetRpgDeathCorpseRunTimeoutSeconds()
 {
     return std::clamp<uint32>(sConfigMgr->GetIntDefault("Playerbots.RpgDeathCorpseRunTimeoutSeconds", 600), 60, 1800);
 }
+
+// Bot outbound-packet observation (playerbots-bot-packet-observation-handoff.md). Master toggle
+// for the SMSG signal layer: the module's ServerScript observer bails immediately when this is
+// off, so the one-line core seam's OnPacketSend dispatch simply finds no interested handler and
+// bot behavior falls back to the per-tick polls. Default on with the module (the layer is inert
+// without registered signal features anyway). Opcode-as-signal only — the observer keys purely on
+// the packet's opcode and never reads its payload (handoff § 0), which is what keeps the feature
+// safe against Midnight wire-format churn.
+inline bool GetPacketObservationEnabled()
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.PacketObservation.Enable", true);
+}
 }
 
 #endif

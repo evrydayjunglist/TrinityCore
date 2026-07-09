@@ -334,3 +334,18 @@ Playerbots.RpgDeathReleaseDelaySeconds = 3
 # Default 600.
 #
 Playerbots.RpgDeathCorpseRunTimeoutSeconds = 600
+
+#
+#    Playerbots.PacketObservation.Enable
+#        Description: Master toggle for the bot outbound-packet (SMSG) observation / signal layer.
+#                     Bot sessions are socketless, so the packets the server would send them are
+#                     normally dropped unobserved; this layer lets the bot AI react to the *fact*
+#                     that a packet was generated, keyed purely by opcode (never by decoding the
+#                     packet payload — that no-parse rule is what keeps the feature safe against
+#                     wire-format churn). When off, the observer bails and bots fall back to their
+#                     per-tick polls. Currently drives one feature: master-alt party-invite accept
+#                     (SMSG_PARTY_INVITE), which also keeps its poll as a fallback.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+
+Playerbots.PacketObservation.Enable = 1

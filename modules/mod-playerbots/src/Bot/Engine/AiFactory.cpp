@@ -34,6 +34,7 @@
 #include "Bot/Strategy/PassiveStrategy.h"
 #include "Bot/Trigger/GroupTriggers.h"
 #include "Bot/Trigger/NewRpgTriggers.h"
+#include "Bot/Trigger/SignalTrigger.h"
 #include "BotPlayerbotAI.h"
 #include "DB2Stores.h"
 #include "Log.h"
@@ -53,8 +54,15 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterAction("wander", std::make_unique<WanderAction>(botAI));
     context->RegisterAction("quest giver", std::make_unique<QuestGiverAction>(botAI));
 
-    // Master-alt party join (bot auto-accepts its master's invite). AC drives this off an
-    // SMSG_GROUP_INVITE packet trigger; socketless bots poll Player::GetGroupInvite() instead.
+    // Master-alt party join (bot auto-accepts its master's invite). Two paths both fire the
+    // "accept invitation" action (see FollowMasterStrategy::InitTriggers):
+    //   - "group invite signal": the packet-observation layer's consume-on-read SignalTrigger,
+    //     fired when SMSG_PARTY_INVITE is observed for the bot (reacts on the very next tick). Its
+    //     name matches the opcode registry entry in BotPlayerbotAI.cpp (LookupPacketSignal).
+    //   - "group invite": the original per-tick poll of Player::GetGroupInvite(), kept as a
+    //     fallback so an invite is still accepted if a signal is ever lost or observation is off.
+    // See playerbots-bot-packet-observation-handoff.md § 5c.
+    context->RegisterTrigger("group invite signal", std::make_unique<SignalTrigger>(botAI, "group invite signal"));
     context->RegisterTrigger("group invite", std::make_unique<GroupInviteTrigger>(botAI));
 
     // Quest loot + object interaction (AC: OpenLootAction/StoreLootAction, InteractWithGameObject).
