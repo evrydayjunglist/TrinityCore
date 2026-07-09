@@ -61,6 +61,19 @@ std::vector<float> GenerateRandomWeights(size_t count)
     return weights;
 }
 
+// "Would a terrain/liquid/area query at this position force a synchronous grid+VMAP disk load on
+// the map-update thread?" Bot AI ticks inside Map::Update, so a Map::GetZoneId/GetHeight on a
+// far/cold position routes through TerrainInfo::GetGrid(loadIfMissing=true) → a blocking readFile
+// that can stall the world thread past MaxCoreStuckTime and trip the FreezeDetector. If the grid
+// isn't already resident, DON'T query it — skip the candidate. A created NGrid eagerly loads its
+// terrain+VMAP (Map::EnsureGridCreated), so IsGridLoaded(pos)==true ⇒ the subsequent query is a
+// memory read, never disk. (Public Map API; TerrainInfo::GetGrid/_loadedGrids are private, so this
+// is the correct gate — do not reach into TerrainInfo.)
+inline bool IsBotMapPosQueryable(Player const* bot, Position const& pos)
+{
+    return bot && bot->IsInWorld() && bot->GetMap()->IsGridLoaded(pos);
+}
+
 // Same live-search radius Gate 10's grind behavior uses ("what to attack right now").
 constexpr float RPG_NEARBY_HOSTILE_RADIUS = 30.0f;
 
@@ -499,6 +512,14 @@ bool NewRpgBaseAction::SelectRandomHubPos(Position& destOut)
     for (int attempt = 0; attempt < 5; ++attempt)
     {
         HubSpot const* spot = pool[urand(0, uint32(pool.size()) - 1)];
+        // Never force a cold VMAP/terrain load on the map tick: skip a candidate whose grid isn't
+        // already resident rather than let GetZoneId block on a disk read (freeze-crash fix).
+        if (!IsBotMapPosQueryable(bot, spot->Pos))
+        {
+            TC_LOG_DEBUG("playerbots", "[New RPG] {} skip hub candidate ({},{},{}) — grid not resident",
+                bot->GetName(), spot->Pos.GetPositionX(), spot->Pos.GetPositionY(), spot->Pos.GetPositionZ());
+            continue;
+        }
         if (bot->GetMap()->GetZoneId(bot->GetPhaseShift(), spot->Pos) != bot->GetZoneId())
             continue;
 
@@ -672,6 +693,17 @@ bool NewRpgBaseAction::GetQuestPOIPosAndObjective(uint32 questId, std::vector<PO
 
         if (bot->GetDistance2d(dx, dy) >= 1500.0f)
             return;
+
+        // Never force a cold VMAP/terrain load on the map tick: if this blob point's grid isn't
+        // already resident, skip it this sweep rather than let GetHeight/GetZoneId block on a disk
+        // read (freeze-crash fix). It is re-sampled next sweep once the world around it is warm.
+        Position const interp(dx, dy, dz);
+        if (!IsBotMapPosQueryable(bot, interp))
+        {
+            TC_LOG_DEBUG("playerbots", "[New RPG] {} skip POI blob point ({},{},{}) — grid not resident",
+                bot->GetName(), dx, dy, dz);
+            return;
+        }
 
         // Refine the interpolated Z to actual ground near it; a blob whose area has no
         // resolvable ground here is not a usable travel target.
@@ -979,6 +1011,14 @@ bool NewRpgBaseAction::SelectRandomGrindPos(Position& destOut)
     for (int attempt = 0; attempt < 5; ++attempt)
     {
         GrindSpot const* spot = pool[urand(0, uint32(pool.size()) - 1)];
+        // Never force a cold VMAP/terrain load on the map tick: skip a candidate whose grid isn't
+        // already resident rather than let GetZoneId block on a disk read (freeze-crash fix).
+        if (!IsBotMapPosQueryable(bot, spot->Pos))
+        {
+            TC_LOG_DEBUG("playerbots", "[New RPG] {} skip grind candidate ({},{},{}) — grid not resident",
+                bot->GetName(), spot->Pos.GetPositionX(), spot->Pos.GetPositionY(), spot->Pos.GetPositionZ());
+            continue;
+        }
         if (bot->GetMap()->GetZoneId(bot->GetPhaseShift(), spot->Pos) != bot->GetZoneId())
             continue;
 
