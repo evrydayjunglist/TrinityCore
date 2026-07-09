@@ -202,6 +202,7 @@ bool NewRpgDoQuestAction::DoIncompleteQuest(NewRpgInfo::DoQuest& data)
     if (data.hasPos && data.objectiveId && bot->IsQuestObjectiveComplete(questId, data.objectiveId))
     {
         data.lastReachPOI = 0;
+        data.lastSweep = 0;
         data.hasPos = false;
         data.objectiveId = 0;
     }
@@ -218,6 +219,7 @@ bool NewRpgDoQuestAction::DoIncompleteQuest(NewRpgInfo::DoQuest& data)
 
         POIInfo const& poi = poiInfo[urand(0, uint32(poiInfo.size()) - 1)];
         data.lastReachPOI = 0;
+        data.lastSweep = 0;
         data.pos = poi.pos;
         data.hasPos = true;
         data.objectiveId = poi.objectiveId;
@@ -257,13 +259,54 @@ bool NewRpgDoQuestAction::DoIncompleteQuest(NewRpgInfo::DoQuest& data)
 
         // progress happened, just slowly — clear and re-resolve a (possibly different) POI
         data.lastReachPOI = 0;
+        data.lastSweep = 0;
         data.hasPos = false;
         data.objectiveId = 0;
         return true;
     }
 
+    // Convergence F2 (playerbots-rpg-quest-convergence-fixes-handoff.md § 4-F2): zero progress so
+    // far — don't circle one fixed point for the whole stay window; every sweep interval re-sample
+    // a fresh random-weighted interior point of the same objective blob and walk there, so the bot
+    // actually covers the objective area. That is what lets it *discover* stealthed objective mobs
+    // the retail-like way (patrol until a frontal detect-range encounter happens naturally — the
+    // core's stealth-detection gates are untouched). lastReachPOI is deliberately NOT reset: the
+    // zero-progress abandon budget keeps running across sweep legs, so an impossible quest still
+    // retires on schedule.
+    if (data.objectiveId && bot->GetQuestObjectiveData(questId, data.objectiveId) == 0)
+    {
+        uint32 const lastLeg = data.lastSweep ? data.lastSweep : data.lastReachPOI;
+        if (GetMSTimeDiffToNow(lastLeg) >= Playerbots::GetRpgPoiSweepIntervalMs())
+        {
+            // Each GetQuestPOIPosAndObjective call rolls fresh random weights per blob — keep only
+            // the pursued objective's entries so the sweep stays inside the same objective area.
+            std::vector<POIInfo> poiInfo;
+            if (GetQuestPOIPosAndObjective(questId, poiInfo))
+            {
+                std::vector<POIInfo const*> sameObjective;
+                for (POIInfo const& poi : poiInfo)
+                    if (poi.objectiveId == data.objectiveId)
+                        sameObjective.push_back(&poi);
+
+                if (!sameObjective.empty())
+                {
+                    data.pos = sameObjective[urand(0, uint32(sameObjective.size()) - 1)]->pos;
+                    data.lastSweep = getMSTime();
+                    TC_LOG_DEBUG("playerbots", "[New RPG] {} sweeping to fresh POI point ({},{},{}) for quest {} objective {}",
+                        bot->GetName(), data.pos.GetPositionX(), data.pos.GetPositionY(), data.pos.GetPositionZ(),
+                        questId, data.objectiveId);
+                }
+            }
+        }
+
+        // Walking a committed sweep leg — same SafeMovement MoveFarTo path as the initial travel.
+        if (data.lastSweep && bot->GetExactDist(data.pos) > 10.0f && MoveFarTo(data.pos))
+            return true;
+    }
+
     // At the POI: small ~8yd wanders read as the bot looking around while kills/collections
-    // progress (AC keeps the same small step to avoid pacing back and forth).
+    // progress (AC keeps the same small step to avoid pacing back and forth); between F2 sweep
+    // legs they also provide the frontal-arc turning stealth detection needs.
     return MoveRandomNear(8.0f);
 }
 

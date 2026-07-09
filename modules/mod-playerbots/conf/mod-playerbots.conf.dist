@@ -241,6 +241,16 @@ Playerbots.RpgStatusDuration.Rest = 30
 Playerbots.RpgPoiStayTime = 300
 
 #
+# While parked at a quest objective POI with zero progress, how often (seconds) the bot walks to a
+# fresh random point inside the same objective area instead of circling one fixed spot for the
+# whole stay window. Sweeping the area is how a bot *finds* stealthed objective mobs the way a real
+# player does — stealth detection itself is untouched (still ~10yd frontal at equal level), so
+# finding all of a stealthed pack still takes minutes, by design. The zero-progress abandon budget
+# (RpgPoiStayTime) keeps running across sweep legs. Bounded [10, 120]. Default 25.
+#
+Playerbots.RpgPoiSweepIntervalSeconds = 25
+
+#
 # How close (yards) a *neutral* quest kill target must be for a bot to engage it. The always-on
 # "attack anything" behavior is hostile-only by design (so bots don't grief town wildlife); this
 # additionally lets a bot kill a neutral creature ONLY when a live quest objective wants it dead

@@ -57,6 +57,7 @@ modules/mod-playerbots/src/
     Rpg/
       GrindLocationCache.h/.cpp     # Gate 10 Layer 1: lazy per-map SQL-scan grind spot cache
       HubLocationCache.h/.cpp       # RPG GO_CAMP: lazy per-map cache of NPC-hub (quest-giver cluster) centroids
+      QuestItemDropCache.h/.cpp     # Convergence F4: lazy item id -> quest-loot drop-source creature entries
       NewRpgInfo.h/.cpp             # Gate 10b per-bot RPG state machine + statistics
     BotPlayerbotAI.h/.cpp           # Gate 5–10b bot AI
   Mgr/
@@ -324,11 +325,13 @@ opportunistic nearby pickup.
 - `NewRpgDoQuestAction` — typed `QuestObjective` progress tracking (modern objective IDs, not
   WotLK fixed-array index math), `GetQuestPOIPosAndObjective` blob resolution, POI-stay timeout
   → abandon-set (`Playerbots.RpgPoiStayTimeMs`)
-- `AttackAnythingAction` also kills **neutral** creatures a live `QUEST_OBJECTIVE_MONSTER` objective
-  wants dead (e.g. mottled boars for "Cutting Teeth") via a data-first quest-kill target searcher
-  (`AttackValidity::CollectQuestKillEntries`/`FindNearbyQuestKillTarget`, from the bot's own quest
-  log) — its always-on hostile search stays hostile-only, so bots never grief neutral wildlife they
-  have no quest for. `Playerbots.RpgQuestKillSearchRadius`
+- `AttackAnythingAction` also kills **neutral** creatures a live quest objective wants dead via a
+  data-first quest-kill target searcher (`AttackValidity::CollectQuestKillEntries`/
+  `FindNearbyQuestKillTarget`, from the bot's own quest log) — `QUEST_OBJECTIVE_MONSTER` entries
+  directly (e.g. mottled boars for "Cutting Teeth") and, since the convergence fixes,
+  `QUEST_OBJECTIVE_ITEM` kill-and-loot drop sources via `Bot/Rpg/QuestItemDropCache` (e.g. scorpid
+  workers for "Sting of the Scorpid"). Its always-on hostile search stays hostile-only, so bots
+  never grief neutral wildlife they have no quest for. `Playerbots.RpgQuestKillSearchRadius`
 - `NewRpgBaseAction::MoveFarTo` — long-distance travel on top of `SafeMovement`'s validated-path
   contract, with stuck-detection teleport recovery (depends on the bot-session teleport self-ack
   fix)
@@ -371,6 +374,33 @@ them, and every action additionally short-circuits on `HasMaster()`. Spirit-heal
 other-bot/player res, self-res (soulstone/reincarnation), death-count teleport and master-alt/group death
 are all **NYI** — see
 [`playerbots-bot-death-corpse-run-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-bot-death-corpse-run-handoff.md).
+
+## RPG quest-loop convergence fixes (F1–F4)
+
+Four fixes that make the RPG loop reliably *converge* on questing (2026-07-08 Valley of Trials
+playtest diagnosis — giver ping-pong + stealth-quest stalls):
+
+- **F1 — strict quest-giver targeting (AC parity).** `QuestGiverAction`'s candidate search now
+  gates each giver on the strict `HasQuestToAcceptOrReward` (transactable right now: rewardable
+  COMPLETE, or takeable+worth+capable NONE) instead of "quest menu non-empty". TC menus include
+  the bot's own INCOMPLETE turn-ins, so an ender of a quest the bot was still working anchored the
+  action permanently useful while nothing could ever transact — hijacking WANDER_NPC/REST into a
+  movement tug-of-war around the giver (the "milling around Gornek" crowd).
+- **F2 — POI-area sweep.** Parked at an objective POI with zero progress, a bot now walks to a
+  fresh random-weighted interior point of the same objective blob every
+  `Playerbots.RpgPoiSweepIntervalSeconds` (default 25) instead of circling one fixed point — so it
+  actually covers large objective areas and *discovers* stealthed objective mobs the retail-like
+  way (stealth detection untouched; the `RpgPoiStayTime` abandon budget keeps running).
+- **F3 — reachable kill targets.** `FindNearbyQuestKillTarget` prefers the nearest candidate whose
+  approach passes the `SafeMovement` walkability probe (max 5 probed, plain-nearest fallback) so a
+  bot doesn't latch onto a ridge-perched mob it can attack but never chase.
+- **F4 — kill-and-loot quests.** `CollectQuestKillEntries` also arms `QUEST_OBJECTIVE_ITEM`
+  objectives by mapping the item to its quest-loot drop-source creatures
+  (`Bot/Rpg/QuestItemDropCache`, a lazy one-shot reverse index over the ObjectMgr
+  `creature_questitem` store). Gameobject-gathered items map to no creatures and stay with the
+  `UseQuestObjectAction` gather path.
+
+Handoff: [`playerbots-rpg-quest-convergence-fixes-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-rpg-quest-convergence-fixes-handoff.md).
 
 ## Quest loot + object interaction
 

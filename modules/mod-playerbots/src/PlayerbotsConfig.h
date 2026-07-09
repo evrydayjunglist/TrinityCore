@@ -505,6 +505,18 @@ inline uint32 GetRpgPoiStayTimeMs()
     return std::max<uint32>(sConfigMgr->GetIntDefault("Playerbots.RpgPoiStayTime", 300), 1u) * 1000;
 }
 
+// RPG quest-loop convergence F2 (playerbots-rpg-quest-convergence-fixes-handoff.md § 4-F2): while
+// parked at a quest objective POI with zero progress, how often the bot walks to a fresh
+// random-weighted interior point of the same objective blob instead of circling one fixed point
+// for the whole stay window. This is what lets a bot *discover* stealthed objective mobs the
+// retail-like way — patrol the area until a frontal detect-range encounter happens naturally —
+// with stealth detection itself untouched. The zero-progress abandon budget (RpgPoiStayTime) keeps
+// running across sweep legs.
+inline uint32 GetRpgPoiSweepIntervalMs()
+{
+    return std::clamp<uint32>(sConfigMgr->GetIntDefault("Playerbots.RpgPoiSweepIntervalSeconds", 25), 10u, 120u) * 1000;
+}
+
 // Fork-native (not ported from AC — see playerbots-bot-wander-ground-clip-handoff.md §5): the
 // mmap navmesh's own "normal ground" cutoff is 55 degrees (src/common/mmaps_common/Generator/
 // TileBuilder.cpp), which PathGenerator already confines Player-type sources to (steep 55-70

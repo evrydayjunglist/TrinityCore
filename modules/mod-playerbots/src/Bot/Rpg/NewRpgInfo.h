@@ -92,6 +92,9 @@ struct NewRpgInfo
         bool hasPos = false;         // AC compares pos != WorldPosition(); an explicit flag avoids float compares
         bool travelToTurnIn = false; // AC's objectiveIdx == -1 marker: turn-in blob resolved, heading there
         uint32 lastReachPOI = 0;     // ms timestamp of arrival at the POI; 0 = not arrived yet
+        uint32 lastSweep = 0;        // convergence F2: ms timestamp of the last zero-progress area-sweep
+                                     // leg (fresh weighted point in the same objective blob); 0 = none yet.
+                                     // Never feeds the abandon budget — that stays on lastReachPOI.
     };
 
     // RPG_WANDER_NPC — AC's lifelike "visit any hub NPC" mingling (NewRpgInfo.h WanderNpc

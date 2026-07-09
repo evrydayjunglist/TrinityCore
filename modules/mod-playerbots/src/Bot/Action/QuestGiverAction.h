@@ -29,6 +29,10 @@ class WorldObject;
 // Gate 10b: composes NewRpgBaseAction so accepts are filtered through IsQuestWorthDoing/
 // IsQuestCapableDoing and the quest log gets OrganizeQuestLog hygiene before new pickups,
 // exactly like AC's SearchQuestGiverAndAcceptOrReward + InteractWithNpcOrGameObjectForQuest.
+// Convergence F1: candidates pass the same strict HasQuestToAcceptOrReward gate AC applies —
+// a giver whose menu only holds the bot's own INCOMPLETE turn-ins is NOT a target (that loose
+// menu-non-empty gate was the giver-anchor ping-pong bug — see
+// playerbots-rpg-quest-convergence-fixes-handoff.md § 3a).
 class QuestGiverAction : public NewRpgBaseAction
 {
 public:
@@ -39,6 +43,7 @@ public:
 
 private:
     bool InteractWithQuestGiver(WorldObject* questGiver);
+    WorldObject* FindNearbyQuestGiver();
 };
 
 #endif

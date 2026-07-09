@@ -37,16 +37,22 @@ bool IsValidAttackTarget(Player* bot, Unit* target);
 Unit* FindNearbyAttackableUnit(Player* bot, float radius);
 
 // RPG combat/objective completion V1 (playerbots-rpg-combat-objective-completion-handoff.md).
-// Creature entries the bot still needs to *kill* for an incomplete QUEST_OBJECTIVE_MONSTER
-// objective in its own quest log — data-first, no hardcoded ids. Mirrors
-// TalkToQuestNpcAction::CollectQuestTalkToEntries exactly, MONSTER instead of TALKTO.
+// Creature entries the bot still needs to *kill* for an incomplete objective in its own quest
+// log — data-first, no hardcoded ids. Mirrors TalkToQuestNpcAction::CollectQuestTalkToEntries.
+// Covers QUEST_OBJECTIVE_MONSTER (ObjectID = creature entry) and, since convergence F4
+// (playerbots-rpg-quest-convergence-fixes-handoff.md), QUEST_OBJECTIVE_ITEM — the item id is
+// mapped to its quest-loot drop-source creatures via QuestItemDropCache so kill-and-loot quests
+// arm the kill search too.
 void CollectQuestKillEntries(Player* bot, std::unordered_set<uint32_t>& entries);
 
 // Nearest living creature whose entry is a current quest kill target (CollectQuestKillEntries)
 // AND passes IsValidAttackTarget — which, unlike FindNearbyAttackableUnit's hostile-only core
 // search, accepts *neutral* creatures. This is the narrow widening that lets bots kill neutral
 // quest mobs (e.g. mottled boars) without griefing generic neutral wildlife: inclusion is gated
-// entirely on "this entry is a live quest kill objective".
+// entirely on "this entry is a live quest kill objective". Convergence F3: prefers the nearest
+// candidate whose approach passes the SafeMovement walkability probe (so a bot doesn't latch onto
+// a ridge-perched mob it can never reach), falling back to the plain nearest when none of the
+// probed few pass — never fewer targets than the pre-F3 behavior.
 Unit* FindNearbyQuestKillTarget(Player* bot, float radius);
 
 #endif

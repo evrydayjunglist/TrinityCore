@@ -64,8 +64,9 @@ protected:
     // True iff this quest giver has at least one quest the bot could actually transact right now —
     // a COMPLETE quest it can be rewarded for, or a NONE quest it can take and that passes the
     // worth/capable filters. AC parity: NewRpgBaseAction::HasQuestToAcceptOrReward. Used by the
-    // seek scan so a bot only travels to a giver it would really do business with (vs
-    // QuestGiverAction's looser menu-non-empty check, fine for adjacent opportunistic pickup).
+    // seek scan AND (convergence F1) QuestGiverAction's own candidate search, so a bot only ever
+    // targets a giver it would really do business with — a menu holding just the bot's own
+    // INCOMPLETE turn-ins doesn't count (that looser gate was the giver-anchor ping-pong bug).
     bool HasQuestToAcceptOrReward(WorldObject* questGiver) const;
 
     // A quest proven impossible for ANY player to finish: COMPLETE with no quest-ender in either
