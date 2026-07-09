@@ -19,6 +19,7 @@
 #include "AttackValidity.h"
 #include "BotPlayerbotAI.h"
 #include "MotionMaster.h"
+#include "MovementDefines.h"
 #include "Player.h"
 #include "PlayerbotsConfig.h"
 #include "SafeMovement.h"
@@ -36,10 +37,19 @@ bool AttackAnythingAction::IsUseful()
     if (!bot || !bot->IsInWorld() || !bot->IsAlive())
         return false;
 
-    // In combat: only step in when the bot has no victim (it got aggroed, or its target died
-    // while other attackers remain) — otherwise let the current auto-attack run.
+    // In combat: step in when the bot has no victim (it got aggroed, or its target died while other
+    // attackers remain), OR while it still holds a valid victim it hasn't finished — so the combat
+    // chase keeps *owning movement* for the whole fight instead of an RPG-travel MovePoint clobbering
+    // it and parking the bot just out of melee range. A melee mob closes to the bot on its own so this
+    // never mattered for them; a *ranged* attacker (Northwatch Scout 39317, quest 25172) holds its
+    // distance and shoots, so a bot that cedes movement mid-fight stands at ~6yd, never swings, and
+    // dies. Confirmed via C0 instrumentation (moveGen=POINT while a scout victim sat 5-6yd out). See
+    // playerbots-rpg-combat-ranged-attacker-engagement-handoff.md.
     if (bot->IsInCombat())
-        return bot->GetVictim() == nullptr;
+    {
+        Unit* victim = bot->GetVictim();
+        return !victim || IsValidAttackTarget(bot, victim);
+    }
 
     // Out of combat: engage a nearby hostile, OR a nearby *neutral* creature that a live quest
     // kill objective wants dead (the narrow widening — see the quest-kill searcher). Neutral
@@ -54,6 +64,30 @@ bool AttackAnythingAction::Execute(Event /*event*/)
     Player* bot = GetBot();
     if (!bot)
         return false;
+
+    // Already fighting a valid target: keep it (don't thrash to a different one) and make sure the
+    // combat chase — not a stray RPG-travel MovePoint — owns movement, so the bot actually closes to
+    // and holds melee. Re-assert MoveChase only when it isn't already the active generator, to avoid
+    // resetting the spline every tick (when already chasing we still consume the tick so RPG travel
+    // can't take movement back mid-fight). The walkability gate is unchanged — the SafeMovement slope
+    // contract stays exactly as-is (playerbots-bot-wander-ground-clip-handoff.md ⭐ standing watch).
+    // Returning here yields the fight to core auto-attack once in melee (MoveChase just holds range).
+    // When the victim dies or goes invalid, IsUseful releases and RPG travel resumes. See
+    // playerbots-rpg-combat-ranged-attacker-engagement-handoff.md.
+    if (Unit* victim = bot->GetVictim())
+    {
+        if (bot->IsInCombat() && IsValidAttackTarget(bot, victim))
+        {
+            if (!bot->HasInArc(float(M_PI), victim))
+                bot->SetFacingToObject(victim);
+
+            if (bot->GetMotionMaster()->GetCurrentMovementGeneratorType() != CHASE_MOTION_TYPE &&
+                IsApproachPathWalkable(bot, victim->GetPositionX(), victim->GetPositionY(), victim->GetPositionZ()))
+                bot->GetMotionMaster()->MoveChase(victim);
+
+            return true;
+        }
+    }
 
     Unit* target = nullptr;
 

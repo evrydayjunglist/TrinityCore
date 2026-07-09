@@ -332,6 +332,15 @@ opportunistic nearby pickup.
   `QUEST_OBJECTIVE_ITEM` kill-and-loot drop sources via `Bot/Rpg/QuestItemDropCache` (e.g. scorpid
   workers for "Sting of the Scorpid"). Its always-on hostile search stays hostile-only, so bots
   never grief neutral wildlife they have no quest for. `Playerbots.RpgQuestKillSearchRadius`
+- `AttackAnythingAction` keeps the combat chase **owning movement for the whole fight**: `IsUseful`
+  stays useful while the bot holds a valid victim in combat, and `Execute`'s sustain branch keeps
+  that victim, faces it, and re-asserts `MoveChase` (only when the active generator isn't already
+  `CHASE`, via the unchanged `IsApproachPathWalkable` slope gate). Without it, once the bot has a
+  victim the action bowed out and an RPG-travel `MovePoint` clobbered the chase, parking the bot
+  ~5–6 yd from a *ranged* attacker (e.g. Northwatch Scout `39317`, quest `25172`) it never closed on
+  — a melee mob masked this by closing itself. Player-like "stay on the mob," no combat-power buff,
+  no rotation/kiting; see
+  [`playerbots-rpg-combat-ranged-attacker-engagement-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-rpg-combat-ranged-attacker-engagement-handoff.md).
 - `NewRpgBaseAction::MoveFarTo` — travel on top of `SafeMovement`'s validated-path contract, with
   stuck-detection teleport recovery (depends on the bot-session teleport self-ack fix); short and
   far legs share one progress-guarded attempt + leg-scaled forward-cone fallback (see *Bot obstacle
