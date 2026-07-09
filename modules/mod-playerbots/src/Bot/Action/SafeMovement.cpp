@@ -16,6 +16,7 @@
  */
 
 #include "SafeMovement.h"
+#include "Log.h"
 #include "Map.h"
 #include "MotionMaster.h"
 #include "PathGenerator.h"
@@ -83,10 +84,23 @@ bool ValidatePathAndSlope(Player* bot, float x, float y, float z, PathGenerator&
 
     outPath.CalculatePath(x, y, z);
     if (outPath.GetPathType() & ~PATH_TYPE_ACCEPTABLE)
+    {
+        // D0 (obstacle-pathing handoff §5-D0): which rejection fires at a local obstacle —
+        // here the mmap found no acceptable route (SHORTCUT/NOPATH). Debug-only; the `playerbots`
+        // logger stays quiet unless enabled, so this makes the playtest diagnostic, not anecdotal.
+        TC_LOG_DEBUG("playerbots", "[New RPG][SafeMovement] {} path-type reject to ({},{},{}) leg {}yd type {}",
+            bot->GetName(), x, y, z, bot->GetExactDist(x, y, z), uint32(outPath.GetPathType()));
         return false; // no real mmap route — refuse rather than walk straight through terrain
+    }
 
     if (!HasWalkableSlope(outPath.GetPath()))
+    {
+        // D0: slope-gate rejection (candidate B). Logging only — the 35° ceiling is the ⭐
+        // standing-watch ground-clip contract and stays untouched (handoff §0).
+        TC_LOG_DEBUG("playerbots", "[New RPG][SafeMovement] {} slope reject to ({},{},{}) leg {}yd",
+            bot->GetName(), x, y, z, bot->GetExactDist(x, y, z));
         return false; // technically-connected but too steep to be a real player-climbable incline
+    }
 
     return true;
 }
@@ -114,7 +128,14 @@ bool TryMoveValidated(Player* bot, float x, float y, float z, float minProgress)
         float const distNow = bot->GetExactDist(x, y, z);
         float const distAfter = std::sqrt((x - end.x) * (x - end.x) + (y - end.y) * (y - end.y) + (z - end.z) * (z - end.z));
         if (distAfter + minProgress > distNow)
+        {
+            // D0 (candidate A): a (possibly PATHFIND_INCOMPLETE) route whose reachable endpoint
+            // doesn't close the gap toward the destination — the "moving to my own feet" case that
+            // read as standing still at the bonfire. With D1 this now also guards short legs.
+            TC_LOG_DEBUG("playerbots", "[New RPG][SafeMovement] {} low-progress reject to ({},{},{}) distNow {} distAfter {} minProgress {} end ({},{},{})",
+                bot->GetName(), x, y, z, distNow, distAfter, minProgress, end.x, end.y, end.z);
             return false; // partial-route endpoint doesn't actually close the gap — let the caller sample elsewhere
+        }
     }
 
     bot->GetMotionMaster()->MovePoint(0, end.x, end.y, end.z);

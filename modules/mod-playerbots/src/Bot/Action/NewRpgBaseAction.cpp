@@ -175,18 +175,31 @@ bool NewRpgBaseAction::MoveFarTo(Position const& dest)
             bot->GetOrientation());
     }
 
-    // Close enough for a single validated leg (AC: dis < pathFinderDis → plain MoveTo).
-    if (disToDest < PATH_FINDER_DIS)
-        return TryMoveToValidatedPoint(bot, dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ());
+    // Progress floor scaled to leg length (D1, obstacle-pathing handoff §5-D1). A short final
+    // approach leg (interaction range) can legitimately close < 5yd, so require only 1yd there;
+    // far legs keep AC's 5yd anti-oscillation floor. INTERACTION_DISTANCE is 5yd and the approach
+    // only fires when the bot is beyond it (WANDER_NPC/QuestGiver both gate on distance first), so
+    // the 1yd floor can never block a legitimate final step (§7). This replaces the old short-leg
+    // early return that used TryMoveToValidatedPoint (minProgress 0) — a zero-progress
+    // PATHFIND_INCOMPLETE endpoint at the bot's own feet used to count as success (candidate A),
+    // burning the tick standing still at the obstacle; now it fails and falls through to the cone.
+    float const minProgress = (disToDest < PATH_FINDER_DIS) ? 1.0f : 5.0f;
 
     // Primary: route toward the true destination and walk the furthest reachable waypoint —
     // partial (PATHFIND_INCOMPLETE) routes past the ~296yd smooth-path cap are exactly what we
     // want here, as long as they actually close the gap (AC's "endDistToDest + 5.0f < disToDest").
-    if (TryMoveTowardValidatedPoint(bot, dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(), 5.0f))
+    if (TryMoveTowardValidatedPoint(bot, dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(), minProgress))
         return true;
 
     // Fallback: sample the forward cone for a reachable stepping stone (AC: 2 samples, ±π/2
     // around the bearing to dest, 0.5–1.0 × pathFinderDis, preferring the more-forward sample).
+    // D2 (§5-D2): short legs reach this now too (the early return above is gone). Scale the sample
+    // distance to the leg so an ~18yd obstacle leg samples ~9–18yd stepping stones instead of
+    // 35–70yd overshoots. For a far leg disToDest >= PATH_FINDER_DIS so coneBaseDis ==
+    // PATH_FINDER_DIS — far-branch behavior is preserved exactly. Each sample still goes through
+    // the full SafeMovement contract, so this finds validated partial routes around the obstacle,
+    // never worse ones (§0). 2-sample cap kept (AC's explicit 3000-bot PathGenerator budget).
+    float const coneBaseDis = std::min(PATH_FINDER_DIS, disToDest);
     float const baseAngle = bot->GetAbsoluteAngle(dest.GetPositionX(), dest.GetPositionY());
     float deltas[2] = { (float(rand_norm()) - 0.5f) * float(M_PI), (float(rand_norm()) - 0.5f) * float(M_PI) };
     if (std::fabs(deltas[1]) < std::fabs(deltas[0]))
@@ -194,7 +207,7 @@ bool NewRpgBaseAction::MoveFarTo(Position const& dest)
 
     for (float delta : deltas)
     {
-        float const sampleDis = (0.5f + float(rand_norm()) * 0.5f) * PATH_FINDER_DIS;
+        float const sampleDis = (0.5f + float(rand_norm()) * 0.5f) * coneBaseDis;
         float const angle = baseAngle + delta;
         float const dx = bot->GetPositionX() + std::cos(angle) * sampleDis;
         float const dy = bot->GetPositionY() + std::sin(angle) * sampleDis;

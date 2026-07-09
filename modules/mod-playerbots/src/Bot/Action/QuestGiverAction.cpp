@@ -28,7 +28,6 @@
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "QuestDef.h"
-#include "SafeMovement.h"
 
 namespace
 {
@@ -203,9 +202,13 @@ bool QuestGiverAction::Execute(Event /*event*/)
         if (bot->GetMotionMaster()->GetCurrentMovementGeneratorType() == POINT_MOTION_TYPE)
             return false; // already walking toward a destination this tick
 
-        // Validate via a real mmap path before committing (see SafeMovement.h) — same steep-
-        // terrain clipping risk as Wander/Grind if the approach happens to cross an incline.
-        return TryMoveToValidatedPoint(bot, questGiver->GetPositionX(), questGiver->GetPositionY(), questGiver->GetPositionZ());
+        // Approach via MoveFarTo (obstacle-pathing handoff §5-D2) rather than a bare
+        // TryMoveToValidatedPoint: this was the one raw, fallback-less locomotion call site, so a
+        // failed direct attempt used to leave the bot standing still at an obstacle that tick.
+        // Going through MoveFarTo inherits the same SafeMovement validation plus the D1 progress
+        // guard, the D2 leg-scaled forward-cone stepping-stone fallback, and the shared stuck
+        // accounting every other locomotion site already uses.
+        return MoveFarTo(questGiver->GetPosition());
     }
 
     return InteractWithQuestGiver(questGiver);

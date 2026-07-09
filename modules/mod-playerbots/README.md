@@ -332,9 +332,10 @@ opportunistic nearby pickup.
   `QUEST_OBJECTIVE_ITEM` kill-and-loot drop sources via `Bot/Rpg/QuestItemDropCache` (e.g. scorpid
   workers for "Sting of the Scorpid"). Its always-on hostile search stays hostile-only, so bots
   never grief neutral wildlife they have no quest for. `Playerbots.RpgQuestKillSearchRadius`
-- `NewRpgBaseAction::MoveFarTo` — long-distance travel on top of `SafeMovement`'s validated-path
-  contract, with stuck-detection teleport recovery (depends on the bot-session teleport self-ack
-  fix)
+- `NewRpgBaseAction::MoveFarTo` — travel on top of `SafeMovement`'s validated-path contract, with
+  stuck-detection teleport recovery (depends on the bot-session teleport self-ack fix); short and
+  far legs share one progress-guarded attempt + leg-scaled forward-cone fallback (see *Bot obstacle
+  pathing* below)
 - `OrganizeQuestLog` — drops greyed-out/incapable/failed quests when the log is nearly full,
   same 3-pass AC contract
 - `.playerbot status` surfaces each bot's live RPG status string + quest accept/reward/complete/
@@ -401,6 +402,33 @@ playtest diagnosis — giver ping-pong + stealth-quest stalls):
   `UseQuestObjectAction` gather path.
 
 Handoff: [`playerbots-rpg-quest-convergence-fixes-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-rpg-quest-convergence-fixes-handoff.md).
+
+## Bot obstacle pathing (D0–D2)
+
+Extends `MoveFarTo`'s AC-shaped obstacle convergence — commit-validated-partial-progress +
+forward-cone stepping-stone resampling — from the far (> 70 yd) branch down to **short legs**,
+where local obstacles (e.g. the Valley of Trials Den bonfire between Kaltunk and Gornek) actually
+sit. Every fix routes *around* an obstacle by finding a better **validated** move; the ⭐
+standing-watch `SafeMovement` slope/path-type contract is untouched (never relaxed).
+
+- **D0 — rejection instrumentation.** `SafeMovement` logs (debug-only, `playerbots` logger) which
+  gate refuses a move — path-type, slope, or low-progress `PATHFIND_INCOMPLETE` — with the leg
+  length, so a playtest can *see* which mechanism fires at an obstacle instead of guessing.
+- **D1 — short-leg progress guard.** `MoveFarTo`'s short branch used to accept a zero-progress
+  `PATHFIND_INCOMPLETE` route (endpoint at the bot's own feet) as success, burning the tick
+  standing still. It now requires a leg-scaled minimum gain (1 yd on short approach legs, AC's 5 yd
+  on far legs) and falls through on failure.
+- **D2 — leg-scaled cone fallback.** A failed short leg now reaches the same forward-cone
+  stepping-stone sampler the far branch uses (2 samples, ±π/2, each fully SafeMovement-validated),
+  with the sample distance scaled to the leg (`min(PATH_FINDER_DIS, disToDest)`) so an ~18 yd
+  obstacle leg samples ~9–18 yd stones, not 35–70 yd overshoots — far-branch behavior unchanged.
+  `QuestGiverAction`'s giver approach now routes through `MoveFarTo` too (was the one raw,
+  fallback-less locomotion call site), inheriting D1/D2 and the shared stuck accounting. WANDER_NPC
+  / DO_QUEST callers already used `MoveFarTo`, so their blind 360° `MoveRandomNear` nudge is now the
+  last tier behind a directed recovery.
+
+Handoff: [`playerbots-bot-obstacle-pathing-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-bot-obstacle-pathing-handoff.md);
+extends the ⭐ standing-watch [`playerbots-bot-wander-ground-clip-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-bot-wander-ground-clip-handoff.md).
 
 ## Quest loot + object interaction
 
