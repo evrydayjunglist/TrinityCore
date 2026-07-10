@@ -25,6 +25,7 @@
 #include "Random.h"
 #include "RandomPlayerbotMgr.h"
 #include "WorldPacket.h"
+#include <algorithm>
 #include <unordered_map>
 
 namespace
@@ -50,6 +51,8 @@ std::string const* LookupPacketSignal(uint32 opcode)
 // still poll-readable (handoff § 7). Small: signals are drained every tick, so this only ever
 // fills if a bot is somehow not ticking.
 constexpr size_t BOT_SIGNAL_QUEUE_MAX = 32;
+constexpr size_t BOT_SIGNAL_PENDING_MAX = 32;
+constexpr uint8 BOT_SIGNAL_TTL_TICKS = 3;
 }
 
 BotPlayerbotAI::BotPlayerbotAI(Player* bot) : PlayerbotAIBase(bot)
@@ -118,34 +121,68 @@ void BotPlayerbotAI::HandleBotOutgoingPacket(WorldPacket const& packet)
                 GetBot() ? GetBot()->GetName() : "?");
     }
     _signalQueue.push_back(*signalName);
+    if (Playerbots::GetLogLevel() >= 1)
+        TC_LOG_DEBUG("playerbots", "BotPlayerbotAI queued signal '{}' for bot {}",
+            *signalName, GetBot() ? GetBot()->GetName() : "?");
 }
 
 bool BotPlayerbotAI::ConsumeSignal(std::string const& name)
 {
-    auto itr = _firedSignals.find(name);
-    if (itr == _firedSignals.end())
+    auto itr = std::ranges::find_if(_pendingSignals, [&name](PendingSignal const& signal)
+    {
+        return signal.Name == name;
+    });
+
+    if (itr == _pendingSignals.end())
         return false;
 
-    _firedSignals.erase(itr);
+    _pendingSignals.erase(itr);
     return true;
 }
 
 void BotPlayerbotAI::UpdateAIInternal(uint32 diff)
 {
     // Drain the packet-observation signals captured on sender threads since the last tick. Swap the
-    // queue out under the lock (tiny critical section), then rebuild the per-tick fired set outside
-    // it. From here on everything is single-threaded on the bot's own tick (handoff § 5.4). Signals
-    // live for exactly one tick — a consume-on-read SignalTrigger claims theirs during DoNextAction.
+    // queue out under the lock (tiny critical section), then append to the tick-thread pending list
+    // outside it. From here on everything is single-threaded on the bot's own tick (handoff § 5.4).
+    // Signals persist briefly: Engine::DoNextAction can return early while GCD is active, before
+    // ProcessTriggers runs, so a one-tick fired set can lose the signal before SignalTrigger sees it.
     std::vector<std::string> drained;
     {
         std::lock_guard<std::mutex> lock(_signalMutex);
         drained.swap(_signalQueue);
     }
 
-    _firedSignals.clear();
     for (std::string& name : drained)
-        _firedSignals.insert(std::move(name));
+    {
+        if (_pendingSignals.size() >= BOT_SIGNAL_PENDING_MAX)
+        {
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots", "BotPlayerbotAI pending signal overflow (dropped oldest) for bot {}",
+                    GetBot() ? GetBot()->GetName() : "?");
+
+            _pendingSignals.erase(_pendingSignals.begin());
+        }
+
+        _pendingSignals.push_back({ std::move(name), BOT_SIGNAL_TTL_TICKS });
+    }
 
     if (_engine)
         _engine->DoNextAction(diff);
+
+    for (auto itr = _pendingSignals.begin(); itr != _pendingSignals.end();)
+    {
+        if (itr->TicksRemaining > 1)
+        {
+            --itr->TicksRemaining;
+            ++itr;
+            continue;
+        }
+
+        if (Playerbots::GetLogLevel() >= 1)
+            TC_LOG_DEBUG("playerbots", "BotPlayerbotAI expired signal '{}' for bot {}",
+                itr->Name, GetBot() ? GetBot()->GetName() : "?");
+
+        itr = _pendingSignals.erase(itr);
+    }
 }

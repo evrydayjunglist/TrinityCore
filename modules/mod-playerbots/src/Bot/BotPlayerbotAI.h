@@ -85,13 +85,20 @@ private:
     std::unordered_set<uint32> _lowPriorityQuest;
     std::unordered_set<uint32> _unactionableQuest;
 
+    struct PendingSignal
+    {
+        std::string Name;
+        uint8 TicksRemaining = 0;
+    };
+
     // Cross-thread signal handoff. _signalQueue is written by HandleBotOutgoingPacket on sender
-    // threads and drained (swapped out) at the top of each tick under _signalMutex; _firedSignals
-    // is the per-tick fired set, only ever touched on the bot's own tick thread (drain + consume),
-    // so it needs no lock of its own.
+    // threads and drained (swapped out) at the top of each tick under _signalMutex. _pendingSignals
+    // is only ever touched on the bot's own tick thread (drain + consume + expire), so it needs no
+    // lock of its own. Signals persist briefly so an engine GCD early-return cannot erase them
+    // before SignalTrigger gets a chance to consume them.
     std::mutex _signalMutex;
     std::vector<std::string> _signalQueue;
-    std::unordered_set<std::string> _firedSignals;
+    std::vector<PendingSignal> _pendingSignals;
 };
 
 #endif
