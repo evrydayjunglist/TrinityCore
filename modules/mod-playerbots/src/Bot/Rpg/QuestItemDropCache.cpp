@@ -19,6 +19,7 @@
 #include "DBCEnums.h"
 #include "Log.h"
 #include "ObjectMgr.h"
+#include <mutex>
 
 QuestItemDropCache* QuestItemDropCache::instance()
 {
@@ -28,17 +29,20 @@ QuestItemDropCache* QuestItemDropCache::instance()
 
 std::unordered_set<uint32> const* QuestItemDropCache::GetDropSources(uint32 itemId)
 {
+    // See _mutex in the header: this singleton is shared across parallel map-update threads.
+    std::lock_guard<std::mutex> guard(_mutex);
+
     if (!_built)
         Build();
 
+    // Safe to hand out past the lock: the index is built once and never mutated after, and
+    // std::unordered_map does not invalidate element pointers on rehash.
     auto itr = _sourcesByItem.find(itemId);
     return itr != _sourcesByItem.end() ? &itr->second : nullptr;
 }
 
 void QuestItemDropCache::Build()
 {
-    _built = true;
-
     // The creature quest-item store has no whole-map accessor, so invert it by iterating the
     // creature templates and querying each entry — a one-shot pass at first use. DIFFICULTY_NONE
     // covers open-world spawns (GetCreatureQuestItemList falls back through the difficulty chain
@@ -60,4 +64,7 @@ void QuestItemDropCache::Build()
 
     TC_LOG_DEBUG("playerbots", "QuestItemDropCache: built {} quest items from {} item-creature pairs",
         uint32(_sourcesByItem.size()), pairs);
+
+    // Mark built only after the index is fully populated (removes the build TOCTOU; caller holds _mutex).
+    _built = true;
 }

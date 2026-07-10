@@ -19,6 +19,7 @@
 #define TRINITY_PLAYERBOT_QUEST_ITEM_DROP_CACHE_H
 
 #include "Define.h"
+#include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -44,6 +45,11 @@ private:
 
     void Build();
 
+    // See Hub/GrindLocationCache: this singleton's lazy build runs from bot AI on parallel MapUpdater
+    // worker threads (GetDropSources ← AttackValidity's quest-kill check), so all access to _built /
+    // _sourcesByItem must be serialised — an unsynchronised unordered_map build/read across threads is
+    // undefined behaviour (a latent freeze/corruption vector).
+    std::mutex _mutex;
     bool _built = false;
     std::unordered_map<uint32, std::unordered_set<uint32>> _sourcesByItem;
 };
