@@ -158,6 +158,9 @@ Core enforces: `Unit::SetAI` **refuses** players on `IsBotSession()` sessions.
 
 Top-level command is **`.playerbot`** (singular).
 
+**Full operator reference** (args, RBAC, constraints, quick-start):
+[`docs/midnight-assessment/playerbots/playerbots-in-game-commands.md`](../../docs/midnight-assessment/playerbots/playerbots-in-game-commands.md).
+
 | Subcommand | AC analogue | This fork |
 |------------|-------------|-----------|
 | `bot` | Master-alt control (`PlayerbotMgr`) | `.playerbot bot add/remove/list/logout` (Gate 7) |
