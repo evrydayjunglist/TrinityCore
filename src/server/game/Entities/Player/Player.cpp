@@ -18643,6 +18643,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     InitTalentForLevel();
     LearnDefaultSkills();
     LearnCustomSpells();
+    LearnSkyridingV1(); // Skyriding V1: auto-grant Skyriding skill/abilities/Vigor on login (retail quest unlock NYI)
 
     _LoadTraits(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_TRAIT_CONFIGS),
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_TRAIT_ENTRIES)); // must be after loading spells
@@ -19095,8 +19096,10 @@ void Player::_LoadAuras(PreparedQueryResult auraResult, PreparedQueryResult effe
         while (auraResult->NextRow());
     }
 
-    // TODO: finish dragonriding - this forces old flight mode
-    AddAura(404468, this);
+    // Skyriding V1 (default to Skyriding): do NOT force "Flight Style: Steady" (404468) here — a
+    // Skyriding-capable mount now drives AdvFlying automatically. The Skyriding skill/abilities and
+    // the Dragonrider Energy (Vigor) aura are granted in LoadFromDB (Player::LearnSkyridingV1). A
+    // Steady<->Skyriding style toggle is a later phase (Phase A). See docs/midnight-assessment/skyriding/.
 }
 
 void Player::_LoadGlyphAuras()
@@ -25246,6 +25249,34 @@ void Player::LearnCustomSpells()
         else                                                // but send in normal spell in game learn case
             LearnSpell(tspell, true);
     }
+}
+
+void Player::LearnSkyridingV1()
+{
+    // Skyriding V1 (Phase V1) — auto-grant on login. Retail teaches these via the Skyriding intro
+    // quest chain; that unlock path is NYI (later phase). This build is data-complete for Skyriding
+    // (FlightCapability / dragonriding MountCapability / abilities all present in DB2), so V1 just:
+    //   - learns "Skyriding Basics" (376777) — required as ReqSpellKnownID by dragonriding MountCapability,
+    //   - learns the core active abilities (Surge Forward / Skyward Ascent / Whirling Surge /
+    //     Aerial Halt / Upward Flap / Second Wind),
+    //   - applies "Dragonrider Energy" (372773) — the Vigor caster-aura every active ability requires
+    //     via SpellAuraRestrictions. Applying it at login is a V1 simplification; the full Vigor
+    //     regen/spend economy (applied while dragonriding) is Phase V (NYI here).
+    // Combined with no longer forcing "Flight Style: Steady" (see _LoadAuras), a Skyriding-capable
+    // mount now drives AdvFlying instead of old flight. See docs/midnight-assessment/skyriding/.
+    constexpr uint32 SKYRIDING_BASICS = 376777;
+    constexpr uint32 DRAGONRIDER_ENERGY = 372773;
+    static constexpr uint32 skyridingAbilities[] = { 372608, 372610, 361584, 403092, 401671, 425782 };
+
+    if (!HasSpell(SKYRIDING_BASICS))
+        LearnSpell(SKYRIDING_BASICS, false);
+
+    for (uint32 abilityId : skyridingAbilities)
+        if (!HasSpell(abilityId))
+            LearnSpell(abilityId, false);
+
+    if (!HasAura(DRAGONRIDER_ENERGY))
+        AddAura(DRAGONRIDER_ENERGY, this);
 }
 
 void Player::LearnDefaultSkills()
