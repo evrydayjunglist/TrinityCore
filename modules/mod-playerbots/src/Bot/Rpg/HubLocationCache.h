@@ -19,6 +19,7 @@
 #define TRINITY_PLAYERBOT_HUB_LOCATION_CACHE_H
 
 #include "Position.h"
+#include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -53,6 +54,13 @@ private:
 
     void BuildForMap(uint32 mapId);
 
+    // Bot AI ticks inside Map::Update on parallel MapUpdater worker threads, and this cache is a
+    // single module-wide instance shared across every map. Without synchronisation, two maps being
+    // first-built concurrently would race on the containers below (unsynchronised std::unordered_map
+    // insert/rehash is undefined behaviour — a latent freeze/corruption vector). All access to
+    // _spotsByMap/_builtMaps goes through this mutex; the build is once-per-map, so after warmup the
+    // lock is uncontended and the per-tick cost is a negligible lock around a find().
+    std::mutex _mutex;
     std::unordered_map<uint32, std::vector<HubSpot>> _spotsByMap;
     std::unordered_set<uint32> _builtMaps;
 };

@@ -22,6 +22,7 @@
 #include "UnitDefines.h"
 #include <cmath>
 #include <map>
+#include <mutex>
 #include <tuple>
 
 namespace
@@ -47,9 +48,15 @@ HubLocationCache* HubLocationCache::instance()
 
 std::vector<HubSpot> const& HubLocationCache::GetSpotsForMap(uint32 mapId)
 {
+    // See _mutex in the header: this singleton is shared across parallel map-update threads.
+    std::lock_guard<std::mutex> guard(_mutex);
+
     if (!_builtMaps.contains(mapId))
         BuildForMap(mapId);
 
+    // Safe to hand out past the lock: a map's entry is built once and never mutated again, and
+    // std::unordered_map does not invalidate element references when another map's entry is later
+    // inserted (rehash only invalidates iterators, not references/pointers to elements).
     static std::vector<HubSpot> const empty;
     auto itr = _spotsByMap.find(mapId);
     return itr != _spotsByMap.end() ? itr->second : empty;
@@ -57,8 +64,6 @@ std::vector<HubSpot> const& HubLocationCache::GetSpotsForMap(uint32 mapId)
 
 void HubLocationCache::BuildForMap(uint32 mapId)
 {
-    _builtMaps.insert(mapId);
-
     std::map<std::tuple<int32, int32, int32>, HubCellAccumulator> cells;
 
     for (auto const& [spawnId, data] : sObjectMgr->GetAllCreatureData())
@@ -102,5 +107,8 @@ void HubLocationCache::BuildForMap(uint32 mapId)
 
     TC_LOG_DEBUG("playerbots", "HubLocationCache: built map {} with {} hub spots", mapId, uint32(spots.size()));
 
+    // Mark built only after the entry is fully populated, so the _builtMaps flag never advertises a
+    // map whose _spotsByMap entry isn't there yet (removes the build TOCTOU; caller holds _mutex).
     _spotsByMap[mapId] = std::move(spots);
+    _builtMaps.insert(mapId);
 }
