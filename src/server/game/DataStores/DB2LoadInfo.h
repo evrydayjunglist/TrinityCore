@@ -4931,7 +4931,7 @@ struct ResearchBranchLoadInfo
     static constexpr DB2FieldMeta Fields[7] =
     {
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = true, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
         { .IsSigned = false, .Type = FT_BYTE, .Name = "ResearchFieldID" },
         { .IsSigned = false, .Type = FT_SHORT, .Name = "CurrencyID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "TextureFileID" },
@@ -4947,7 +4947,7 @@ struct ResearchFieldLoadInfo
     static constexpr DB2FieldMeta Fields[3] =
     {
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = true, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
         { .IsSigned = false, .Type = FT_BYTE, .Name = "Slot" },
     };
 
@@ -4959,8 +4959,8 @@ struct ResearchProjectLoadInfo
     static constexpr DB2FieldMeta Fields[9] =
     {
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = true, .Type = FT_STRING, .Name = "Name" },
-        { .IsSigned = true, .Type = FT_STRING, .Name = "Description" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Description" },
         { .IsSigned = false, .Type = FT_BYTE, .Name = "Rarity" },
         { .IsSigned = true, .Type = FT_INT, .Name = "SpellID" },
         { .IsSigned = false, .Type = FT_SHORT, .Name = "ResearchBranchID" },
@@ -4977,7 +4977,7 @@ struct ResearchSiteLoadInfo
     static constexpr DB2FieldMeta Fields[5] =
     {
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
-        { .IsSigned = true, .Type = FT_STRING, .Name = "Name" },
+        { .IsSigned = false, .Type = FT_STRING, .Name = "Name" },
         { .IsSigned = true, .Type = FT_SHORT, .Name = "MapID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "QuestPOIBlobID" },
         { .IsSigned = false, .Type = FT_INT, .Name = "AreaPOIIconEnum" },
