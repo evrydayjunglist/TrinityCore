@@ -17,6 +17,7 @@
 
 #include "ArchaeologyMgr.h"
 #include "Containers.h"
+#include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "Log.h"
 #include "Timer.h"
@@ -54,6 +55,47 @@ std::vector<ResearchSiteEntry const*> const* ArchaeologyMgr::GetResearchSitesFor
 {
     auto itr = _researchSitesByMap.find(mapId);
     return itr != _researchSitesByMap.end() ? &itr->second : nullptr;
+}
+
+void ArchaeologyMgr::LoadDigSiteData()
+{
+    uint32 oldMSTime = getMSTime();
+
+    _digSiteInfo.clear();
+
+    //                                               0                 1                 2
+    QueryResult result = WorldDatabase.Query("SELECT researchSiteId, researchBranchId, findCount FROM archaeology_dig_site");
+    if (!result)
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 archaeology dig-site branch mappings. DB table `archaeology_dig_site` is empty.");
+        return;
+    }
+
+    uint32 count = 0;
+    do
+    {
+        Field* fields = result->Fetch();
+        uint32 siteId = fields[0].GetUInt32();
+
+        if (!sResearchSiteStore.HasRecord(siteId))
+        {
+            TC_LOG_ERROR("sql.sql", "Table `archaeology_dig_site` has researchSiteId {} with no matching ResearchSite.db2 entry, skipped.", siteId);
+            continue;
+        }
+
+        ArchaeologyDigSiteInfo& info = _digSiteInfo[siteId];
+        info.BranchID = fields[1].GetUInt32();
+        info.FindCount = fields[2].GetUInt8();
+        ++count;
+    } while (result->NextRow());
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} archaeology dig-site branch mappings in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
+}
+
+ArchaeologyDigSiteInfo const* ArchaeologyMgr::GetDigSiteInfo(uint32 researchSiteId) const
+{
+    auto itr = _digSiteInfo.find(researchSiteId);
+    return itr != _digSiteInfo.end() ? &itr->second : nullptr;
 }
 
 std::vector<uint32> ArchaeologyMgr::RollResearchSitesForMap(uint32 mapId, uint32 count) const

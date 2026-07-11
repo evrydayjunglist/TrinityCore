@@ -24,9 +24,19 @@
 
 struct ResearchSiteEntry;
 
+// Per dig site: which research branch its fragments belong to, and how many finds exhaust it.
+// The site->branch theming is not carried by client DB2, so it is fork reference data loaded from
+// the world table `archaeology_dig_site` (seeded from the Archy addon join). See
+// docs/midnight-assessment/archaeology/archaeology-phase1-foundation-handoff.md.
+struct ArchaeologyDigSiteInfo
+{
+    uint32 BranchID = 0;
+    uint8 FindCount = 0;
+};
+
 // Server-side owner of Archaeology (secondary profession) research data loaded from the client
-// DB2 stores. Currently indexes the dig-site pools per continent so active sites can be assigned to
-// players; branch/project indexing and QuestPOIBlob dig-site polygons follow in later sub-slices.
+// DB2 stores. Indexes the dig-site pools per continent so active sites can be assigned to players,
+// and the site->branch reference data. Dig-site polygons (QuestPOIBlob) follow with the survey slice.
 class TC_GAME_API ArchaeologyMgr
 {
     private:
@@ -44,6 +54,10 @@ class TC_GAME_API ArchaeologyMgr
         // Index dig sites (ResearchSite.db2) by map. Call once at startup after DB2 stores load.
         void LoadResearchSites();
 
+        // Load the site->branch reference data from `archaeology_dig_site`. Call after LoadResearchSites
+        // (needs sResearchSiteStore) and once the world DB is available.
+        void LoadDigSiteData();
+
         // Dig-site pool for a continent/map, or nullptr if the map has none.
         std::vector<ResearchSiteEntry const*> const* GetResearchSitesForMap(uint32 mapId) const;
 
@@ -51,8 +65,12 @@ class TC_GAME_API ArchaeologyMgr
         // smaller). Empty if the map has no dig sites.
         std::vector<uint32> RollResearchSitesForMap(uint32 mapId, uint32 count) const;
 
+        // Branch/find-count for a dig site, or nullptr if the site has no mapping.
+        ArchaeologyDigSiteInfo const* GetDigSiteInfo(uint32 researchSiteId) const;
+
     private:
         std::unordered_map<uint32 /*mapId*/, std::vector<ResearchSiteEntry const*>> _researchSitesByMap;
+        std::unordered_map<uint32 /*researchSiteId*/, ArchaeologyDigSiteInfo> _digSiteInfo;
 };
 
 #define sArchaeologyMgr ArchaeologyMgr::instance()
