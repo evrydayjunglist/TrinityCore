@@ -4217,6 +4217,10 @@ void Player::DeleteFromDB(ObjectGuid playerguid, uint32 accountId, bool updateRe
             stmt->setUInt64(0, guid);
             trans->Append(stmt);
 
+            stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_RESEARCH_SITE);
+            stmt->setUInt64(0, guid);
+            trans->Append(stmt);
+
             stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_STATS);
             stmt->setUInt64(0, guid);
             trans->Append(stmt);
@@ -19008,7 +19012,8 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     _LoadSkills(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_SKILLS));
     UpdateSkillsForLevel(); //update skills after load, to make sure they are correctly update at player load
 
-    InitializeResearchSites(); // Archaeology: seed active dig sites once skills are known (Phase 1 slice)
+    _LoadResearchSites(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_RESEARCH_SITES)); // Archaeology: restore persisted dig sites
+    InitializeResearchSites(); // Archaeology: seed active dig sites if none persisted and skills are known (Phase 1 slice)
 
     SetNumRespecs(fields.numRespecs);
     SetPrimarySpecialization(fields.primarySpecialization);
@@ -21160,6 +21165,7 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     _SaveActions(trans);
     _SaveAuras(trans);
     _SaveSkills(trans);
+    _SaveResearchSites(trans);
     _SaveStoredAuraTeleportLocations(trans);
     m_achievementMgr->SaveToDB(trans);
     m_reputationMgr->SaveToDB(trans);
@@ -21849,6 +21855,25 @@ void Player::_SaveMonthlyQuestStatus(CharacterDatabaseTransaction trans)
     }
 
     m_MonthlyQuestChanged = false;
+}
+
+void Player::_SaveResearchSites(CharacterDatabaseTransaction trans)
+{
+    // Rewrite the character's active dig sites from the ResearchSites / ResearchSiteProgress update
+    // fields (delete-all + reinsert; the set is small and always rewritten together).
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_RESEARCH_SITE);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    trans->Append(stmt);
+
+    uint32 const count = m_activePlayerData->ResearchSites[0].size();
+    for (uint32 i = 0; i < count; ++i)
+    {
+        stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_RESEARCH_SITE);
+        stmt->setUInt64(0, GetGUID().GetCounter());
+        stmt->setUInt16(1, m_activePlayerData->ResearchSites[0][i]);
+        stmt->setUInt32(2, m_activePlayerData->ResearchSiteProgress[0][i]);
+        trans->Append(stmt);
+    }
 }
 
 void Player::_SaveSkills(CharacterDatabaseTransaction trans)
@@ -27643,6 +27668,24 @@ void Player::StoreLootItem(ObjectGuid lootWorldObjectGuid, uint8 lootSlot, Loot*
     // LootItem is being removed (looted) from the container, delete it from the DB.
     if (loot->loot_type == LOOT_ITEM)
         sLootItemStorage->RemoveStoredLootItemForContainer(lootWorldObjectGuid.GetCounter(), item->type, item->itemid, item->count, item->LootListId);
+}
+
+void Player::_LoadResearchSites(PreparedQueryResult result)
+{
+    // Restore persisted active dig sites into the ResearchSites / ResearchSiteProgress update fields.
+    // SELECT researchSiteId, progress FROM character_research_site WHERE guid = ?
+    if (!result)
+        return;
+
+    do
+    {
+        Field* fields = result->Fetch();
+        uint16 siteId = fields[0].GetUInt16();
+        uint32 progress = fields[1].GetUInt32();
+
+        AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSites, 0).ModifyValue()) = siteId;
+        AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSiteProgress, 0).ModifyValue()) = progress;
+    } while (result->NextRow());
 }
 
 void Player::InitializeResearchSites()
