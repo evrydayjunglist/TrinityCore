@@ -21,6 +21,7 @@
 #include "AccountMgr.h"
 #include "AccountCurrencyMgr.h"
 #include "AchievementMgr.h"
+#include "ArchaeologyMgr.h"
 #include "ArenaTeam.h"
 #include "ArenaTeamMgr.h"
 #include "AzeriteEmpoweredItem.h"
@@ -19007,6 +19008,8 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     _LoadSkills(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_SKILLS));
     UpdateSkillsForLevel(); //update skills after load, to make sure they are correctly update at player load
 
+    InitializeResearchSites(); // Archaeology: seed active dig sites once skills are known (Phase 1 slice)
+
     SetNumRespecs(fields.numRespecs);
     SetPrimarySpecialization(fields.primarySpecialization);
     SetActiveTalentGroup(fields.activeTalentGroup);
@@ -27640,6 +27643,29 @@ void Player::StoreLootItem(ObjectGuid lootWorldObjectGuid, uint8 lootSlot, Loot*
     // LootItem is being removed (looted) from the container, delete it from the DB.
     if (loot->loot_type == LOOT_ITEM)
         sLootItemStorage->RemoveStoredLootItemForContainer(lootWorldObjectGuid.GetCounter(), item->type, item->itemid, item->count, item->LootListId);
+}
+
+void Player::InitializeResearchSites()
+{
+    // Archaeology (from the ground up) - Phase 1 Cataclysm vertical slice: seed active dig sites for
+    // Eastern Kingdoms (0) and Kalimdor (1) only. Later phases extend to the other continents retail
+    // assigns (Draenor/Legion/Zandalar/Kul Tiras). Per-continent active count 4 (retail 68453 sniff
+    // observed 4-5 per continent).
+    if (!HasSkill(SKILL_ARCHAEOLOGY))
+        return;
+
+    // Only seed when the character has no active sites yet; persistence lands in a later sub-slice.
+    if (!m_activePlayerData->ResearchSites[0].empty())
+        return;
+
+    for (uint32 mapId : { 0u, 1u })
+    {
+        for (uint32 siteId : sArchaeologyMgr->RollResearchSitesForMap(mapId, 4))
+        {
+            AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSites, 0).ModifyValue()) = uint16(siteId);
+            AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSiteProgress, 0).ModifyValue()) = 0u;
+        }
+    }
 }
 
 void Player::_LoadSkills(PreparedQueryResult result)
