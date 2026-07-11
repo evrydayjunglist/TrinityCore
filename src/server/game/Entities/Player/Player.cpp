@@ -25684,9 +25684,9 @@ void Player::LearnSkyridingV1()
     //   - learns "Skyriding Basics" (376777) — required as ReqSpellKnownID by dragonriding MountCapability,
     //   - learns the core active abilities (Surge Forward / Skyward Ascent / Whirling Surge /
     //     Aerial Halt / Upward Flap / Second Wind),
-    //   - applies "Dragonrider Energy" (372773) — the Vigor caster-aura every active ability requires
-    //     via SpellAuraRestrictions. Applying it at login is a V1 simplification; the full Vigor
-    //     regen/spend economy (applied while dragonriding) is Phase V (NYI here).
+    //   - applies effect 0 of "Dragonrider Energy" (372773) — the caster-aura every active ability
+    //     requires via SpellAuraRestrictions. Midnight does not apply the obsolete periodic Vigor
+    //     effect 1; its resource economy is SpellCategory 2391's six shared charges.
     // Combined with no longer forcing "Flight Style: Steady" (see _LoadAuras), a Skyriding-capable
     // mount now drives AdvFlying instead of old flight. See docs/midnight-assessment/skyriding/.
     constexpr uint32 SKYRIDING_BASICS = 376777;
@@ -25701,7 +25701,8 @@ void Player::LearnSkyridingV1()
             LearnSpell(abilityId, false);
 
     if (!HasAura(DRAGONRIDER_ENERGY))
-        AddAura(DRAGONRIDER_ENERGY, this);
+        if (SpellInfo const* dragonriderEnergy = sSpellMgr->GetSpellInfo(DRAGONRIDER_ENERGY, GetMap()->GetDifficultyID()))
+            AddAura(dragonriderEnergy, 1u << EFFECT_0, this);
 }
 
 void Player::LearnDefaultSkills()
