@@ -9021,6 +9021,18 @@ void Unit::SetFlightCapabilityID(int32 flightCapabilityId, bool clientUpdate)
     UpdateAdvFlyingSpeed(ADV_FLYING_LAUNCH_SPEED_COEFFICIENT, clientUpdate);
 }
 
+void Unit::AddMoveImpulse(Position const& direction)
+{
+    if (Player const* movingPlayer = GetPlayerMovingMe())
+    {
+        WorldPackets::Movement::MoveAddImpulse packet;
+        packet.MoverGUID = GetGUID();
+        packet.SequenceIndex = m_movementCounter++;
+        packet.Direction = direction;
+        movingPlayer->SendDirectMessage(packet.Write());
+    }
+}
+
 void Unit::UpdateAdvFlyingSpeed(AdvFlyingRateTypeSingle speedType, bool clientUpdate)
 {
     FlightCapabilityEntry const* flightCapabilityEntry = sFlightCapabilityStore.LookupEntry(GetFlightCapabilityID());

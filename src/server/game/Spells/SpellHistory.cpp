@@ -311,23 +311,44 @@ void SpellHistory::WritePacket(WorldPackets::Spells::SendSpellHistory* sendSpell
 
 void SpellHistory::WritePacket(WorldPackets::Spells::SendSpellCharges* sendSpellCharges) const
 {
-    sendSpellCharges->Entries.reserve(_categoryCharges.size());
-
-    TimePoint now = time_point_cast<Duration>(GameTime::GetTime<Clock>());
-    for (auto const& [categoryId, consumedCharges] : _categoryCharges)
+    std::set<uint32> chargeCategories;
+    if (Player const* playerOwner = _owner->ToPlayer())
     {
-        if (!consumedCharges.empty())
+        for (auto const& [spellId, playerSpell] : playerOwner->GetSpellMap())
         {
-            Milliseconds cooldownDuration = duration_cast<Milliseconds>(consumedCharges.front().RechargeEnd - now);
-            if (cooldownDuration.count() <= 0)
+            if (playerSpell.state == PLAYERSPELL_REMOVED || playerSpell.disabled)
                 continue;
 
-            WorldPackets::Spells::SpellChargeEntry chargeEntry;
-            chargeEntry.Category = categoryId;
-            chargeEntry.NextRecoveryTime = uint32(cooldownDuration.count());
-            chargeEntry.ConsumedCharges = uint8(consumedCharges.size());
-            sendSpellCharges->Entries.push_back(chargeEntry);
+            if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId, _owner->GetMap()->GetDifficultyID()))
+                if (spellInfo->ChargeCategoryId && GetMaxCharges(spellInfo->ChargeCategoryId) > 0)
+                    chargeCategories.insert(spellInfo->ChargeCategoryId);
         }
+    }
+
+    for (auto const& [categoryId, consumedCharges] : _categoryCharges)
+        chargeCategories.insert(categoryId);
+
+    sendSpellCharges->Entries.reserve(chargeCategories.size());
+
+    TimePoint now = time_point_cast<Duration>(GameTime::GetTime<Clock>());
+    for (uint32 categoryId : chargeCategories)
+    {
+        WorldPackets::Spells::SpellChargeEntry chargeEntry;
+        chargeEntry.Category = categoryId;
+
+        auto consumedChargesItr = _categoryCharges.find(categoryId);
+        if (consumedChargesItr != _categoryCharges.end() && !consumedChargesItr->second.empty())
+        {
+            std::deque<ChargeEntry> const& consumedCharges = consumedChargesItr->second;
+            Milliseconds cooldownDuration = duration_cast<Milliseconds>(consumedCharges.front().RechargeEnd - now);
+            if (cooldownDuration.count() > 0)
+            {
+                chargeEntry.NextRecoveryTime = uint32(cooldownDuration.count());
+                chargeEntry.ConsumedCharges = uint8(consumedCharges.size());
+            }
+        }
+
+        sendSpellCharges->Entries.push_back(chargeEntry);
     }
 }
 
