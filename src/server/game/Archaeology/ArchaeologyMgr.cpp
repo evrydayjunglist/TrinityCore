@@ -21,6 +21,7 @@
 #include "DB2Stores.h"
 #include "Log.h"
 #include "Timer.h"
+#include <algorithm>
 
 ArchaeologyMgr::ArchaeologyMgr() = default;
 ArchaeologyMgr::~ArchaeologyMgr() = default;
@@ -92,10 +93,64 @@ void ArchaeologyMgr::LoadDigSiteData()
     TC_LOG_INFO("server.loading", ">> Loaded {} archaeology dig-site branch mappings in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
 }
 
+void ArchaeologyMgr::LoadDigSitePoints()
+{
+    uint32 oldMSTime = getMSTime();
+
+    //                                               0               1     2
+    QueryResult result = WorldDatabase.Query("SELECT researchSiteId, posX, posY FROM archaeology_dig_site_point ORDER BY researchSiteId, idx");
+    if (!result)
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 archaeology dig-site polygons. DB table `archaeology_dig_site_point` is empty.");
+        return;
+    }
+
+    uint32 points = 0, sites = 0;
+    do
+    {
+        Field* fields = result->Fetch();
+        uint32 siteId = fields[0].GetUInt32();
+
+        auto itr = _digSiteInfo.find(siteId);
+        if (itr == _digSiteInfo.end())
+        {
+            TC_LOG_ERROR("sql.sql", "Table `archaeology_dig_site_point` has researchSiteId {} with no branch mapping in `archaeology_dig_site`, skipped.", siteId);
+            continue;
+        }
+
+        if (itr->second.Polygon.empty())
+            ++sites;
+
+        itr->second.Polygon.emplace_back(fields[1].GetFloat(), fields[2].GetFloat());
+        ++points;
+    } while (result->NextRow());
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} archaeology dig-site polygons ({} points) in {} ms", sites, points, GetMSTimeDiffToNow(oldMSTime));
+}
+
 ArchaeologyDigSiteInfo const* ArchaeologyMgr::GetDigSiteInfo(uint32 researchSiteId) const
 {
     auto itr = _digSiteInfo.find(researchSiteId);
     return itr != _digSiteInfo.end() ? &itr->second : nullptr;
+}
+
+bool ArchaeologyMgr::IsInsideDigSite(uint32 researchSiteId, float x, float y) const
+{
+    ArchaeologyDigSiteInfo const* info = GetDigSiteInfo(researchSiteId);
+    if (!info || info->Polygon.size() < 3)
+        return false;
+
+    // Standard ray-casting point-in-polygon test on the world X/Y boundary.
+    std::vector<std::pair<float, float>> const& poly = info->Polygon;
+    bool inside = false;
+    for (std::size_t i = 0, j = poly.size() - 1; i < poly.size(); j = i++)
+    {
+        float xi = poly[i].first, yi = poly[i].second;
+        float xj = poly[j].first, yj = poly[j].second;
+        if (((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi))
+            inside = !inside;
+    }
+    return inside;
 }
 
 std::vector<uint32> ArchaeologyMgr::RollResearchSitesForMap(uint32 mapId, uint32 count) const
@@ -107,6 +162,11 @@ std::vector<uint32> ArchaeologyMgr::RollResearchSitesForMap(uint32 mapId, uint32
         return result;
 
     std::vector<ResearchSiteEntry const*> picks = *pool;
+    // Only assign sites we can fully drive (branch mapping + boundary polygon), so every active site
+    // the player receives is surveyable. Unmapped sites (e.g. Archy gaps) are skipped for now.
+    picks.erase(std::remove_if(picks.begin(), picks.end(),
+        [this](ResearchSiteEntry const* site) { return !GetDigSiteInfo(site->ID); }), picks.end());
+
     if (picks.size() > count)
         Trinity::Containers::RandomResize(picks, count);
 

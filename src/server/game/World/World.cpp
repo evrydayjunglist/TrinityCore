@@ -1601,6 +1601,7 @@ bool World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading Archaeology research data...");
     sArchaeologyMgr->LoadResearchSites();
     sArchaeologyMgr->LoadDigSiteData();
+    sArchaeologyMgr->LoadDigSitePoints();
 
     TC_LOG_INFO("server.loading", "Loading Quests Starters and Enders...");
     sObjectMgr->LoadQuestStartersAndEnders();                    // must be after quest load

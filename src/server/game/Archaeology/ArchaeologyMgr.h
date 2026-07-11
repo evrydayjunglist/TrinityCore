@@ -20,6 +20,7 @@
 
 #include "Define.h"
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 struct ResearchSiteEntry;
@@ -32,6 +33,7 @@ struct ArchaeologyDigSiteInfo
 {
     uint32 BranchID = 0;
     uint8 FindCount = 0;
+    std::vector<std::pair<float, float>> Polygon; // dig-site boundary, world X/Y vertices in order
 };
 
 // Server-side owner of Archaeology (secondary profession) research data loaded from the client
@@ -57,6 +59,12 @@ class TC_GAME_API ArchaeologyMgr
         // Load the site->branch reference data from `archaeology_dig_site`. Call after LoadResearchSites
         // (needs sResearchSiteStore) and once the world DB is available.
         void LoadDigSiteData();
+
+        // Load dig-site boundary polygons from `archaeology_dig_site_point`. Call after LoadDigSiteData.
+        void LoadDigSitePoints();
+
+        // True if the world position (x, y) is inside the dig site's boundary polygon.
+        bool IsInsideDigSite(uint32 researchSiteId, float x, float y) const;
 
         // Dig-site pool for a continent/map, or nullptr if the map has none.
         std::vector<ResearchSiteEntry const*> const* GetResearchSitesForMap(uint32 mapId) const;
