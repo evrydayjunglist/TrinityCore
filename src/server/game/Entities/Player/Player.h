@@ -2449,6 +2449,10 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void UpdateSkillsForLevel();
         void ModifySkillBonus(uint32 skillid, int32 val, bool talent);
 
+        // Archaeology: seed active dig sites into the ResearchSites update fields on login when the
+        // player knows the profession and has none yet (Phase 1 Cataclysm vertical slice).
+        void InitializeResearchSites();
+
         /*********************************************************/
         /***                  PVP SYSTEM                       ***/
         /*********************************************************/
