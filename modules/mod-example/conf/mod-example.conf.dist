@@ -1,0 +1,13 @@
+###############################################################################
+# Example module
+#
+# Copied to bin/.../modules/mod-example.conf.dist at build time.
+# Override with modules/mod-example.conf beside worldserver.exe (not overwritten).
+###############################################################################
+
+[mod-example]
+
+#
+# Logs a startup confirmation when enabled.
+#
+Example.Enable = 0

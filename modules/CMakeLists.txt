@@ -180,6 +180,11 @@ target_include_directories(modules
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR})
 
+# Allow modules to extend their own build configuration without naming them here.
+foreach(MODULE ${MODULE_LIST})
+  include("${CMAKE_SOURCE_DIR}/modules/${MODULE}/${MODULE}.cmake" OPTIONAL)
+endforeach()
+
 set_target_properties(modules
   PROPERTIES
     COMPILE_WARNING_AS_ERROR ${WITH_WARNINGS_AS_ERRORS}
@@ -213,12 +218,6 @@ if(DISABLED_MODULE_PROJECTS)
       endif()
     endforeach()
   ")
-endif()
-
-ModuleNameToVariable(mod-playerbots MODULE_MOD_PLAYERBOTS_VARIABLE)
-    if(${MODULE_MOD_PLAYERBOTS_VARIABLE} STREQUAL "static")
-  target_compile_definitions(database PUBLIC WITH_PLAYERBOTS)
-  target_link_libraries(modules PRIVATE database)
 endif()
 
 message("")

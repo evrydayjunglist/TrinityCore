@@ -1,0 +1,5 @@
+ModuleNameToVariable(mod-playerbots MODULE_MOD_PLAYERBOTS_VARIABLE)
+if(${MODULE_MOD_PLAYERBOTS_VARIABLE} STREQUAL "static")
+  target_compile_definitions(database PUBLIC WITH_PLAYERBOTS)
+  target_link_libraries(modules PRIVATE database)
+endif()
