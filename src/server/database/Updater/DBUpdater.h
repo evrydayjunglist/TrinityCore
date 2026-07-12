@@ -20,8 +20,11 @@
 
 #include "Define.h"
 #include "DatabaseEnvFwd.h"
+#include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <vector>
 
 template <class T>
 class DatabaseWorkerPool;
@@ -75,9 +78,14 @@ public:
 
     static std::string GetUpdateSourceDirectory();
 
+    static std::string_view GetModuleDatabaseName();
+
+    static std::vector<Path> GetModuleUpdateDirectories(Path const& sourceDirectory,
+        std::span<std::string const> moduleNames);
+
     static bool Create(DatabaseWorkerPool<T>& pool);
 
-    static bool Update(DatabaseWorkerPool<T>& pool);
+    static bool Update(DatabaseWorkerPool<T>& pool, std::span<std::string const> moduleNames = {});
 
     static bool Populate(DatabaseWorkerPool<T>& pool);
 
