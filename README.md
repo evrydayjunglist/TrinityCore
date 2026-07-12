@@ -44,7 +44,7 @@ This is an active development fork, not an official TrinityCore distribution.
 - `MODULES=none`, `static`, and `dynamic` build modes.
 - Flat runtime module configuration with user overrides preserved across builds.
 - Configuration reload support for module-owned settings.
-- Deterministic module SQL updates for the existing auth, characters, and world databases.
+- Deterministic auth, characters, and world SQL updates from enabled static or dynamic modules.
 - Dynamic-module loading through TrinityCore's existing script reload lifecycle, including
   replacement reload, unload/reload, duplicate-name rejection, and revision diagnostics.
 
