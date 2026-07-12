@@ -43,6 +43,7 @@ TC_MODULE_API char const* GetScriptModule()
 
 #else
 #  include "ModulesScriptLoader.h"
+#  include <array>
 #  define TC_MODULE_API
 #endif
 
@@ -50,6 +51,16 @@ TC_MODULE_API char const* GetScriptModule()
 TC_MODULE_API void AddModulesScripts()
 {
 @TRINITY_MODULES_INVOKE@}
+
+#ifndef TRINITY_IS_DYNAMIC_MODULELOADER
+std::span<std::string_view const> GetStaticModuleNames()
+{
+    static constexpr std::array<std::string_view, @TRINITY_MODULE_COUNT@> moduleNames =
+    {
+@TRINITY_MODULE_NAMES@    };
+    return moduleNames;
+}
+#endif
 
 #ifdef TRINITY_IS_DYNAMIC_MODULELOADER
 /// Exposed in dynamic module libraries to get the build directive of the module.

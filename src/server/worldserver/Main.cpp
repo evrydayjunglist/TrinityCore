@@ -668,7 +668,7 @@ bool StartDB()
     MySQL::Library_Init();
 
     // Load databases
-    DatabaseLoader loader("server.worldserver", DatabaseLoader::DATABASE_NONE);
+    DatabaseLoader loader("server.worldserver", DatabaseLoader::DATABASE_NONE, GetStaticModuleNames());
     loader
         .AddDatabase(LoginDatabase, "Login")
         .AddDatabase(CharacterDatabase, "Character")
