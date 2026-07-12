@@ -159,6 +159,7 @@
 enum PlayerSpells
 {
     SPELL_EXPERIENCE_ELIMINATED = 206662,
+    SPELL_ARCHAEOLOGY_STANDING_ON_IT = 210837,
 };
 
 static uint32 corpseReclaimDelay[MAX_DEATH_COUNT] = { 30, 60, 120 };
@@ -6191,6 +6192,7 @@ bool Player::UpdatePosition(float x, float y, float z, float orientation, bool t
         SetGroupUpdateFlag(GROUP_UPDATE_FLAG_POSITION);
 
     CheckAreaExplore();
+    _UpdateArchaeologySurveyIndicator();
 
     return true;
 }
@@ -21475,10 +21477,16 @@ void Player::_SaveResearchSites(CharacterDatabaseTransaction trans)
     uint32 const count = m_activePlayerData->ResearchSites[0].size();
     for (uint32 i = 0; i < count; ++i)
     {
+        uint32 const siteId = m_activePlayerData->ResearchSites[0][i];
+        float findX = 0.0f, findY = 0.0f;
+        _EnsureResearchSiteFindLocation(siteId, findX, findY);
+
         stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_RESEARCH_SITE);
         stmt->setUInt64(0, GetGUID().GetCounter());
-        stmt->setUInt16(1, m_activePlayerData->ResearchSites[0][i]);
+        stmt->setUInt16(1, siteId);
         stmt->setUInt32(2, m_activePlayerData->ResearchSiteProgress[0][i]);
+        stmt->setFloat(3, findX);
+        stmt->setFloat(4, findY);
         trans->Append(stmt);
     }
 }
@@ -27320,21 +27328,49 @@ void Player::StoreLootItem(ObjectGuid lootWorldObjectGuid, uint8 lootSlot, Loot*
 
 void Player::HandleArchaeologySurvey()
 {
-    // Retail survey mechanic: casting Survey spawns a survey-tool GameObject that faces the hidden
-    // find, and whose model encodes distance (green = close, yellow = medium, red = far). Walking
-    // toward the green cone and re-surveying homes in on the find; digging it up awards fragments.
-    // GO entries and the distance bands mirror the reference archaeology implementation.
-    constexpr uint32 GO_SURVEY_TOOL_GREEN  = 204272; // < GREEN band: close
-    constexpr uint32 GO_SURVEY_TOOL_YELLOW = 206589; // < YELLOW band: medium
-    constexpr uint32 GO_SURVEY_TOOL_RED    = 206590; // beyond: far
-    constexpr float SURVEY_FIND_DISTANCE   = 10.0f;  // yards to the find that count as a dig (retail ~5)
-    constexpr float SURVEY_GREEN_DISTANCE  = 35.0f;  // within this the tool shows green (close)
-    constexpr float SURVEY_YELLOW_DISTANCE = 85.0f;  // within this yellow (medium); beyond, red (far)
-    constexpr int32 SURVEY_FRAGMENTS_PER_FIND = 5;   // fragments awarded per find; tune via playtest
-    Seconds const SURVEY_TOOL_DURATION = Seconds(15); // how long the survey-tool GO lingers
+    // A successful retail Survey reveals a private, branch-specific lootable find at the hidden
+    // position and advances site progress immediately. Dig/open-lock and fragment award then use the
+    // normal GameObject chest path. Retail 12.0.7.68453 also spawns an approximate red/yellow/green
+    // direction tool on misses and applies Standing On It while the player is over the hidden point.
+    constexpr uint32 SPELL_ARCHAEOLOGY_SURVEY = 80451;
+    constexpr uint32 GO_SURVEY_TOOL_GREEN = 204272;
+    constexpr uint32 GO_SURVEY_TOOL_YELLOW = 206589;
+    constexpr uint32 GO_SURVEY_TOOL_RED = 206590;
+    constexpr float SURVEY_FIND_DISTANCE = 5.0f;
+    constexpr float SURVEY_GREEN_DISTANCE = 35.0f;
+    constexpr float SURVEY_YELLOW_DISTANCE = 85.0f;
+    constexpr Seconds SURVEY_TOOL_DURATION = 5s;
+    constexpr Seconds ARCHAEOLOGY_FIND_DURATION = 2min;
 
     if (!HasSkill(SKILL_ARCHAEOLOGY))
         return;
+
+    // Survey tools occupy the reference implementation's second GameObject slot. Recasting removes
+    // the previous tool before creating its replacement, so stale guidance cannot make a
+    // later cast appear inert.
+    if (GameObject* previousTool = GetMap()->GetGameObject(m_ObjectSlot[1]))
+    {
+        uint32 const entry = previousTool->GetEntry();
+        if (entry == GO_SURVEY_TOOL_GREEN || entry == GO_SURVEY_TOOL_YELLOW || entry == GO_SURVEY_TOOL_RED)
+        {
+            if (previousTool->GetSpellId() == SPELL_ARCHAEOLOGY_SURVEY)
+                previousTool->SetSpellId(0);
+
+            RemoveGameObject(previousTool, true);
+            m_ObjectSlot[1] = ObjectGuid::Empty;
+        }
+    }
+
+    // Only one revealed, unconsumed find may exist for a player. Clear an expired/despawned token
+    // lazily; owned GameObjects are also removed by normal player cleanup.
+    if (_pendingArchaeologyFind)
+    {
+        if (GameObject* pendingFind = GetMap()->GetGameObject(_pendingArchaeologyFind->GameObjectGuid))
+            if (pendingFind->isSpawned())
+                return;
+
+        _pendingArchaeologyFind.reset();
+    }
 
     uint32 const mapId = GetMapId();
     float const px = GetPositionX();
@@ -27375,34 +27411,65 @@ void Player::HandleArchaeologySurvey()
     }
 
     float fx, fy;
-    if (!sArchaeologyMgr->GetFindLocation(siteId, progress, fx, fy))
+    if (!_EnsureResearchSiteFindLocation(siteId, fx, fy))
         return;
 
     float const dist = GetExactDist2d(fx, fy);
-    bool const found = dist <= SURVEY_FIND_DISTANCE;
+    bool found = dist <= SURVEY_FIND_DISTANCE;
 
     if (found)
     {
-        ++progress;
-        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSiteProgress, 0).ModifyValue(siteIndex), progress);
+        uint32 const findGameObjectId = sArchaeologyMgr->GetFindGameObjectId(info->BranchID);
+        if (!findGameObjectId)
+            found = false;
+        else
+        {
+            float fz = GetPositionZ();
+            UpdateGroundPositionZ(fx, fy, fz);
+            float const facing = GetOrientation();
+            if (GameObject* find = SummonGameObject(findGameObjectId, Position(fx, fy, fz, facing),
+                QuaternionData::fromEulerAnglesZYX(facing, 0.0f, 0.0f), ARCHAEOLOGY_FIND_DURATION,
+                GO_SUMMON_TIMED_OR_CORPSE_DESPAWN, GetGUID()))
+            {
+                _pendingArchaeologyFind = PendingArchaeologyFind
+                {
+                    .GameObjectGuid = find->GetGUID(),
+                    .ResearchSiteId = siteId,
+                    .ResearchBranchId = info->BranchID
+                };
 
-        if (ResearchBranchEntry const* branch = sResearchBranchStore.LookupEntry(info->BranchID))
-            ModifyCurrency(branch->CurrencyID, SURVEY_FRAGMENTS_PER_FIND);
+                ++progress;
+                SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSiteProgress, 0).ModifyValue(siteIndex), progress);
+                RemoveAurasDueToSpell(SPELL_ARCHAEOLOGY_STANDING_ON_IT);
 
-        // Give the branch a current research project the first time the player finds fragments for it,
-        // so the Archaeology UI shows the artifact being assembled and the fragment progress.
-        EnsureResearchProject(info->BranchID);
+                // Progress advances at reveal on retail. Generate and retain the next point now so
+                // relog/restart cannot relocate an in-progress site's hidden find.
+                if (progress < info->FindCount)
+                {
+                    _researchSiteFindLocations.erase(siteId);
+                    float nextX, nextY;
+                    _EnsureResearchSiteFindLocation(siteId, nextX, nextY);
+                }
+            }
+            else
+                found = false;
+        }
     }
-    else
+    if (!found)
     {
-        // Guidance: spawn a survey tool at the player, oriented toward the find. Its model tells the
-        // player how close they are (green/yellow/red); its facing tells them which way to go.
         uint32 const toolEntry = dist < SURVEY_GREEN_DISTANCE ? GO_SURVEY_TOOL_GREEN
                                : dist < SURVEY_YELLOW_DISTANCE ? GO_SURVEY_TOOL_YELLOW
                                : GO_SURVEY_TOOL_RED;
-        float const facing = GetAbsoluteAngle(fx, fy);
-        SummonGameObject(toolEntry, Position(px, py, GetPositionZ(), facing),
-            QuaternionData::fromEulerAnglesZYX(facing, 0.0f, 0.0f), SURVEY_TOOL_DURATION);
+        // The captured tools deviate by up to roughly 45 degrees from the exact bearing; they guide
+        // rather than reveal a straight-line coordinate.
+        float const facing = Position::NormalizeOrientation(
+            GetAbsoluteAngle(fx, fy) + frand(-float(M_PI_4), float(M_PI_4)));
+        if (GameObject* tool = SummonGameObject(toolEntry, Position(px, py, GetPositionZ(), facing),
+            QuaternionData::fromEulerAnglesZYX(facing, 0.0f, 0.0f), SURVEY_TOOL_DURATION))
+        {
+            tool->SetSpellId(SPELL_ARCHAEOLOGY_SURVEY);
+            m_ObjectSlot[1] = tool->GetGUID();
+        }
     }
 
     WorldPackets::Archaeology::SurveyCast survey;
@@ -27415,6 +27482,102 @@ void Player::HandleArchaeologySurvey()
     // Exhaust and replace once every find is collected (retail single-slot replacement).
     if (found && progress >= info->FindCount)
         ReplaceResearchSite(siteIndex, mapId);
+}
+
+bool Player::CanUseArchaeologyFind(GameObject const* find) const
+{
+    if (!find || !_pendingArchaeologyFind || !HasSkill(SKILL_ARCHAEOLOGY))
+        return false;
+
+    return _pendingArchaeologyFind->GameObjectGuid == find->GetGUID() &&
+        find->GetOwnerGUID() == GetGUID() &&
+        find->GetPrivateObjectOwner() == GetGUID() &&
+        find->GetEntry() == sArchaeologyMgr->GetFindGameObjectId(_pendingArchaeologyFind->ResearchBranchId);
+}
+
+void Player::OnArchaeologyFindLooted(GameObject* find)
+{
+    if (!CanUseArchaeologyFind(find))
+        return;
+
+    uint32 const branchId = _pendingArchaeologyFind->ResearchBranchId;
+    _pendingArchaeologyFind.reset();
+
+    // The normal chest loot path has already granted the branch currency. Surface the branch's
+    // current project immediately; login initialization remains the disconnect fallback.
+    EnsureResearchProject(branchId);
+}
+
+bool Player::_EnsureResearchSiteFindLocation(uint32 researchSiteId, float& x, float& y)
+{
+    auto itr = _researchSiteFindLocations.find(researchSiteId);
+    if (itr != _researchSiteFindLocations.end() &&
+        sArchaeologyMgr->IsInsideDigSite(researchSiteId, itr->second.first, itr->second.second))
+    {
+        x = itr->second.first;
+        y = itr->second.second;
+        return true;
+    }
+
+    if (!sArchaeologyMgr->GenerateFindLocation(researchSiteId, x, y))
+        return false;
+
+    _researchSiteFindLocations[researchSiteId] = { x, y };
+    return true;
+}
+
+void Player::_UpdateArchaeologySurveyIndicator()
+{
+    constexpr float SURVEY_FIND_DISTANCE = 5.0f;
+
+    bool standingOnFind = false;
+    if (HasSkill(SKILL_ARCHAEOLOGY))
+    {
+        if (_pendingArchaeologyFind)
+        {
+            if (GameObject* find = GetMap()->GetGameObject(_pendingArchaeologyFind->GameObjectGuid))
+            {
+                if (find->isSpawned())
+                {
+                    if (HasAura(SPELL_ARCHAEOLOGY_STANDING_ON_IT))
+                        RemoveAurasDueToSpell(SPELL_ARCHAEOLOGY_STANDING_ON_IT);
+                    return;
+                }
+            }
+
+            _pendingArchaeologyFind.reset();
+        }
+
+        uint32 const mapId = GetMapId();
+        uint32 const siteCount = m_activePlayerData->ResearchSites[0].size();
+        for (uint32 i = 0; i < siteCount; ++i)
+        {
+            uint32 const siteId = m_activePlayerData->ResearchSites[0][i];
+            ResearchSiteEntry const* site = sResearchSiteStore.LookupEntry(siteId);
+            if (!site || site->MapID < 0 || uint32(site->MapID) != mapId ||
+                !sArchaeologyMgr->IsInsideDigSite(siteId, GetPositionX(), GetPositionY()))
+                continue;
+
+            ArchaeologyDigSiteInfo const* info = sArchaeologyMgr->GetDigSiteInfo(siteId);
+            uint32 const progressSize = m_activePlayerData->ResearchSiteProgress[0].size();
+            uint32 const progress = i < progressSize ? m_activePlayerData->ResearchSiteProgress[0][i] : 0;
+            if (!info || progress >= info->FindCount)
+                break;
+
+            float fx, fy;
+            standingOnFind = _EnsureResearchSiteFindLocation(siteId, fx, fy) &&
+                GetExactDist2d(fx, fy) <= SURVEY_FIND_DISTANCE;
+            break;
+        }
+    }
+
+    if (standingOnFind)
+    {
+        if (!HasAura(SPELL_ARCHAEOLOGY_STANDING_ON_IT))
+            CastSpell(this, SPELL_ARCHAEOLOGY_STANDING_ON_IT, true);
+    }
+    else if (HasAura(SPELL_ARCHAEOLOGY_STANDING_ON_IT))
+        RemoveAurasDueToSpell(SPELL_ARCHAEOLOGY_STANDING_ON_IT);
 }
 
 void Player::ReplaceResearchSite(uint32 siteIndex, uint32 mapId)
@@ -27435,14 +27598,18 @@ void Player::ReplaceResearchSite(uint32 siteIndex, uint32 mapId)
     if (!replacement)
         return;
 
+    _researchSiteFindLocations.erase(m_activePlayerData->ResearchSites[0][siteIndex]);
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSites, 0).ModifyValue(siteIndex), uint16(replacement));
     SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSiteProgress, 0).ModifyValue(siteIndex), 0u);
+
+    float x, y;
+    _EnsureResearchSiteFindLocation(replacement, x, y);
 }
 
 void Player::_LoadResearchSites(PreparedQueryResult result)
 {
     // Restore persisted active dig sites into the ResearchSites / ResearchSiteProgress update fields.
-    // SELECT researchSiteId, progress FROM character_research_site WHERE guid = ?
+    // SELECT researchSiteId, progress, findX, findY FROM character_research_site WHERE guid = ?
     if (!result)
         return;
 
@@ -27451,9 +27618,26 @@ void Player::_LoadResearchSites(PreparedQueryResult result)
         Field* fields = result->Fetch();
         uint16 siteId = fields[0].GetUInt16();
         uint32 progress = fields[1].GetUInt32();
+        float findX = fields[2].GetFloat();
+        float findY = fields[3].GetFloat();
+
+        // Older Phase 1 assignments could persist any ResearchSite.db2 row on the continent,
+        // including non-Archaeology overlays such as warfront phases. Do not expose a site the
+        // server cannot drive; InitializeResearchSites replaces the missing slot below.
+        if (!sArchaeologyMgr->IsSurveyableDigSite(siteId))
+        {
+            TC_LOG_WARN("entities.player.loading", "Player::_LoadResearchSites: player ({}, name: '{}') has unsupported research site {}. Replacing it with a surveyable site.",
+                GetGUID().ToString(), GetName(), siteId);
+            continue;
+        }
 
         AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSites, 0).ModifyValue()) = siteId;
         AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSiteProgress, 0).ModifyValue()) = progress;
+
+        if (sArchaeologyMgr->IsInsideDigSite(siteId, findX, findY))
+            _researchSiteFindLocations[siteId] = { findX, findY };
+        else
+            _EnsureResearchSiteFindLocation(siteId, findX, findY);
     } while (result->NextRow());
 }
 
@@ -27466,16 +27650,30 @@ void Player::InitializeResearchSites()
     if (!HasSkill(SKILL_ARCHAEOLOGY))
         return;
 
-    // Only seed when the character has no active sites yet; persistence lands in a later sub-slice.
-    if (!m_activePlayerData->ResearchSites[0].empty())
-        return;
+    std::vector<uint32> activeSites;
+    activeSites.reserve(m_activePlayerData->ResearchSites[0].size() + 8);
+    for (uint16 siteId : m_activePlayerData->ResearchSites[0])
+        activeSites.push_back(siteId);
 
     for (uint32 mapId : { 0u, 1u })
     {
-        for (uint32 siteId : sArchaeologyMgr->RollResearchSitesForMap(mapId, 4))
+        uint32 activeCount = 0;
+        for (uint32 siteId : activeSites)
+            if (ResearchSiteEntry const* site = sResearchSiteStore.LookupEntry(siteId))
+                if (uint32(site->MapID) == mapId)
+                    ++activeCount;
+
+        if (activeCount >= 4)
+            continue;
+
+        for (uint32 siteId : sArchaeologyMgr->RollResearchSitesForMap(mapId, 4 - activeCount, activeSites))
         {
             AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSites, 0).ModifyValue()) = uint16(siteId);
             AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSiteProgress, 0).ModifyValue()) = 0u;
+            activeSites.push_back(siteId);
+
+            float x, y;
+            _EnsureResearchSiteFindLocation(siteId, x, y);
         }
     }
 }
@@ -27557,6 +27755,9 @@ void Player::_LoadResearchProjects(PreparedQueryResult result)
 
 bool Player::CanSolveResearchProjectBySpell(uint32 spellId) const
 {
+    if (!HasSkill(SKILL_ARCHAEOLOGY))
+        return false;
+
     ResearchProjectEntry const* project = sArchaeologyMgr->GetProjectBySpellId(spellId);
     if (!project)
         return false;
@@ -32007,9 +32208,11 @@ void Player::ExecutePendingSpellCastRequest()
             triggerFlag = TRIGGERED_FULL_MASK;
         }
 
-        // allow casting of archaeology research-project solve spells: the research UI casts a project's
-        // own SpellID to solve it, but the player never learns that spell into their spellbook.
-        if (sArchaeologyMgr->GetProjectBySpellId(spellInfo->Id))
+        // The research UI casts a project's own SpellID, which is never learned into the spellbook.
+        // Fail closed unless this exact solve script is enabled and the player's current state permits it;
+        // otherwise the spell's CREATE_ITEM effect could run without the bookkeeping script.
+        if (plrCaster->CanSolveResearchProjectBySpell(spellInfo->Id) &&
+            sObjectMgr->HasEnabledSpellScript(spellInfo->Id, "spell_archaeology_solve"))
             allow = true;
 
         if (!allow)

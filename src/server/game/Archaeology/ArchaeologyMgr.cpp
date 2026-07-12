@@ -19,7 +19,9 @@
 #include "Containers.h"
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
+#include "GameObjectData.h"
 #include "Log.h"
+#include "ObjectMgr.h"
 #include "Random.h"
 #include "Timer.h"
 #include <algorithm>
@@ -94,6 +96,49 @@ void ArchaeologyMgr::LoadDigSiteData()
     TC_LOG_INFO("server.loading", ">> Loaded {} archaeology dig-site branch mappings in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
 }
 
+void ArchaeologyMgr::LoadResearchBranchData()
+{
+    uint32 oldMSTime = getMSTime();
+
+    _findGameObjectsByBranch.clear();
+
+    QueryResult result = WorldDatabase.Query("SELECT researchBranchId, findGameObjectId FROM archaeology_research_branch");
+    if (!result)
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 archaeology research-branch policies. DB table `archaeology_research_branch` is empty.");
+        return;
+    }
+
+    uint32 count = 0;
+    do
+    {
+        Field* fields = result->Fetch();
+        uint32 branchId = fields[0].GetUInt32();
+        uint32 gameObjectId = fields[1].GetUInt32();
+
+        ResearchBranchEntry const* branch = sResearchBranchStore.LookupEntry(branchId);
+        if (!branch || !branch->CurrencyID)
+        {
+            TC_LOG_ERROR("sql.sql", "Table `archaeology_research_branch` has researchBranchId {} with no usable ResearchBranch.db2 entry, skipped.", branchId);
+            continue;
+        }
+
+        GameObjectTemplate const* gameObjectTemplate = sObjectMgr->GetGameObjectTemplate(gameObjectId);
+        if (!gameObjectTemplate || gameObjectTemplate->type != GAMEOBJECT_TYPE_CHEST ||
+            gameObjectTemplate->chest.open != 1859 ||
+            !gameObjectTemplate->GetLootId())
+        {
+            TC_LOG_ERROR("sql.sql", "Table `archaeology_research_branch` maps branch {} to invalid archaeology find GameObject {}, skipped.", branchId, gameObjectId);
+            continue;
+        }
+
+        _findGameObjectsByBranch.emplace(branchId, gameObjectId);
+        ++count;
+    } while (result->NextRow());
+
+    TC_LOG_INFO("server.loading", ">> Loaded {} archaeology research-branch policies in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
+}
+
 void ArchaeologyMgr::LoadDigSitePoints()
 {
     uint32 oldMSTime = getMSTime();
@@ -135,6 +180,12 @@ ArchaeologyDigSiteInfo const* ArchaeologyMgr::GetDigSiteInfo(uint32 researchSite
     return itr != _digSiteInfo.end() ? &itr->second : nullptr;
 }
 
+uint32 ArchaeologyMgr::GetFindGameObjectId(uint32 researchBranchId) const
+{
+    auto itr = _findGameObjectsByBranch.find(researchBranchId);
+    return itr != _findGameObjectsByBranch.end() ? itr->second : 0;
+}
+
 bool ArchaeologyMgr::IsInsideDigSite(uint32 researchSiteId, float x, float y) const
 {
     ArchaeologyDigSiteInfo const* info = GetDigSiteInfo(researchSiteId);
@@ -154,31 +205,45 @@ bool ArchaeologyMgr::IsInsideDigSite(uint32 researchSiteId, float x, float y) co
     return inside;
 }
 
-bool ArchaeologyMgr::GetFindLocation(uint32 researchSiteId, uint32 findIndex, float& x, float& y) const
+bool ArchaeologyMgr::GenerateFindLocation(uint32 researchSiteId, float& x, float& y) const
 {
     ArchaeologyDigSiteInfo const* info = GetDigSiteInfo(researchSiteId);
     if (!info || info->Polygon.size() < 3)
         return false;
 
-    float cx = 0.0f, cy = 0.0f;
+    float minX = info->Polygon.front().first;
+    float maxX = minX;
+    float minY = info->Polygon.front().second;
+    float maxY = minY;
     for (std::pair<float, float> const& p : info->Polygon)
     {
-        cx += p.first;
-        cy += p.second;
+        minX = std::min(minX, p.first);
+        maxX = std::max(maxX, p.first);
+        minY = std::min(minY, p.second);
+        maxY = std::max(maxY, p.second);
     }
-    cx /= info->Polygon.size();
-    cy /= info->Polygon.size();
 
-    // A distinct point per find, kept inside the (roughly convex) dig-site polygon by blending the
-    // centroid toward one vertex. Sufficient for the Phase 1 survey loop; a true in-polygon RNG and
-    // the retail red/yellow/green telescope guidance can follow.
-    std::pair<float, float> const& v = info->Polygon[findIndex % info->Polygon.size()];
-    x = cx + 0.35f * (v.first - cx);
-    y = cy + 0.35f * (v.second - cy);
-    return true;
+    // Rejection sampling over the polygon's bounding box is uniform over the polygon, works for
+    // concave boundaries, and runs only when assigning the next hidden find. Retail carries no fixed
+    // find coordinates in ResearchSite.db2; the generated point is persisted with character state.
+    for (uint32 attempt = 0; attempt < 1000; ++attempt)
+    {
+        x = frand(minX, maxX);
+        y = frand(minY, maxY);
+        if (IsInsideDigSite(researchSiteId, x, y))
+            return true;
+    }
+
+    return false;
 }
 
-std::vector<uint32> ArchaeologyMgr::RollResearchSitesForMap(uint32 mapId, uint32 count) const
+bool ArchaeologyMgr::IsSurveyableDigSite(uint32 researchSiteId) const
+{
+    ArchaeologyDigSiteInfo const* info = GetDigSiteInfo(researchSiteId);
+    return info && info->FindCount && info->Polygon.size() >= 3 && GetFindGameObjectId(info->BranchID);
+}
+
+std::vector<uint32> ArchaeologyMgr::RollResearchSitesForMap(uint32 mapId, uint32 count, std::vector<uint32> const& exclude) const
 {
     std::vector<uint32> result;
 
@@ -190,7 +255,11 @@ std::vector<uint32> ArchaeologyMgr::RollResearchSitesForMap(uint32 mapId, uint32
     // Only assign sites we can fully drive (branch mapping + boundary polygon), so every active site
     // the player receives is surveyable. Unmapped sites (e.g. Archy gaps) are skipped for now.
     picks.erase(std::remove_if(picks.begin(), picks.end(),
-        [this](ResearchSiteEntry const* site) { return !GetDigSiteInfo(site->ID); }), picks.end());
+        [this, &exclude](ResearchSiteEntry const* site)
+        {
+            return !IsSurveyableDigSite(site->ID) ||
+                std::find(exclude.begin(), exclude.end(), site->ID) != exclude.end();
+        }), picks.end());
 
     if (picks.size() > count)
         Trinity::Containers::RandomResize(picks, count);
@@ -212,7 +281,7 @@ uint32 ArchaeologyMgr::RollReplacementSite(uint32 mapId, std::vector<uint32> con
     // sites, so exhausting a site never re-rolls the same one or a duplicate.
     std::vector<uint32> candidates;
     for (ResearchSiteEntry const* site : *pool)
-        if (GetDigSiteInfo(site->ID) && std::find(exclude.begin(), exclude.end(), site->ID) == exclude.end())
+        if (IsSurveyableDigSite(site->ID) && std::find(exclude.begin(), exclude.end(), site->ID) == exclude.end())
             candidates.push_back(site->ID);
 
     if (candidates.empty())

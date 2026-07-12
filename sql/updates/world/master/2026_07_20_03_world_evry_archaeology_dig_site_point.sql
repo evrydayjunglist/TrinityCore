@@ -5,14 +5,14 @@
 -- quest POI polygons in the world DB rather than loading the full QuestPOIPoint DB2. Used by the
 -- Survey effect to test whether the player is inside an active dig site. EK + Kalimdor sites.
 --
-DROP TABLE IF EXISTS `archaeology_dig_site_point`;
-CREATE TABLE `archaeology_dig_site_point` (
+CREATE TABLE IF NOT EXISTS `archaeology_dig_site_point` (
   `researchSiteId` int unsigned NOT NULL DEFAULT '0' COMMENT 'ResearchSite.db2 ID',
   `idx` tinyint unsigned NOT NULL DEFAULT '0' COMMENT 'polygon vertex order',
   `posX` float NOT NULL DEFAULT '0',
   `posY` float NOT NULL DEFAULT '0',
   PRIMARY KEY (`researchSiteId`,`idx`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Archaeology dig site boundary polygons (world coords)';
+DELETE FROM `archaeology_dig_site_point`;
 INSERT INTO `archaeology_dig_site_point` (`researchSiteId`,`idx`,`posX`,`posY`) VALUES
 (9,0,-5698.0000,-4046.0000),
 (9,1,-5647.0000,-4030.0000),

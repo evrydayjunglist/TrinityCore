@@ -2457,9 +2457,13 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void InitializeResearchSites();
 
         // Archaeology: resolve a Survey (spell 80451) cast — if standing in an active dig site, test
-        // the hidden find, award fragments + advance progress on success (else spawn a survey-tool GO
-        // that points toward the find), and reply with the survey result packet.
+        // the hidden find, reveal its private lootable GameObject + advance progress on success, and
+        // reply with the survey result packet.
         void HandleArchaeologySurvey();
+
+        // Archaeology find GameObject guard/callback used by go_archaeology_find.
+        bool CanUseArchaeologyFind(GameObject const* find) const;
+        void OnArchaeologyFindLooted(GameObject* find);
 
         // Archaeology: swap one active dig-site slot for a fresh surveyable site on the same continent
         // (progress reset), used when a site is exhausted or found already complete.
@@ -3182,6 +3186,8 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void _LoadGroup(PreparedQueryResult result);
         void _LoadSkills(PreparedQueryResult result);
         void _LoadResearchSites(PreparedQueryResult result);
+        bool _EnsureResearchSiteFindLocation(uint32 researchSiteId, float& x, float& y);
+        void _UpdateArchaeologySurveyIndicator();
         void _LoadResearchProjects(PreparedQueryResult result);
         void _LoadResearchHistory(PreparedQueryResult result);
         void RecordCompletedProject(uint32 projectId);
@@ -3446,6 +3452,15 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
 
         uint32 _pendingBindId;
         uint32 _pendingBindTimer;
+
+        struct PendingArchaeologyFind
+        {
+            ObjectGuid GameObjectGuid;
+            uint32 ResearchSiteId = 0;
+            uint32 ResearchBranchId = 0;
+        };
+        Optional<PendingArchaeologyFind> _pendingArchaeologyFind;
+        std::unordered_map<uint32 /*researchSiteId*/, std::pair<float, float>> _researchSiteFindLocations;
 
         uint32 _activeCheats;
 

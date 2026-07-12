@@ -15,9 +15,33 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "GameObject.h"
+#include "GameObjectAI.h"
+#include "ObjectAccessor.h"
 #include "ScriptMgr.h"
 #include "Player.h"
 #include "SpellScript.h"
+
+struct go_archaeology_find : public GameObjectAI
+{
+    go_archaeology_find(GameObject* gameObject) : GameObjectAI(gameObject) { }
+
+    bool OnGossipHello(Player* player) override
+    {
+        // Private-object visibility is the first boundary; retain an authoritative owner/token check
+        // in case a stale or forced-visible object is used.
+        return !player->CanUseArchaeologyFind(me);
+    }
+
+    void OnLootStateChanged(uint32 state, Unit* /*unit*/) override
+    {
+        if (state != GO_JUST_DEACTIVATED)
+            return;
+
+        if (Player* owner = ObjectAccessor::GetPlayer(*me, me->GetOwnerGUID()))
+            owner->OnArchaeologyFindLooted(me);
+    }
+};
 
 // 80451 - Survey
 // Archaeology survey: the profession loop lives in Player::HandleArchaeologySurvey; this hook just
@@ -66,6 +90,7 @@ class spell_archaeology_solve : public SpellScript
 
 void AddSC_archaeology_spell_scripts()
 {
+    RegisterGameObjectAI(go_archaeology_find);
     RegisterSpellScript(spell_archaeology_survey);
     RegisterSpellScript(spell_archaeology_solve);
 }
