@@ -305,9 +305,9 @@ Optional<std::shared_ptr<ScriptModule>>
 
 static bool HasValidScriptModuleName(std::string const& name)
 {
-    // Detects scripts_NAME.dll's / .so's
+    // Detects scripts_NAME and modules_NAME native shared libraries.
     static Trinity::regex const regex(
-        Trinity::StringFormat("^{}[sS]cripts_[a-zA-Z0-9_]+\\.{}$",
+        Trinity::StringFormat("^{}([sS]cripts|modules)_[a-zA-Z0-9_]+\\.{}$",
             GetSharedLibraryPrefix(),
             GetSharedLibraryExtension()));
 
@@ -929,10 +929,15 @@ private:
             }
         }
 
-        // Create the source listener
-        auto listener = std::make_unique<SourceUpdateListener>(
-            sScriptReloadMgr->GetSourceDirectory() / module_name,
-            module_name);
+        // Create the source listener only when automatic recompilation is enabled.
+        // Library replacement remains available independently.
+        std::unique_ptr<SourceUpdateListener> listener;
+        if (sWorld->getBoolConfig(CONFIG_HOTSWAP_RECOMPILER_ENABLED))
+        {
+            listener = std::make_unique<SourceUpdateListener>(
+                sScriptReloadMgr->GetSourceDirectory() / module_name,
+                module_name);
+        }
 
         // Store the module
         _known_modules_build_directives.insert(std::make_pair(module_name, (*module)->GetBuildDirective()));

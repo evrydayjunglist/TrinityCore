@@ -36,6 +36,7 @@ namespace
 {
     std::string _filename;
     std::vector<std::string> _additonalFiles;
+    std::string _moduleConfigDir;
     std::vector<std::string> _args;
     bpt::ptree _config;
     std::mutex _configLock;
@@ -198,6 +199,9 @@ bool ConfigMgr::LoadAdditionalDir(std::string const& dir, bool keepOnReload, std
 
 bool ConfigMgr::LoadModuleConfigDir(std::string const& dir, bool keepOnReload, std::vector<std::string>& loadedFiles, std::vector<std::string>& errors)
 {
+    if (keepOnReload)
+        _moduleConfigDir = dir;
+
     fs::path dirPath = dir;
     if (!fs::exists(dirPath) || !fs::is_directory(dirPath))
         return true;
@@ -223,7 +227,7 @@ bool ConfigMgr::LoadModuleConfigDir(std::string const& dir, bool keepOnReload, s
     {
         std::string fileName = configPath.generic_string();
         std::string error;
-        if (LoadAdditionalFile(fileName, keepOnReload, error))
+        if (LoadAdditionalFile(fileName, false, error))
             loadedFiles.push_back(std::move(fileName));
         else
             errors.push_back(std::move(error));
@@ -294,6 +298,12 @@ bool ConfigMgr::Reload(std::vector<std::string>& errors)
     for (std::string const& additionalFile : _additonalFiles)
         if (!LoadAdditionalFile(additionalFile, false, error))
             errors.push_back(std::move(error));
+
+    if (!_moduleConfigDir.empty())
+    {
+        std::vector<std::string> loadedModuleConfigFiles;
+        LoadModuleConfigDir(_moduleConfigDir, false, loadedModuleConfigFiles, errors);
+    }
 
     OverrideWithEnvVariablesIfAny();
 

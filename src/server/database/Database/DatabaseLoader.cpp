@@ -23,8 +23,10 @@
 
 #include <mysqld_error.h>
 
-DatabaseLoader::DatabaseLoader(std::string const& logger, uint32 const defaultUpdateMask)
-    : _logger(logger), _autoSetup(sConfigMgr->GetBoolDefault("Updates.AutoSetup", true)),
+DatabaseLoader::DatabaseLoader(std::string const& logger, uint32 const defaultUpdateMask,
+    std::span<std::string_view const> moduleNames)
+    : _logger(logger), _moduleNames(moduleNames.begin(), moduleNames.end()),
+    _autoSetup(sConfigMgr->GetBoolDefault("Updates.AutoSetup", true)),
     _updateFlags(sConfigMgr->GetIntDefault("Updates.EnableDatabases", defaultUpdateMask))
 {
 }
@@ -96,7 +98,7 @@ DatabaseLoader& DatabaseLoader::AddDatabase(DatabaseWorkerPool<T>& pool, std::st
 
         _update.push([this, name, &pool]() -> bool
         {
-            if (!DBUpdater<T>::Update(pool))
+            if (!DBUpdater<T>::Update(pool, _moduleNames))
             {
                 TC_LOG_ERROR(_logger, "Could not update the {} database, see log for details.", name);
                 return false;

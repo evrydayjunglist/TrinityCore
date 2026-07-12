@@ -91,6 +91,12 @@ bool DBUpdater<LoginDatabaseConnection>::IsEnabled(uint32 const updateMask)
     return (updateMask & DatabaseLoader::DATABASE_LOGIN) ? true : false;
 }
 
+template<>
+std::string_view DBUpdater<LoginDatabaseConnection>::GetModuleDatabaseName()
+{
+    return "auth";
+}
+
 // World Database
 template<>
 std::string DBUpdater<WorldDatabaseConnection>::GetConfigEntry()
@@ -115,6 +121,12 @@ bool DBUpdater<WorldDatabaseConnection>::IsEnabled(uint32 const updateMask)
 {
     // This way silences warnings under msvc
     return (updateMask & DatabaseLoader::DATABASE_WORLD) ? true : false;
+}
+
+template<>
+std::string_view DBUpdater<WorldDatabaseConnection>::GetModuleDatabaseName()
+{
+    return "world";
 }
 
 template<>
@@ -148,6 +160,12 @@ bool DBUpdater<CharacterDatabaseConnection>::IsEnabled(uint32 const updateMask)
 {
     // This way silences warnings under msvc
     return (updateMask & DatabaseLoader::DATABASE_CHARACTER) ? true : false;
+}
+
+template<>
+std::string_view DBUpdater<CharacterDatabaseConnection>::GetModuleDatabaseName()
+{
+    return "characters";
 }
 
 // Hotfix Database
@@ -230,6 +248,29 @@ std::string DBUpdater<T>::GetUpdateSourceDirectory()
 }
 
 template<class T>
+std::string_view DBUpdater<T>::GetModuleDatabaseName()
+{
+    return {};
+}
+
+template<class T>
+std::vector<typename DBUpdater<T>::Path> DBUpdater<T>::GetModuleUpdateDirectories(
+    Path const& sourceDirectory, std::span<std::string const> moduleNames)
+{
+    std::vector<Path> moduleDirectories;
+    std::string_view const moduleDatabaseName = DBUpdater<T>::GetModuleDatabaseName();
+    if (moduleDatabaseName.empty())
+        return moduleDirectories;
+
+    moduleDirectories.reserve(moduleNames.size());
+    for (std::string const& moduleName : moduleNames)
+        moduleDirectories.emplace_back(sourceDirectory / "modules" / moduleName / "data" / "sql" /
+            std::string(moduleDatabaseName));
+
+    return moduleDirectories;
+}
+
+template<class T>
 bool DBUpdater<T>::Create(DatabaseWorkerPool<T>& pool)
 {
     TC_LOG_INFO("sql.updates", "Database \"{}\" does not exist, do you want to create it? [yes (default) / no]: ",
@@ -275,7 +316,7 @@ bool DBUpdater<T>::Create(DatabaseWorkerPool<T>& pool)
 }
 
 template<class T>
-bool DBUpdater<T>::Update(DatabaseWorkerPool<T>& pool)
+bool DBUpdater<T>::Update(DatabaseWorkerPool<T>& pool, std::span<std::string const> moduleNames)
 {
     if (!DBUpdaterUtil::CheckExecutable())
         return false;
@@ -290,7 +331,10 @@ bool DBUpdater<T>::Update(DatabaseWorkerPool<T>& pool)
         return false;
     }
 
-    UpdateFetcher updateFetcher(sourceDirectory, [&](std::string const& query) { DBUpdater<T>::Apply(pool, query); },
+    std::vector<Path> moduleDirectories = DBUpdater<T>::GetModuleUpdateDirectories(sourceDirectory, moduleNames);
+
+    UpdateFetcher updateFetcher(sourceDirectory, std::move(moduleDirectories),
+        [&](std::string const& query) { DBUpdater<T>::Apply(pool, query); },
         [&](Path const& file) { DBUpdater<T>::ApplyFile(pool, file); },
             [&](std::string const& query) -> QueryResult { return DBUpdater<T>::Retrieve(pool, query); });
 
