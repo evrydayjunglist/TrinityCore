@@ -22,6 +22,6 @@
 #include <string_view>
 
 void AddModulesScripts();
-std::span<std::string_view const> GetStaticModuleNames();
+std::span<std::string_view const> GetEnabledModuleNames();
 
 #endif
