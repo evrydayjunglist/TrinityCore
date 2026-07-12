@@ -1007,6 +1007,7 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_SKILLS,
     PLAYER_LOGIN_QUERY_LOAD_RESEARCH_SITES,
     PLAYER_LOGIN_QUERY_LOAD_RESEARCH_PROJECTS,
+    PLAYER_LOGIN_QUERY_LOAD_RESEARCH_HISTORY,
     PLAYER_LOGIN_QUERY_LOAD_WEEKLY_QUEST_STATUS,
     PLAYER_LOGIN_QUERY_LOAD_RANDOM_BG,
     PLAYER_LOGIN_QUERY_LOAD_BANNED,
@@ -2494,6 +2495,15 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         // new project rolls away from repeats.
         std::unordered_set<uint32> GetCompletedResearchProjects() const;
 
+        // Archaeology: true if the player may solve the project whose solve spell is `spellId` — it is
+        // their current project for its branch and they hold enough fragments (keystones not yet used).
+        bool CanSolveResearchProjectBySpell(uint32 spellId) const;
+
+        // Archaeology: complete the project whose solve spell is `spellId` — deduct the fragments,
+        // record the completion in ResearchHistory, roll the branch's next project, and gain skill. The
+        // reward item is created by the solve spell's own effect.
+        void SolveResearchProjectBySpell(uint32 spellId);
+
         /*********************************************************/
         /***                  PVP SYSTEM                       ***/
         /*********************************************************/
@@ -3187,6 +3197,9 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void _LoadSkills(PreparedQueryResult result);
         void _LoadResearchSites(PreparedQueryResult result);
         void _LoadResearchProjects(PreparedQueryResult result);
+        void _LoadResearchHistory(PreparedQueryResult result);
+        void RecordCompletedProject(uint32 projectId);
+        void AdvanceResearchProject(uint32 branchId, uint32 completedProjectId);
         void _LoadSpells(PreparedQueryResult result, PreparedQueryResult favoritesResult);
         void _LoadStoredAuraTeleportLocations(PreparedQueryResult result);
         bool _LoadHomeBind(PreparedQueryResult result);
@@ -3226,6 +3239,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void _SaveSkills(CharacterDatabaseTransaction trans);
         void _SaveResearchSites(CharacterDatabaseTransaction trans);
         void _SaveResearchProjects(CharacterDatabaseTransaction trans);
+        void _SaveResearchHistory(CharacterDatabaseTransaction trans);
         void _SaveSpells(CharacterDatabaseTransaction trans);
         void _SaveStoredAuraTeleportLocations(CharacterDatabaseTransaction trans);
         void _SaveEquipmentSets(CharacterDatabaseTransaction trans);

@@ -255,3 +255,17 @@ uint32 ArchaeologyMgr::RollResearchProject(uint32 branchId, std::unordered_set<u
 
     return Trinity::Containers::SelectRandomContainerElement(pool);
 }
+
+ResearchProjectEntry const* ArchaeologyMgr::GetProjectBySpellId(uint32 spellId) const
+{
+    if (!spellId)
+        return nullptr;
+
+    // Linear scan of the (few hundred) projects. Only reached when a player casts an archaeology solve
+    // spell, so the cost is negligible and avoids maintaining a separate spell->project index.
+    for (ResearchProjectEntry const* project : sResearchProjectStore)
+        if (project->SpellID > 0 && uint32(project->SpellID) == spellId)
+            return project;
+
+    return nullptr;
+}
