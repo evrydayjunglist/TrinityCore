@@ -57,7 +57,7 @@ TC_MODULE_API void AddModulesScripts()
 @TRINITY_MODULES_INVOKE@}
 
 #ifndef TRINITY_IS_DYNAMIC_MODULELOADER
-std::span<std::string_view const> GetStaticModuleNames()
+std::span<std::string_view const> GetEnabledModuleNames()
 {
     static constexpr std::array<std::string_view, @TRINITY_MODULE_COUNT@> moduleNames =
     {
