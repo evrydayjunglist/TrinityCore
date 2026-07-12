@@ -20,6 +20,7 @@
 
 #include "Define.h"
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -66,12 +67,24 @@ class TC_GAME_API ArchaeologyMgr
         // True if the world position (x, y) is inside the dig site's boundary polygon.
         bool IsInsideDigSite(uint32 researchSiteId, float x, float y) const;
 
+        // Deterministic world location of the Nth find at a dig site (a point inside its polygon).
+        // Returns false if the site has no usable polygon.
+        bool GetFindLocation(uint32 researchSiteId, uint32 findIndex, float& x, float& y) const;
+
         // Dig-site pool for a continent/map, or nullptr if the map has none.
         std::vector<ResearchSiteEntry const*> const* GetResearchSitesForMap(uint32 mapId) const;
 
         // Randomly pick up to `count` distinct dig-site IDs from a map's pool (fewer if the pool is
         // smaller). Empty if the map has no dig sites.
         std::vector<uint32> RollResearchSitesForMap(uint32 mapId, uint32 count) const;
+
+        // Pick one random branch-mapped dig site on a map that is not in `exclude` (used to replace an
+        // exhausted site). Returns 0 if none are available.
+        uint32 RollReplacementSite(uint32 mapId, std::vector<uint32> const& exclude) const;
+
+        // Pick a random research project for a branch (rarity-weighted toward commons), preferring
+        // projects not in `completed`. Returns the ResearchProject.db2 ID, or 0 if the branch has none.
+        uint32 RollResearchProject(uint32 branchId, std::unordered_set<uint32> const& completed) const;
 
         // Branch/find-count for a dig site, or nullptr if the site has no mapping.
         ArchaeologyDigSiteInfo const* GetDigSiteInfo(uint32 researchSiteId) const;
