@@ -48,7 +48,11 @@ TC_MODULE_API char const* GetScriptModule()
 #endif
 
 /// Exposed in module libraries to register all module scripts to the ScriptMgr.
+#ifdef TRINITY_IS_DYNAMIC_MODULELOADER
+TC_MODULE_API void AddScripts()
+#else
 TC_MODULE_API void AddModulesScripts()
+#endif
 {
 @TRINITY_MODULES_INVOKE@}
 
