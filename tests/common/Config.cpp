@@ -42,6 +42,49 @@ std::string CreateConfigWithMap(std::map<std::string, std::string> const& map)
     return mTempFileAbs.string();
 }
 
+TEST_CASE("Module config reload rescans overrides", "[Config]")
+{
+    boost::filesystem::path tempDir = boost::filesystem::temp_directory_path() /
+        boost::filesystem::unique_path("trinity-module-config-%%%%-%%%%");
+    boost::filesystem::create_directories(tempDir);
+
+    boost::filesystem::path mainConfig = tempDir / "worldserver.conf";
+    {
+        std::ofstream config(mainConfig.string());
+        config << "[worldserver]\n";
+        config << "Main.Value = 1\n";
+    }
+
+    boost::filesystem::path moduleDistConfig = tempDir / "mod-example.conf.dist";
+    {
+        std::ofstream config(moduleDistConfig.string());
+        config << "[mod-example]\n";
+        config << "Example.ReloadValue = 1\n";
+    }
+
+    std::string error;
+    REQUIRE(sConfigMgr->LoadInitial(mainConfig.string(), std::vector<std::string>(), error));
+
+    std::vector<std::string> loadedFiles;
+    std::vector<std::string> errors;
+    REQUIRE(sConfigMgr->LoadModuleConfigDir(tempDir.string(), true, loadedFiles, errors));
+    REQUIRE(errors.empty());
+    REQUIRE(sConfigMgr->GetIntDefault("Example.ReloadValue", 0) == 1);
+
+    boost::filesystem::path moduleConfig = tempDir / "mod-example.conf";
+    {
+        std::ofstream config(moduleConfig.string());
+        config << "[mod-example]\n";
+        config << "Example.ReloadValue = 2\n";
+    }
+
+    REQUIRE(sConfigMgr->Reload(errors));
+    REQUIRE(errors.empty());
+    REQUIRE(sConfigMgr->GetIntDefault("Example.ReloadValue", 0) == 2);
+
+    boost::filesystem::remove_all(tempDir);
+}
+
 TEST_CASE("Environment variables", "[Config]")
 {
     std::map<std::string, std::string> config;

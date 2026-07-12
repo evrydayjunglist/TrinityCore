@@ -450,7 +450,7 @@ namespace WorldPackets
             ObjectGuid TriggerGUID;
         };
 
-        class MoveTeleportAck final : public ClientPacket
+        class TC_GAME_API MoveTeleportAck final : public ClientPacket
         {
         public:
             explicit MoveTeleportAck(WorldPacket&& packet) : ClientPacket(CMSG_MOVE_TELEPORT_ACK, std::move(packet)) { }
