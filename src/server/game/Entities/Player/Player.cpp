@@ -4137,6 +4137,10 @@ void Player::DeleteFromDB(ObjectGuid playerguid, uint32 accountId, bool updateRe
             stmt->setUInt64(0, guid);
             trans->Append(stmt);
 
+            stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_RESEARCH_HISTORY);
+            stmt->setUInt64(0, guid);
+            trans->Append(stmt);
+
             stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHAR_STATS);
             stmt->setUInt64(0, guid);
             trans->Append(stmt);
@@ -18621,6 +18625,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
 
     _LoadResearchSites(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_RESEARCH_SITES)); // Archaeology: restore persisted dig sites
     InitializeResearchSites(); // Archaeology: seed active dig sites if none persisted and skills are known (Phase 1 slice)
+    _LoadResearchHistory(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_RESEARCH_HISTORY)); // Archaeology: restore completed projects (before project rolls so they avoid repeats)
     _LoadResearchProjects(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_RESEARCH_PROJECTS)); // Archaeology: restore active research projects
     InitializeResearchProjects(); // Archaeology: backfill a project for branches with fragments but none active
 
@@ -20768,6 +20773,7 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     _SaveSkills(trans);
     _SaveResearchSites(trans);
     _SaveResearchProjects(trans);
+    _SaveResearchHistory(trans);
     _SaveStoredAuraTeleportLocations(trans);
     m_achievementMgr->SaveToDB(trans);
     m_reputationMgr->SaveToDB(trans);
@@ -21495,6 +21501,25 @@ void Player::_SaveResearchProjects(CharacterDatabaseTransaction trans)
         stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_RESEARCH_PROJECT);
         stmt->setUInt64(0, GetGUID().GetCounter());
         stmt->setUInt32(1, uint32(projectId));
+        trans->Append(stmt);
+    }
+}
+
+void Player::_SaveResearchHistory(CharacterDatabaseTransaction trans)
+{
+    // Rewrite the character's completed research projects from ResearchHistory (delete-all + reinsert).
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_RESEARCH_HISTORY);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    trans->Append(stmt);
+
+    auto const& completed = m_activePlayerData->ResearchHistory->CompletedProjects;
+    for (uint32 i = 0; i < completed.size(); ++i)
+    {
+        stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_RESEARCH_HISTORY);
+        stmt->setUInt64(0, GetGUID().GetCounter());
+        stmt->setUInt32(1, completed[i].ProjectID);
+        stmt->setInt64(2, completed[i].FirstCompleted);
+        stmt->setUInt32(3, completed[i].CompletionCount);
         trans->Append(stmt);
     }
 }
@@ -27530,6 +27555,102 @@ void Player::_LoadResearchProjects(PreparedQueryResult result)
     } while (result->NextRow());
 }
 
+bool Player::CanSolveResearchProjectBySpell(uint32 spellId) const
+{
+    ResearchProjectEntry const* project = sArchaeologyMgr->GetProjectBySpellId(spellId);
+    if (!project)
+        return false;
+
+    // Only the branch's current project may be solved.
+    if (GetCurrentResearchProject(project->ResearchBranchID) != int32(project->ID))
+        return false;
+
+    ResearchBranchEntry const* branch = sResearchBranchStore.LookupEntry(project->ResearchBranchID);
+    if (!branch || !branch->CurrencyID)
+        return false;
+
+    // Full fragment weight required (keystone sockets not yet supported).
+    return GetCurrencyQuantity(branch->CurrencyID) >= project->RequiredWeight;
+}
+
+void Player::SolveResearchProjectBySpell(uint32 spellId)
+{
+    ResearchProjectEntry const* project = sArchaeologyMgr->GetProjectBySpellId(spellId);
+    if (!project || !CanSolveResearchProjectBySpell(spellId))
+        return;
+
+    ResearchBranchEntry const* branch = sResearchBranchStore.LookupEntry(project->ResearchBranchID);
+
+    // Spend the fragments the project requires; the reward item is created by the solve spell itself.
+    ModifyCurrency(branch->CurrencyID, -int32(project->RequiredWeight));
+
+    RecordCompletedProject(project->ID);
+    AdvanceResearchProject(project->ResearchBranchID, project->ID);
+
+    // Solving a project trains Archaeology (retail's main skill-up source for the profession).
+    UpdateGatherSkill(SKILL_ARCHAEOLOGY, GetPureSkillValue(SKILL_ARCHAEOLOGY), 0);
+}
+
+void Player::RecordCompletedProject(uint32 projectId)
+{
+    auto history = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchHistory);
+
+    // Bump the completion count if this project has been solved before.
+    auto const& completed = m_activePlayerData->ResearchHistory->CompletedProjects;
+    for (uint32 i = 0; i < completed.size(); ++i)
+    {
+        if (uint32(completed[i].ProjectID) == projectId)
+        {
+            auto entry = history.ModifyValue(&UF::ResearchHistory::CompletedProjects, i);
+            SetUpdateFieldValue(entry.ModifyValue(&UF::CompletedProject::CompletionCount), uint32(completed[i].CompletionCount) + 1);
+            return;
+        }
+    }
+
+    auto entry = AddDynamicUpdateFieldValue(history.ModifyValue(&UF::ResearchHistory::CompletedProjects));
+    entry.ModifyValue(&UF::CompletedProject::ProjectID).SetValue(projectId);
+    entry.ModifyValue(&UF::CompletedProject::FirstCompleted).SetValue(int64(GameTime::GetGameTime()));
+    entry.ModifyValue(&UF::CompletedProject::CompletionCount).SetValue(1u);
+}
+
+void Player::AdvanceResearchProject(uint32 branchId, uint32 completedProjectId)
+{
+    // Drop the completed project from the active list, then roll the branch's next project.
+    uint32 const count = m_activePlayerData->Research[0].size();
+    for (uint32 i = 0; i < count; ++i)
+    {
+        if (uint32(m_activePlayerData->Research[0][i].ResearchProjectID) == completedProjectId)
+        {
+            RemoveDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::Research, 0).ModifyValue(), i);
+            break;
+        }
+    }
+
+    EnsureResearchProject(branchId);
+}
+
+void Player::_LoadResearchHistory(PreparedQueryResult result)
+{
+    // Restore completed research projects into the ResearchHistory update field.
+    // SELECT projectId, firstCompleted, completionCount FROM character_research_history WHERE guid = ?
+    if (!result)
+        return;
+
+    auto history = m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchHistory);
+    do
+    {
+        Field* fields = result->Fetch();
+        uint32 projectId = fields[0].GetUInt32();
+        if (!sResearchProjectStore.HasRecord(projectId))
+            continue;
+
+        auto entry = AddDynamicUpdateFieldValue(history.ModifyValue(&UF::ResearchHistory::CompletedProjects));
+        entry.ModifyValue(&UF::CompletedProject::ProjectID).SetValue(projectId);
+        entry.ModifyValue(&UF::CompletedProject::FirstCompleted).SetValue(fields[1].GetInt64());
+        entry.ModifyValue(&UF::CompletedProject::CompletionCount).SetValue(fields[2].GetUInt32());
+    } while (result->NextRow());
+}
+
 void Player::_LoadSkills(PreparedQueryResult result)
 {
     //                                                           0      1      2    3
@@ -31885,6 +32006,11 @@ void Player::ExecutePendingSpellCastRequest()
             allow = true;
             triggerFlag = TRIGGERED_FULL_MASK;
         }
+
+        // allow casting of archaeology research-project solve spells: the research UI casts a project's
+        // own SpellID to solve it, but the player never learns that spell into their spellbook.
+        if (sArchaeologyMgr->GetProjectBySpellId(spellInfo->Id))
+            allow = true;
 
         if (!allow)
         {

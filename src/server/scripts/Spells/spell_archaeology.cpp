@@ -36,7 +36,36 @@ class spell_archaeology_survey : public SpellScript
     }
 };
 
+// Research project solve spells (one per ResearchProject.db2 entry, bound via spell_script_names)
+// Solving = casting the project's own SpellID. The spell's own effect creates the reward item; this
+// script adds the archaeology bookkeeping: validate the current project + fragments, spend the
+// fragments, record the completion, and roll the branch's next project.
+class spell_archaeology_solve : public SpellScript
+{
+    SpellCastResult CheckCast()
+    {
+        Player* player = GetCaster()->ToPlayer();
+        if (!player || !player->CanSolveResearchProjectBySpell(GetSpellInfo()->Id))
+            return SPELL_FAILED_DONT_REPORT;
+
+        return SPELL_CAST_OK;
+    }
+
+    void HandleAfterCast()
+    {
+        if (Player* player = GetCaster()->ToPlayer())
+            player->SolveResearchProjectBySpell(GetSpellInfo()->Id);
+    }
+
+    void Register() override
+    {
+        OnCheckCast += SpellCheckCastFn(spell_archaeology_solve::CheckCast);
+        AfterCast += SpellCastFn(spell_archaeology_solve::HandleAfterCast);
+    }
+};
+
 void AddSC_archaeology_spell_scripts()
 {
     RegisterSpellScript(spell_archaeology_survey);
+    RegisterSpellScript(spell_archaeology_solve);
 }

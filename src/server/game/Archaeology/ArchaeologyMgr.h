@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 
+struct ResearchProjectEntry;
 struct ResearchSiteEntry;
 
 // Per dig site: which research branch its fragments belong to, and how many finds exhaust it.
@@ -85,6 +86,10 @@ class TC_GAME_API ArchaeologyMgr
         // Pick a random research project for a branch (rarity-weighted toward commons), preferring
         // projects not in `completed`. Returns the ResearchProject.db2 ID, or 0 if the branch has none.
         uint32 RollResearchProject(uint32 branchId, std::unordered_set<uint32> const& completed) const;
+
+        // The research project whose solve spell is `spellId` (the spell a player casts to complete it),
+        // or nullptr if none. Called only for the archaeology solve spells the script is bound to.
+        ResearchProjectEntry const* GetProjectBySpellId(uint32 spellId) const;
 
         // Branch/find-count for a dig site, or nullptr if the site has no mapping.
         ArchaeologyDigSiteInfo const* GetDigSiteInfo(uint32 researchSiteId) const;
