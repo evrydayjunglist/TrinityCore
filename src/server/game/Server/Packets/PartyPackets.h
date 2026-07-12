@@ -95,7 +95,7 @@ namespace WorldPackets
             std::vector<uint32> LfgSlots;
         };
 
-        class PartyInviteResponse final : public ClientPacket
+        class TC_GAME_API PartyInviteResponse final : public ClientPacket
         {
         public:
             explicit PartyInviteResponse(WorldPacket&& packet) : ClientPacket(CMSG_PARTY_INVITE_RESPONSE, std::move(packet)) { }
