@@ -1006,6 +1006,7 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_ACCOUNT_DATA,
     PLAYER_LOGIN_QUERY_LOAD_SKILLS,
     PLAYER_LOGIN_QUERY_LOAD_RESEARCH_SITES,
+    PLAYER_LOGIN_QUERY_LOAD_RESEARCH_PROJECTS,
     PLAYER_LOGIN_QUERY_LOAD_WEEKLY_QUEST_STATUS,
     PLAYER_LOGIN_QUERY_LOAD_RANDOM_BG,
     PLAYER_LOGIN_QUERY_LOAD_BANNED,
@@ -2469,6 +2470,30 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         // player knows the profession and has none yet (Phase 1 Cataclysm vertical slice).
         void InitializeResearchSites();
 
+        // Archaeology: resolve a Survey (spell 80451) cast — if standing in an active dig site, test
+        // the hidden find, award fragments + advance progress on success (else spawn a survey-tool GO
+        // that points toward the find), and reply with the survey result packet.
+        void HandleArchaeologySurvey();
+
+        // Archaeology: swap one active dig-site slot for a fresh surveyable site on the same continent
+        // (progress reset), used when a site is exhausted or found already complete.
+        void ReplaceResearchSite(uint32 siteIndex, uint32 mapId);
+
+        // Archaeology: on login, assign a current research project for each branch the player already
+        // has fragments in but no active project (new fragment gains assign on the fly).
+        void InitializeResearchProjects();
+
+        // Archaeology: the active research project for a branch (ResearchProject.db2 ID), or 0 if none.
+        int32 GetCurrentResearchProject(uint32 branchId) const;
+
+        // Archaeology: ensure a branch has a current project, assigning a fresh one if it has none.
+        // Returns the project ID (existing or new), or 0 if the branch has no eligible projects.
+        uint32 EnsureResearchProject(uint32 branchId);
+
+        // Archaeology: the set of completed research project IDs (from ResearchHistory), used to bias
+        // new project rolls away from repeats.
+        std::unordered_set<uint32> GetCompletedResearchProjects() const;
+
         /*********************************************************/
         /***                  PVP SYSTEM                       ***/
         /*********************************************************/
@@ -3161,6 +3186,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void _LoadGroup(PreparedQueryResult result);
         void _LoadSkills(PreparedQueryResult result);
         void _LoadResearchSites(PreparedQueryResult result);
+        void _LoadResearchProjects(PreparedQueryResult result);
         void _LoadSpells(PreparedQueryResult result, PreparedQueryResult favoritesResult);
         void _LoadStoredAuraTeleportLocations(PreparedQueryResult result);
         bool _LoadHomeBind(PreparedQueryResult result);
@@ -3199,6 +3225,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void _SaveSeasonalQuestStatus(CharacterDatabaseTransaction trans);
         void _SaveSkills(CharacterDatabaseTransaction trans);
         void _SaveResearchSites(CharacterDatabaseTransaction trans);
+        void _SaveResearchProjects(CharacterDatabaseTransaction trans);
         void _SaveSpells(CharacterDatabaseTransaction trans);
         void _SaveStoredAuraTeleportLocations(CharacterDatabaseTransaction trans);
         void _SaveEquipmentSets(CharacterDatabaseTransaction trans);

@@ -20,6 +20,7 @@
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "Log.h"
+#include "Random.h"
 #include "Timer.h"
 #include <algorithm>
 
@@ -153,6 +154,30 @@ bool ArchaeologyMgr::IsInsideDigSite(uint32 researchSiteId, float x, float y) co
     return inside;
 }
 
+bool ArchaeologyMgr::GetFindLocation(uint32 researchSiteId, uint32 findIndex, float& x, float& y) const
+{
+    ArchaeologyDigSiteInfo const* info = GetDigSiteInfo(researchSiteId);
+    if (!info || info->Polygon.size() < 3)
+        return false;
+
+    float cx = 0.0f, cy = 0.0f;
+    for (std::pair<float, float> const& p : info->Polygon)
+    {
+        cx += p.first;
+        cy += p.second;
+    }
+    cx /= info->Polygon.size();
+    cy /= info->Polygon.size();
+
+    // A distinct point per find, kept inside the (roughly convex) dig-site polygon by blending the
+    // centroid toward one vertex. Sufficient for the Phase 1 survey loop; a true in-polygon RNG and
+    // the retail red/yellow/green telescope guidance can follow.
+    std::pair<float, float> const& v = info->Polygon[findIndex % info->Polygon.size()];
+    x = cx + 0.35f * (v.first - cx);
+    y = cy + 0.35f * (v.second - cy);
+    return true;
+}
+
 std::vector<uint32> ArchaeologyMgr::RollResearchSitesForMap(uint32 mapId, uint32 count) const
 {
     std::vector<uint32> result;
@@ -175,4 +200,58 @@ std::vector<uint32> ArchaeologyMgr::RollResearchSitesForMap(uint32 mapId, uint32
         result.push_back(site->ID);
 
     return result;
+}
+
+uint32 ArchaeologyMgr::RollReplacementSite(uint32 mapId, std::vector<uint32> const& exclude) const
+{
+    std::vector<ResearchSiteEntry const*> const* pool = GetResearchSitesForMap(mapId);
+    if (!pool || pool->empty())
+        return 0;
+
+    // Candidate = surveyable (branch mapping + polygon) and not already one of the player's active
+    // sites, so exhausting a site never re-rolls the same one or a duplicate.
+    std::vector<uint32> candidates;
+    for (ResearchSiteEntry const* site : *pool)
+        if (GetDigSiteInfo(site->ID) && std::find(exclude.begin(), exclude.end(), site->ID) == exclude.end())
+            candidates.push_back(site->ID);
+
+    if (candidates.empty())
+        return 0;
+
+    return Trinity::Containers::SelectRandomContainerElement(candidates);
+}
+
+uint32 ArchaeologyMgr::RollResearchProject(uint32 branchId, std::unordered_set<uint32> const& completed) const
+{
+    // Split the branch's projects by rarity (0 = common, 1 = rare). Retail heavily favours commons;
+    // rares appear roughly one roll in five when any exist.
+    std::vector<uint32> commons, rares;
+    for (ResearchProjectEntry const* project : sResearchProjectStore)
+    {
+        if (project->ResearchBranchID != branchId || project->SpellID <= 0)
+            continue;
+
+        (project->Rarity == 0 ? commons : rares).push_back(project->ID);
+    }
+
+    // Prefer projects the player has not completed yet; fall back to the full set once a rarity tier
+    // is exhausted so a long-time archaeologist keeps getting projects (retail allows repeats).
+    auto dropCompleted = [&completed](std::vector<uint32>& pool)
+    {
+        std::vector<uint32> fresh;
+        for (uint32 id : pool)
+            if (!completed.count(id))
+                fresh.push_back(id);
+        if (!fresh.empty())
+            pool = std::move(fresh);
+    };
+    dropCompleted(commons);
+    dropCompleted(rares);
+
+    bool const pickRare = !rares.empty() && (commons.empty() || urand(0, 99) < 20);
+    std::vector<uint32> const& pool = pickRare ? rares : (!commons.empty() ? commons : rares);
+    if (pool.empty())
+        return 0;
+
+    return Trinity::Containers::SelectRandomContainerElement(pool);
 }

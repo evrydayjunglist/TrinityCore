@@ -22,6 +22,7 @@
 #include "AccountCurrencyMgr.h"
 #include "AchievementMgr.h"
 #include "ArchaeologyMgr.h"
+#include "ArchaeologyPackets.h"
 #include "ArenaTeam.h"
 #include "ArenaTeamMgr.h"
 #include "AzeriteEmpoweredItem.h"
@@ -107,6 +108,7 @@
 #include "PetitionMgr.h"
 #include "PhasingHandler.h"
 #include "PlayerChoice.h"
+#include "QuaternionData.h"
 #include "QueryCallback.h"
 #include "QueryHolder.h"
 #include "QueryResultStructured.h"
@@ -4218,6 +4220,10 @@ void Player::DeleteFromDB(ObjectGuid playerguid, uint32 accountId, bool updateRe
             trans->Append(stmt);
 
             stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_RESEARCH_SITE);
+            stmt->setUInt64(0, guid);
+            trans->Append(stmt);
+
+            stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_RESEARCH_PROJECT);
             stmt->setUInt64(0, guid);
             trans->Append(stmt);
 
@@ -19014,6 +19020,8 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
 
     _LoadResearchSites(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_RESEARCH_SITES)); // Archaeology: restore persisted dig sites
     InitializeResearchSites(); // Archaeology: seed active dig sites if none persisted and skills are known (Phase 1 slice)
+    _LoadResearchProjects(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_RESEARCH_PROJECTS)); // Archaeology: restore active research projects
+    InitializeResearchProjects(); // Archaeology: backfill a project for branches with fragments but none active
 
     SetNumRespecs(fields.numRespecs);
     SetPrimarySpecialization(fields.primarySpecialization);
@@ -21166,6 +21174,7 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     _SaveAuras(trans);
     _SaveSkills(trans);
     _SaveResearchSites(trans);
+    _SaveResearchProjects(trans);
     _SaveStoredAuraTeleportLocations(trans);
     m_achievementMgr->SaveToDB(trans);
     m_reputationMgr->SaveToDB(trans);
@@ -21872,6 +21881,28 @@ void Player::_SaveResearchSites(CharacterDatabaseTransaction trans)
         stmt->setUInt64(0, GetGUID().GetCounter());
         stmt->setUInt16(1, m_activePlayerData->ResearchSites[0][i]);
         stmt->setUInt32(2, m_activePlayerData->ResearchSiteProgress[0][i]);
+        trans->Append(stmt);
+    }
+}
+
+void Player::_SaveResearchProjects(CharacterDatabaseTransaction trans)
+{
+    // Rewrite the character's active research projects from the Research update field (delete-all +
+    // reinsert; one entry per active branch).
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_RESEARCH_PROJECT);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    trans->Append(stmt);
+
+    uint32 const count = m_activePlayerData->Research[0].size();
+    for (uint32 i = 0; i < count; ++i)
+    {
+        int16 projectId = m_activePlayerData->Research[0][i].ResearchProjectID;
+        if (!projectId)
+            continue;
+
+        stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_RESEARCH_PROJECT);
+        stmt->setUInt64(0, GetGUID().GetCounter());
+        stmt->setUInt32(1, uint32(projectId));
         trans->Append(stmt);
     }
 }
@@ -27670,6 +27701,127 @@ void Player::StoreLootItem(ObjectGuid lootWorldObjectGuid, uint8 lootSlot, Loot*
         sLootItemStorage->RemoveStoredLootItemForContainer(lootWorldObjectGuid.GetCounter(), item->type, item->itemid, item->count, item->LootListId);
 }
 
+void Player::HandleArchaeologySurvey()
+{
+    // Retail survey mechanic: casting Survey spawns a survey-tool GameObject that faces the hidden
+    // find, and whose model encodes distance (green = close, yellow = medium, red = far). Walking
+    // toward the green cone and re-surveying homes in on the find; digging it up awards fragments.
+    // GO entries and the distance bands mirror the reference archaeology implementation.
+    constexpr uint32 GO_SURVEY_TOOL_GREEN  = 204272; // < GREEN band: close
+    constexpr uint32 GO_SURVEY_TOOL_YELLOW = 206589; // < YELLOW band: medium
+    constexpr uint32 GO_SURVEY_TOOL_RED    = 206590; // beyond: far
+    constexpr float SURVEY_FIND_DISTANCE   = 10.0f;  // yards to the find that count as a dig (retail ~5)
+    constexpr float SURVEY_GREEN_DISTANCE  = 35.0f;  // within this the tool shows green (close)
+    constexpr float SURVEY_YELLOW_DISTANCE = 85.0f;  // within this yellow (medium); beyond, red (far)
+    constexpr int32 SURVEY_FRAGMENTS_PER_FIND = 5;   // fragments awarded per find; tune via playtest
+    Seconds const SURVEY_TOOL_DURATION = Seconds(15); // how long the survey-tool GO lingers
+
+    if (!HasSkill(SKILL_ARCHAEOLOGY))
+        return;
+
+    uint32 const mapId = GetMapId();
+    float const px = GetPositionX();
+    float const py = GetPositionY();
+
+    // Find which of the player's active dig sites (on this map) they are standing in.
+    uint32 siteId = 0;
+    uint32 siteIndex = 0;
+    ArchaeologyDigSiteInfo const* info = nullptr;
+    uint32 const siteCount = m_activePlayerData->ResearchSites[0].size();
+    for (uint32 i = 0; i < siteCount; ++i)
+    {
+        uint32 candidate = m_activePlayerData->ResearchSites[0][i];
+        ResearchSiteEntry const* site = sResearchSiteStore.LookupEntry(candidate);
+        if (!site || uint32(site->MapID) != mapId)
+            continue;
+
+        if (sArchaeologyMgr->IsInsideDigSite(candidate, px, py))
+        {
+            siteId = candidate;
+            siteIndex = i;
+            info = sArchaeologyMgr->GetDigSiteInfo(candidate);
+            break;
+        }
+    }
+
+    if (!siteId || !info)
+        return; // not standing in one of the player's active dig sites
+
+    uint32 const progressSize = m_activePlayerData->ResearchSiteProgress[0].size();
+    uint32 progress = siteIndex < progressSize ? m_activePlayerData->ResearchSiteProgress[0][siteIndex] : 0;
+    if (progress >= info->FindCount)
+    {
+        // Site already fully surveyed (e.g. persisted full from before exhaust/replace existed):
+        // cycle it now instead of no-oping, so the player is never stuck on a dead site.
+        ReplaceResearchSite(siteIndex, mapId);
+        return;
+    }
+
+    float fx, fy;
+    if (!sArchaeologyMgr->GetFindLocation(siteId, progress, fx, fy))
+        return;
+
+    float const dist = GetExactDist2d(fx, fy);
+    bool const found = dist <= SURVEY_FIND_DISTANCE;
+
+    if (found)
+    {
+        ++progress;
+        SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSiteProgress, 0).ModifyValue(siteIndex), progress);
+
+        if (ResearchBranchEntry const* branch = sResearchBranchStore.LookupEntry(info->BranchID))
+            ModifyCurrency(branch->CurrencyID, SURVEY_FRAGMENTS_PER_FIND);
+
+        // Give the branch a current research project the first time the player finds fragments for it,
+        // so the Archaeology UI shows the artifact being assembled and the fragment progress.
+        EnsureResearchProject(info->BranchID);
+    }
+    else
+    {
+        // Guidance: spawn a survey tool at the player, oriented toward the find. Its model tells the
+        // player how close they are (green/yellow/red); its facing tells them which way to go.
+        uint32 const toolEntry = dist < SURVEY_GREEN_DISTANCE ? GO_SURVEY_TOOL_GREEN
+                               : dist < SURVEY_YELLOW_DISTANCE ? GO_SURVEY_TOOL_YELLOW
+                               : GO_SURVEY_TOOL_RED;
+        float const facing = GetAbsoluteAngle(fx, fy);
+        SummonGameObject(toolEntry, Position(px, py, GetPositionZ(), facing),
+            QuaternionData::fromEulerAnglesZYX(facing, 0.0f, 0.0f), SURVEY_TOOL_DURATION);
+    }
+
+    WorldPackets::Archaeology::SurveyCast survey;
+    survey.TotalFinds = progress;
+    survey.NumFindsCompleted = info->FindCount;
+    survey.ResearchBranchID = info->BranchID;
+    survey.SuccessfulFind = found;
+    SendDirectMessage(survey.Write());
+
+    // Exhaust and replace once every find is collected (retail single-slot replacement).
+    if (found && progress >= info->FindCount)
+        ReplaceResearchSite(siteIndex, mapId);
+}
+
+void Player::ReplaceResearchSite(uint32 siteIndex, uint32 mapId)
+{
+    // Swap one active dig-site slot for a fresh surveyable site on the same continent (progress
+    // reset). The client picks up the new site from the ResearchSites update field. If the continent
+    // has no other surveyable site the slot is left as-is.
+    uint32 const siteCount = m_activePlayerData->ResearchSites[0].size();
+    if (siteIndex >= siteCount)
+        return;
+
+    std::vector<uint32> activeSites;
+    activeSites.reserve(siteCount);
+    for (uint32 i = 0; i < siteCount; ++i)
+        activeSites.push_back(m_activePlayerData->ResearchSites[0][i]);
+
+    uint32 const replacement = sArchaeologyMgr->RollReplacementSite(mapId, activeSites);
+    if (!replacement)
+        return;
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSites, 0).ModifyValue(siteIndex), uint16(replacement));
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSiteProgress, 0).ModifyValue(siteIndex), 0u);
+}
+
 void Player::_LoadResearchSites(PreparedQueryResult result)
 {
     // Restore persisted active dig sites into the ResearchSites / ResearchSiteProgress update fields.
@@ -27709,6 +27861,81 @@ void Player::InitializeResearchSites()
             AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSiteProgress, 0).ModifyValue()) = 0u;
         }
     }
+}
+
+int32 Player::GetCurrentResearchProject(uint32 branchId) const
+{
+    uint32 const count = m_activePlayerData->Research[0].size();
+    for (uint32 i = 0; i < count; ++i)
+    {
+        int16 projectId = m_activePlayerData->Research[0][i].ResearchProjectID;
+        if (!projectId)
+            continue;
+
+        if (ResearchProjectEntry const* project = sResearchProjectStore.LookupEntry(uint32(projectId)))
+            if (project->ResearchBranchID == branchId)
+                return projectId;
+    }
+    return 0;
+}
+
+std::unordered_set<uint32> Player::GetCompletedResearchProjects() const
+{
+    std::unordered_set<uint32> completed;
+    for (UF::CompletedProject const& project : m_activePlayerData->ResearchHistory->CompletedProjects)
+        completed.insert(project.ProjectID);
+    return completed;
+}
+
+uint32 Player::EnsureResearchProject(uint32 branchId)
+{
+    if (int32 existing = GetCurrentResearchProject(branchId))
+        return uint32(existing);
+
+    uint32 projectId = sArchaeologyMgr->RollResearchProject(branchId, GetCompletedResearchProjects());
+    if (!projectId)
+        return 0;
+
+    UF::Research& research = AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::Research, 0).ModifyValue());
+    research.ResearchProjectID = int16(projectId);
+    return projectId;
+}
+
+void Player::InitializeResearchProjects()
+{
+    // Backfill a current project for any branch the player already has fragments in but no active
+    // project (e.g. characters that earned fragments before projects were implemented). Fresh fragment
+    // gains assign on the fly in HandleArchaeologySurvey, so this only matters on the first login after
+    // the feature lands. Currencies are already loaded by this point in LoadFromDB.
+    if (!HasSkill(SKILL_ARCHAEOLOGY))
+        return;
+
+    for (ResearchBranchEntry const* branch : sResearchBranchStore)
+    {
+        if (!branch->CurrencyID || GetCurrencyQuantity(branch->CurrencyID) == 0)
+            continue;
+
+        EnsureResearchProject(branch->ID);
+    }
+}
+
+void Player::_LoadResearchProjects(PreparedQueryResult result)
+{
+    // Restore the character's active research projects into the Research update field.
+    // SELECT projectId FROM character_research_project WHERE guid = ?
+    if (!result)
+        return;
+
+    do
+    {
+        Field* fields = result->Fetch();
+        uint32 projectId = fields[0].GetUInt32();
+        if (!sResearchProjectStore.HasRecord(projectId))
+            continue;
+
+        UF::Research& research = AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::Research, 0).ModifyValue());
+        research.ResearchProjectID = int16(projectId);
+    } while (result->NextRow());
 }
 
 void Player::_LoadSkills(PreparedQueryResult result)
