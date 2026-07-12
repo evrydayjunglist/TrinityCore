@@ -62,22 +62,28 @@ class TC_GAME_API ArchaeologyMgr
         // (needs sResearchSiteStore) and once the world DB is available.
         void LoadDigSiteData();
 
+        // Load server-owned branch policy (the branch-specific retail find GameObject).
+        void LoadResearchBranchData();
+
         // Load dig-site boundary polygons from `archaeology_dig_site_point`. Call after LoadDigSiteData.
         void LoadDigSitePoints();
 
         // True if the world position (x, y) is inside the dig site's boundary polygon.
         bool IsInsideDigSite(uint32 researchSiteId, float x, float y) const;
 
-        // Deterministic world location of the Nth find at a dig site (a point inside its polygon).
+        // Generate a uniformly distributed hidden-find location inside the dig-site polygon.
         // Returns false if the site has no usable polygon.
-        bool GetFindLocation(uint32 researchSiteId, uint32 findIndex, float& x, float& y) const;
+        bool GenerateFindLocation(uint32 researchSiteId, float& x, float& y) const;
+
+        // True if the server has every policy needed to drive this site through Survey and loot.
+        bool IsSurveyableDigSite(uint32 researchSiteId) const;
 
         // Dig-site pool for a continent/map, or nullptr if the map has none.
         std::vector<ResearchSiteEntry const*> const* GetResearchSitesForMap(uint32 mapId) const;
 
         // Randomly pick up to `count` distinct dig-site IDs from a map's pool (fewer if the pool is
-        // smaller). Empty if the map has no dig sites.
-        std::vector<uint32> RollResearchSitesForMap(uint32 mapId, uint32 count) const;
+        // smaller), excluding IDs already active for the player. Empty if the map has no dig sites.
+        std::vector<uint32> RollResearchSitesForMap(uint32 mapId, uint32 count, std::vector<uint32> const& exclude = {}) const;
 
         // Pick one random branch-mapped dig site on a map that is not in `exclude` (used to replace an
         // exhausted site). Returns 0 if none are available.
@@ -94,9 +100,13 @@ class TC_GAME_API ArchaeologyMgr
         // Branch/find-count for a dig site, or nullptr if the site has no mapping.
         ArchaeologyDigSiteInfo const* GetDigSiteInfo(uint32 researchSiteId) const;
 
+        // Branch-specific lootable find GameObject, or 0 if the branch is not enabled.
+        uint32 GetFindGameObjectId(uint32 researchBranchId) const;
+
     private:
         std::unordered_map<uint32 /*mapId*/, std::vector<ResearchSiteEntry const*>> _researchSitesByMap;
         std::unordered_map<uint32 /*researchSiteId*/, ArchaeologyDigSiteInfo> _digSiteInfo;
+        std::unordered_map<uint32 /*researchBranchId*/, uint32 /*findGameObjectId*/> _findGameObjectsByBranch;
 };
 
 #define sArchaeologyMgr ArchaeologyMgr::instance()

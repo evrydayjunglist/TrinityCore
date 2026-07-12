@@ -3,8 +3,7 @@
 -- One row per solved project = ActivePlayerData.ResearchHistory.CompletedProjects. Used to bias new
 -- project rolls away from repeats and to show completion counts. Restored on login.
 --
-DROP TABLE IF EXISTS `character_research_history`;
-CREATE TABLE `character_research_history` (
+CREATE TABLE IF NOT EXISTS `character_research_history` (
   `guid` bigint unsigned NOT NULL COMMENT 'Character GUID',
   `projectId` int unsigned NOT NULL COMMENT 'ResearchProject.db2 ID',
   `firstCompleted` bigint NOT NULL DEFAULT '0' COMMENT 'Unix time of the first completion',

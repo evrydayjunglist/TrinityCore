@@ -4,8 +4,7 @@
 -- ID). The branch is derivable from the project, so only the project id is stored. Mirrors
 -- `character_research_site`. Restored into ActivePlayerData.Research on login.
 --
-DROP TABLE IF EXISTS `character_research_project`;
-CREATE TABLE `character_research_project` (
+CREATE TABLE IF NOT EXISTS `character_research_project` (
   `guid` bigint unsigned NOT NULL COMMENT 'Character GUID',
   `projectId` int unsigned NOT NULL COMMENT 'ResearchProject.db2 ID (current project for its branch)',
   PRIMARY KEY (`guid`,`projectId`)

@@ -5,13 +5,13 @@
 -- joined to ResearchBranch by fragment currency. Cataclysm slice = Eastern Kingdoms + Kalimdor.
 -- findCount = 6 (retail 12.0.7.68453 survey sniff, Cata sites).
 --
-DROP TABLE IF EXISTS `archaeology_dig_site`;
-CREATE TABLE `archaeology_dig_site` (
+CREATE TABLE IF NOT EXISTS `archaeology_dig_site` (
   `researchSiteId` int unsigned NOT NULL DEFAULT '0' COMMENT 'ResearchSite.db2 ID',
   `researchBranchId` int unsigned NOT NULL DEFAULT '0' COMMENT 'ResearchBranch.db2 ID',
   `findCount` tinyint unsigned NOT NULL DEFAULT '6' COMMENT 'finds required to exhaust the site',
   PRIMARY KEY (`researchSiteId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Archaeology dig site to research branch (fork reference data)';
+DELETE FROM `archaeology_dig_site`;
 INSERT INTO `archaeology_dig_site` (`researchSiteId`,`researchBranchId`,`findCount`) VALUES
 (9,1,6),
 (10,1,6),
