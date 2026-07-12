@@ -18,6 +18,10 @@
 #ifndef MODULES_SCRIPTLOADER_H
 #define MODULES_SCRIPTLOADER_H
 
+#include <span>
+#include <string_view>
+
 void AddModulesScripts();
+std::span<std::string_view const> GetStaticModuleNames();
 
 #endif
