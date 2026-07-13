@@ -19,6 +19,7 @@
 #define TRINITY_ARCHAEOLOGYMGR_H
 
 #include "Define.h"
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -26,6 +27,22 @@
 
 struct ResearchProjectEntry;
 struct ResearchSiteEntry;
+
+namespace WorldPackets::Spells
+{
+    struct SpellWeight;
+}
+
+struct ArchaeologySolvePlan
+{
+    uint32 ProjectID = 0;
+    uint32 BranchID = 0;
+    uint32 FragmentCurrencyID = 0;
+    uint32 FragmentCount = 0;
+    uint32 KeystoneItemID = 0;
+    uint32 KeystoneCount = 0;
+    uint32 RequiredWeight = 0;
+};
 
 // Per dig site: which research branch its fragments belong to, and how many finds exhaust it.
 // The site->branch theming is not carried by client DB2, so it is fork reference data loaded from
@@ -96,6 +113,11 @@ class TC_GAME_API ArchaeologyMgr
         // The research project whose solve spell is `spellId` (the spell a player casts to complete it),
         // or nullptr if none. Called only for the archaeology solve spells the script is bound to.
         ResearchProjectEntry const* GetProjectBySpellId(uint32 spellId) const;
+
+        // Build the immutable resource plan represented by a research-project cast. Every accepted
+        // quantity and compatibility rule comes from the cast and the loaded Research/item/currency
+        // DB2 rows; player ownership is checked separately immediately before consumption.
+        std::optional<ArchaeologySolvePlan> BuildSolvePlan(uint32 spellId, std::vector<WorldPackets::Spells::SpellWeight> const& weights) const;
 
         // Branch/find-count for a dig site, or nullptr if the site has no mapping.
         ArchaeologyDigSiteInfo const* GetDigSiteInfo(uint32 researchSiteId) const;
