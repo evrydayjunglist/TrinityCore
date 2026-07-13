@@ -17,7 +17,18 @@
 #include "DB2Stores.h"
 #include "DummyData.h"
 #include "SpellPackets.h"
+#include <initializer_list>
 #include <limits>
+
+struct ArchaeologyMgrTestAccess
+{
+    static void SetEnabledBranches(std::initializer_list<uint32> branchIds)
+    {
+        sArchaeologyMgr->_findGameObjectsByBranch.clear();
+        for (uint32 branchId : branchIds)
+            sArchaeologyMgr->_findGameObjectsByBranch.emplace(branchId, 1);
+    }
+};
 
 namespace
 {
@@ -37,6 +48,8 @@ namespace
 
     void LoadArchaeologySolveData()
     {
+        ArchaeologyMgrTestAccess::SetEnabledBranches({ BranchId });
+
         static bool loaded = false;
         if (loaded)
             return;
@@ -54,6 +67,11 @@ namespace
             mismatchedCategoryBranch.ID = 424;
             mismatchedCategoryBranch.CurrencyID = 1535;
             mismatchedCategoryBranch.ItemID = 154990;
+
+            ResearchBranchEntry& orcBranch = loader.Add();
+            orcBranch.ID = 6;
+            orcBranch.CurrencyID = 397;
+            orcBranch.ItemID = 64392;
         }
 
         {
@@ -68,6 +86,11 @@ namespace
             mismatchedCategoryFragments.ID = 1535;
             mismatchedCategoryFragments.SpellWeight = 1;
             mismatchedCategoryFragments.SpellCategory = 57;
+
+            CurrencyTypesEntry& orcFragments = loader.Add();
+            orcFragments.ID = 397;
+            orcFragments.SpellWeight = 1;
+            orcFragments.SpellCategory = 0;
         }
 
         {
@@ -128,8 +151,38 @@ namespace
             missingBranch.ResearchBranchID = 425;
             missingBranch.NumSockets = 0;
             missingBranch.RequiredWeight = 65;
+
+            for (uint32 branchId : { 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 27u })
+            {
+                ResearchProjectEntry& project = loader.Add();
+                project.ID = 6000 + branchId;
+                project.SpellID = 7000 + int32(branchId);
+                project.ResearchBranchID = branchId;
+                project.NumSockets = 0;
+                project.RequiredWeight = 45;
+            }
         }
     }
+}
+
+TEST_CASE("Archaeology project selection follows enabled branch policy", "[Archaeology]")
+{
+    LoadArchaeologySolveData();
+    ArchaeologyMgrTestAccess::SetEnabledBranches({ 1, 3, 4, 5, 7, 8 });
+
+    for (uint32 branchId : { 1u, 3u, 4u, 5u, 7u, 8u })
+    {
+        CHECK(sArchaeologyMgr->IsResearchBranchEnabled(branchId));
+        CHECK(sArchaeologyMgr->RollResearchProject(branchId, {}) == 6000 + branchId);
+    }
+
+    for (uint32 branchId : { 2u, 6u, 27u })
+    {
+        CHECK_FALSE(sArchaeologyMgr->IsResearchBranchEnabled(branchId));
+        CHECK(sArchaeologyMgr->RollResearchProject(branchId, {}) == 0);
+    }
+
+    CHECK_FALSE(sArchaeologyMgr->BuildSolvePlan(7006, { Weight(1, 397, 45) }).has_value());
 }
 
 TEST_CASE("Archaeology solve plans use DB2 weights and project socket caps", "[Archaeology]")

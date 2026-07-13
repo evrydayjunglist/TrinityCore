@@ -27,6 +27,7 @@
 
 struct ResearchProjectEntry;
 struct ResearchSiteEntry;
+struct ArchaeologyMgrTestAccess;
 
 namespace WorldPackets::Spells
 {
@@ -125,7 +126,13 @@ class TC_GAME_API ArchaeologyMgr
         // Branch-specific lootable find GameObject, or 0 if the branch is not enabled.
         uint32 GetFindGameObjectId(uint32 researchBranchId) const;
 
+        // True when the server has loaded the branch policy required to drive its complete
+        // site/find/project loop.
+        bool IsResearchBranchEnabled(uint32 researchBranchId) const;
+
     private:
+        friend struct ArchaeologyMgrTestAccess;
+
         std::unordered_map<uint32 /*mapId*/, std::vector<ResearchSiteEntry const*>> _researchSitesByMap;
         std::unordered_map<uint32 /*researchSiteId*/, ArchaeologyDigSiteInfo> _digSiteInfo;
         std::unordered_map<uint32 /*researchBranchId*/, uint32 /*findGameObjectId*/> _findGameObjectsByBranch;
