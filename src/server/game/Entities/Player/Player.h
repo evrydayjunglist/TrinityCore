@@ -39,6 +39,7 @@ struct AccessRequirement;
 struct AchievementEntry;
 struct AreaTableEntry;
 struct AreaTriggerEntry;
+struct ArchaeologySolvePlan;
 struct ArtifactPowerRankEntry;
 struct AzeriteEssencePowerEntry;
 struct AzeriteItemMilestonePowerEntry;
@@ -2499,14 +2500,15 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         // new project rolls away from repeats.
         std::unordered_set<uint32> GetCompletedResearchProjects() const;
 
-        // Archaeology: true if the player may solve the project whose solve spell is `spellId` — it is
-        // their current project for its branch and they hold enough fragments (keystones not yet used).
-        bool CanSolveResearchProjectBySpell(uint32 spellId) const;
+        // Archaeology: authorize the current project's solve spell through the client-cast known-spell
+        // gate. Resource validation remains in the solve script, which owns the preserved cast weights.
+        bool CanCastResearchProjectSpell(uint32 spellId) const;
 
-        // Archaeology: complete the project whose solve spell is `spellId` — deduct the fragments,
-        // record the completion in ResearchHistory, roll the branch's next project, and gain skill. The
-        // reward item is created by the solve spell's own effect.
-        void SolveResearchProjectBySpell(uint32 spellId);
+        // Archaeology: revalidate mutable player state against one immutable DB2-backed solve plan,
+        // consume its exact accepted resources before the reward effect, then finalize bookkeeping.
+        bool CanSolveResearchProject(ArchaeologySolvePlan const& plan) const;
+        bool ConsumeResearchProjectSolveResources(ArchaeologySolvePlan const& plan);
+        void CompleteResearchProjectSolve(ArchaeologySolvePlan const& plan);
 
         /*********************************************************/
         /***                  PVP SYSTEM                       ***/

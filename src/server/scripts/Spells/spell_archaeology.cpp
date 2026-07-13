@@ -15,12 +15,17 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "ArchaeologyMgr.h"
 #include "GameObject.h"
 #include "GameObjectAI.h"
 #include "ObjectAccessor.h"
-#include "ScriptMgr.h"
 #include "Player.h"
+#include "ScriptMgr.h"
+#include "SpellPackets.h"
 #include "SpellScript.h"
+#include <any>
+#include <optional>
+#include <vector>
 
 struct go_archaeology_find : public GameObjectAI
 {
@@ -62,28 +67,65 @@ class spell_archaeology_survey : public SpellScript
 
 // Research project solve spells (one per ResearchProject.db2 entry, bound via spell_script_names)
 // Solving = casting the project's own SpellID. The spell's own effect creates the reward item; this
-// script adds the archaeology bookkeeping: validate the current project + fragments, spend the
-// fragments, record the completion, and roll the branch's next project.
+// script validates one DB2-backed resource plan, commits exactly that plan before effects, then
+// records the completion and rolls the branch's next project once.
 class spell_archaeology_solve : public SpellScript
 {
+    std::optional<ArchaeologySolvePlan> _solvePlan;
+    bool _resourcesConsumed = false;
+    bool _completed = false;
+
     SpellCastResult CheckCast()
     {
         Player* player = GetCaster()->ToPlayer();
-        if (!player || !player->CanSolveResearchProjectBySpell(GetSpellInfo()->Id))
+        if (!player)
             return SPELL_FAILED_DONT_REPORT;
 
-        return SPELL_CAST_OK;
+        if (!_solvePlan)
+        {
+            std::vector<WorldPackets::Spells::SpellWeight> const* weights =
+                std::any_cast<std::vector<WorldPackets::Spells::SpellWeight>>(&GetSpell()->m_customArg);
+            if (!weights)
+                return SPELL_FAILED_DONT_REPORT;
+
+            _solvePlan = sArchaeologyMgr->BuildSolvePlan(GetSpellInfo()->Id, *weights);
+            if (!_solvePlan)
+                return SPELL_FAILED_DONT_REPORT;
+        }
+
+        return player->CanSolveResearchProject(*_solvePlan) ? SPELL_CAST_OK : SPELL_FAILED_DONT_REPORT;
+    }
+
+    void HandleOnCast()
+    {
+        if (_solvePlan)
+            if (Player* player = GetCaster()->ToPlayer())
+                _resourcesConsumed = player->ConsumeResearchProjectSolveResources(*_solvePlan);
+    }
+
+    void GuardEffects(SpellEffIndex effectIndex)
+    {
+        if (!_resourcesConsumed)
+            PreventHitDefaultEffect(effectIndex);
     }
 
     void HandleAfterCast()
     {
+        if (!_resourcesConsumed || _completed || !_solvePlan)
+            return;
+
         if (Player* player = GetCaster()->ToPlayer())
-            player->SolveResearchProjectBySpell(GetSpellInfo()->Id);
+        {
+            player->CompleteResearchProjectSolve(*_solvePlan);
+            _completed = true;
+        }
     }
 
     void Register() override
     {
         OnCheckCast += SpellCheckCastFn(spell_archaeology_solve::CheckCast);
+        OnCast += SpellCastFn(spell_archaeology_solve::HandleOnCast);
+        OnEffectHitTarget += SpellEffectFn(spell_archaeology_solve::GuardEffects, EFFECT_ALL, SPELL_EFFECT_ANY);
         AfterCast += SpellCastFn(spell_archaeology_solve::HandleAfterCast);
     }
 };

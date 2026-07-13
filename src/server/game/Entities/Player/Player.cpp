@@ -28161,7 +28161,7 @@ void Player::_LoadResearchProjects(PreparedQueryResult result)
     } while (result->NextRow());
 }
 
-bool Player::CanSolveResearchProjectBySpell(uint32 spellId) const
+bool Player::CanCastResearchProjectSpell(uint32 spellId) const
 {
     if (!HasSkill(SKILL_ARCHAEOLOGY))
         return false;
@@ -28174,27 +28174,55 @@ bool Player::CanSolveResearchProjectBySpell(uint32 spellId) const
     if (GetCurrentResearchProject(project->ResearchBranchID) != int32(project->ID))
         return false;
 
-    ResearchBranchEntry const* branch = sResearchBranchStore.LookupEntry(project->ResearchBranchID);
-    if (!branch || !branch->CurrencyID)
-        return false;
-
-    // Full fragment weight required (keystone sockets not yet supported).
-    return GetCurrencyQuantity(branch->CurrencyID) >= project->RequiredWeight;
+    return true;
 }
 
-void Player::SolveResearchProjectBySpell(uint32 spellId)
+bool Player::CanSolveResearchProject(ArchaeologySolvePlan const& plan) const
 {
-    ResearchProjectEntry const* project = sArchaeologyMgr->GetProjectBySpellId(spellId);
-    if (!project || !CanSolveResearchProjectBySpell(spellId))
+    if (!HasSkill(SKILL_ARCHAEOLOGY))
+        return false;
+
+    ResearchProjectEntry const* project = sResearchProjectStore.LookupEntry(plan.ProjectID);
+    if (!project || project->ResearchBranchID != plan.BranchID ||
+        project->RequiredWeight != plan.RequiredWeight ||
+        GetCurrentResearchProject(plan.BranchID) != int32(plan.ProjectID))
+        return false;
+
+    if (plan.FragmentCount && !HasCurrency(plan.FragmentCurrencyID, plan.FragmentCount))
+        return false;
+
+    if (plan.KeystoneCount && !HasItemCount(plan.KeystoneItemID, plan.KeystoneCount))
+        return false;
+
+    return true;
+}
+
+bool Player::ConsumeResearchProjectSolveResources(ArchaeologySolvePlan const& plan)
+{
+    if (!CanSolveResearchProject(plan))
+        return false;
+
+    // The final cast check and this commit run synchronously on the player's world thread. Validate
+    // every resource first, then consume the exact normalized plan before the reward spell effect.
+    if (plan.KeystoneCount &&
+        DestroyItemCount(plan.KeystoneItemID, plan.KeystoneCount, true) != plan.KeystoneCount)
+        return false;
+
+    if (plan.FragmentCount)
+        RemoveCurrency(plan.FragmentCurrencyID, plan.FragmentCount, CurrencyDestroyReason::Spell);
+
+    return true;
+}
+
+void Player::CompleteResearchProjectSolve(ArchaeologySolvePlan const& plan)
+{
+    // The script calls this only after its exact resource plan committed. Keep an expected-project
+    // guard so a completed cast cannot finalize a different or already-advanced project.
+    if (GetCurrentResearchProject(plan.BranchID) != int32(plan.ProjectID))
         return;
 
-    ResearchBranchEntry const* branch = sResearchBranchStore.LookupEntry(project->ResearchBranchID);
-
-    // Spend the fragments the project requires; the reward item is created by the solve spell itself.
-    ModifyCurrency(branch->CurrencyID, -int32(project->RequiredWeight));
-
-    RecordCompletedProject(project->ID);
-    AdvanceResearchProject(project->ResearchBranchID, project->ID);
+    RecordCompletedProject(plan.ProjectID);
+    AdvanceResearchProject(plan.BranchID, plan.ProjectID);
 
     // Solving a project trains Archaeology (retail's main skill-up source for the profession).
     UpdateGatherSkill(SKILL_ARCHAEOLOGY, GetPureSkillValue(SKILL_ARCHAEOLOGY), 0);
@@ -32619,7 +32647,7 @@ void Player::ExecutePendingSpellCastRequest()
         // The research UI casts a project's own SpellID, which is never learned into the spellbook.
         // Fail closed unless this exact solve script is enabled and the player's current state permits it;
         // otherwise the spell's CREATE_ITEM effect could run without the bookkeeping script.
-        if (plrCaster->CanSolveResearchProjectBySpell(spellInfo->Id) &&
+        if (plrCaster->CanCastResearchProjectSpell(spellInfo->Id) &&
             sObjectMgr->HasEnabledSpellScript(spellInfo->Id, "spell_archaeology_solve"))
             allow = true;
 
@@ -32681,6 +32709,8 @@ void Player::ExecutePendingSpellCastRequest()
 
     spell->m_fromClient = true;
     std::ranges::copy(_pendingSpellCastRequest->CastRequest.Misc, std::ranges::begin(spell->m_misc.Raw.Data));
+    if (!_pendingSpellCastRequest->CastRequest.Weight.empty())
+        spell->m_customArg = std::move(_pendingSpellCastRequest->CastRequest.Weight);
     spell->prepare(targets);
 
     _pendingSpellCastRequest = nullptr;

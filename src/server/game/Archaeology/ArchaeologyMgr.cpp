@@ -23,8 +23,10 @@
 #include "Log.h"
 #include "ObjectMgr.h"
 #include "Random.h"
+#include "SpellPackets.h"
 #include "Timer.h"
 #include <algorithm>
+#include <limits>
 
 ArchaeologyMgr::ArchaeologyMgr() = default;
 ArchaeologyMgr::~ArchaeologyMgr() = default;
@@ -337,4 +339,79 @@ ResearchProjectEntry const* ArchaeologyMgr::GetProjectBySpellId(uint32 spellId) 
             return project;
 
     return nullptr;
+}
+
+std::optional<ArchaeologySolvePlan> ArchaeologyMgr::BuildSolvePlan(
+    uint32 spellId, std::vector<WorldPackets::Spells::SpellWeight> const& weights) const
+{
+    ResearchProjectEntry const* project = GetProjectBySpellId(spellId);
+    if (!project)
+        return std::nullopt;
+
+    ResearchBranchEntry const* branch = sResearchBranchStore.LookupEntry(project->ResearchBranchID);
+    if (!branch || !branch->CurrencyID)
+        return std::nullopt;
+
+    CurrencyTypesEntry const* fragments = sCurrencyTypesStore.LookupEntry(branch->CurrencyID);
+    if (!fragments || !fragments->SpellWeight)
+        return std::nullopt;
+
+    uint64 fragmentCount = 0;
+    uint64 keystoneCount = 0;
+    for (WorldPackets::Spells::SpellWeight const& weight : weights)
+    {
+        if (weight.ID <= 0 || !weight.Quantity)
+            return std::nullopt;
+
+        switch (weight.Type)
+        {
+            case 1:
+                if (uint32(weight.ID) != branch->CurrencyID)
+                    return std::nullopt;
+                fragmentCount += weight.Quantity;
+                break;
+            case 2:
+                if (branch->ItemID <= 0 || weight.ID != branch->ItemID)
+                    return std::nullopt;
+                keystoneCount += weight.Quantity;
+                break;
+            default:
+                return std::nullopt;
+        }
+    }
+
+    if (keystoneCount > project->NumSockets || fragmentCount > project->RequiredWeight ||
+        fragmentCount > uint64(std::numeric_limits<int32>::max()))
+        return std::nullopt;
+
+    uint64 totalWeight = fragmentCount * fragments->SpellWeight;
+    if (totalWeight > project->RequiredWeight)
+        return std::nullopt;
+
+    if (keystoneCount)
+    {
+        ItemSparseEntry const* keystone = sItemSparseStore.LookupEntry(uint32(branch->ItemID));
+        if (!keystone || !keystone->SpellWeight ||
+            keystone->SpellWeightCategory != fragments->SpellCategory)
+            return std::nullopt;
+
+        uint64 keystoneWeight = keystoneCount * keystone->SpellWeight;
+        if (keystoneWeight > project->RequiredWeight - totalWeight)
+            return std::nullopt;
+
+        totalWeight += keystoneWeight;
+    }
+
+    if (totalWeight != project->RequiredWeight)
+        return std::nullopt;
+
+    ArchaeologySolvePlan plan;
+    plan.ProjectID = project->ID;
+    plan.BranchID = project->ResearchBranchID;
+    plan.FragmentCurrencyID = branch->CurrencyID;
+    plan.FragmentCount = uint32(fragmentCount);
+    plan.KeystoneItemID = branch->ItemID > 0 ? uint32(branch->ItemID) : 0;
+    plan.KeystoneCount = uint32(keystoneCount);
+    plan.RequiredWeight = project->RequiredWeight;
+    return plan;
 }
