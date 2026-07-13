@@ -188,6 +188,11 @@ uint32 ArchaeologyMgr::GetFindGameObjectId(uint32 researchBranchId) const
     return itr != _findGameObjectsByBranch.end() ? itr->second : 0;
 }
 
+bool ArchaeologyMgr::IsResearchBranchEnabled(uint32 researchBranchId) const
+{
+    return GetFindGameObjectId(researchBranchId) != 0;
+}
+
 bool ArchaeologyMgr::IsInsideDigSite(uint32 researchSiteId, float x, float y) const
 {
     ArchaeologyDigSiteInfo const* info = GetDigSiteInfo(researchSiteId);
@@ -294,6 +299,9 @@ uint32 ArchaeologyMgr::RollReplacementSite(uint32 mapId, std::vector<uint32> con
 
 uint32 ArchaeologyMgr::RollResearchProject(uint32 branchId, std::unordered_set<uint32> const& completed) const
 {
+    if (!IsResearchBranchEnabled(branchId))
+        return 0;
+
     // Split the branch's projects by rarity (0 = common, 1 = rare). Retail heavily favours commons;
     // rares appear roughly one roll in five when any exist.
     std::vector<uint32> commons, rares;
@@ -345,7 +353,7 @@ std::optional<ArchaeologySolvePlan> ArchaeologyMgr::BuildSolvePlan(
     uint32 spellId, std::vector<WorldPackets::Spells::SpellWeight> const& weights) const
 {
     ResearchProjectEntry const* project = GetProjectBySpellId(spellId);
-    if (!project)
+    if (!project || !IsResearchBranchEnabled(project->ResearchBranchID))
         return std::nullopt;
 
     ResearchBranchEntry const* branch = sResearchBranchStore.LookupEntry(project->ResearchBranchID);

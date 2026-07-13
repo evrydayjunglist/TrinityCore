@@ -21918,6 +21918,10 @@ void Player::_SaveResearchProjects(CharacterDatabaseTransaction trans)
         if (!projectId)
             continue;
 
+        ResearchProjectEntry const* project = sResearchProjectStore.LookupEntry(uint32(projectId));
+        if (!project || !sArchaeologyMgr->IsResearchBranchEnabled(project->ResearchBranchID))
+            continue;
+
         stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_RESEARCH_PROJECT);
         stmt->setUInt64(0, GetGUID().GetCounter());
         stmt->setUInt32(1, uint32(projectId));
@@ -28120,6 +28124,9 @@ std::unordered_set<uint32> Player::GetCompletedResearchProjects() const
 
 uint32 Player::EnsureResearchProject(uint32 branchId)
 {
+    if (!sArchaeologyMgr->IsResearchBranchEnabled(branchId))
+        return 0;
+
     if (int32 existing = GetCurrentResearchProject(branchId))
         return uint32(existing);
 
@@ -28161,7 +28168,8 @@ void Player::_LoadResearchProjects(PreparedQueryResult result)
     {
         Field* fields = result->Fetch();
         uint32 projectId = fields[0].GetUInt32();
-        if (!sResearchProjectStore.HasRecord(projectId))
+        ResearchProjectEntry const* project = sResearchProjectStore.LookupEntry(projectId);
+        if (!project || !sArchaeologyMgr->IsResearchBranchEnabled(project->ResearchBranchID))
             continue;
 
         UF::Research& research = AddDynamicUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::Research, 0).ModifyValue());
@@ -28175,7 +28183,7 @@ bool Player::CanCastResearchProjectSpell(uint32 spellId) const
         return false;
 
     ResearchProjectEntry const* project = sArchaeologyMgr->GetProjectBySpellId(spellId);
-    if (!project)
+    if (!project || !sArchaeologyMgr->IsResearchBranchEnabled(project->ResearchBranchID))
         return false;
 
     // Only the branch's current project may be solved.
@@ -28187,7 +28195,7 @@ bool Player::CanCastResearchProjectSpell(uint32 spellId) const
 
 bool Player::CanSolveResearchProject(ArchaeologySolvePlan const& plan) const
 {
-    if (!HasSkill(SKILL_ARCHAEOLOGY))
+    if (!HasSkill(SKILL_ARCHAEOLOGY) || !sArchaeologyMgr->IsResearchBranchEnabled(plan.BranchID))
         return false;
 
     ResearchProjectEntry const* project = sResearchProjectStore.LookupEntry(plan.ProjectID);
