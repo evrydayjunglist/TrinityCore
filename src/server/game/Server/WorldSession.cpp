@@ -17,6 +17,7 @@
 
 #include "WarbandGroupMgr.h"
 #include "AccountCurrencyMgr.h"
+#include "AchievementMgr.h"
 #include "WorldSession.h"
 #include "Account.h"
 #include "AccountMgr.h"
@@ -215,7 +216,8 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     _battlePetMgr(std::make_unique<BattlePets::BattlePetMgr>(this)),
     _collectionMgr(std::make_unique<CollectionMgr>(this)),
     _warbandGroupMgr(std::make_unique<WarbandGroupMgr>(this)),
-    _accountCurrencyMgr(std::make_unique<AccountCurrencyMgr>(this))
+    _accountCurrencyMgr(std::make_unique<AccountCurrencyMgr>(this)),
+    _accountAchievementMgr(std::make_unique<AccountAchievementMgr>(this))
 {
     if (m_Socket[CONNECTION_TYPE_REALM])
     {
@@ -1469,6 +1471,8 @@ public:
         PLAYER_DATA_ELEMENTS_ACCOUNT,
         PLAYER_DATA_FLAGS_ACCOUNT,
         BNET_ACCOUNT_CURRENCY,
+        BNET_ACCOUNT_ACHIEVEMENT,
+        BNET_ACCOUNT_ACHIEVEMENT_PROGRESS,
 
         MAX_QUERIES
     };
@@ -1544,6 +1548,14 @@ public:
         stmt->setUInt32(0, battlenetAccountId);
         ok = SetPreparedQuery(BNET_ACCOUNT_CURRENCY, stmt) && ok;
 
+        stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BNET_ACCOUNT_ACHIEVEMENT);
+        stmt->setUInt32(0, battlenetAccountId);
+        ok = SetPreparedQuery(BNET_ACCOUNT_ACHIEVEMENT, stmt) && ok;
+
+        stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BNET_ACCOUNT_ACHIEVEMENT_PROGRESS);
+        stmt->setUInt32(0, battlenetAccountId);
+        ok = SetPreparedQuery(BNET_ACCOUNT_ACHIEVEMENT_PROGRESS, stmt) && ok;
+
         return ok;
     }
 };
@@ -1602,6 +1614,8 @@ void WorldSession::InitializeSessionCallback(LoginDatabaseQueryHolder const& hol
     _warbandGroupMgr->LoadAccountGroups(holder.GetPreparedResult(AccountInfoQueryHolder::WARBAND_GROUPS), holder.GetPreparedResult(AccountInfoQueryHolder::WARBAND_GROUP_MEMBERS));
     LoadPlayerDataAccount(holder.GetPreparedResult(AccountInfoQueryHolder::PLAYER_DATA_ELEMENTS_ACCOUNT), holder.GetPreparedResult(AccountInfoQueryHolder::PLAYER_DATA_FLAGS_ACCOUNT));
     _accountCurrencyMgr->LoadFromDB(holder.GetPreparedResult(AccountInfoQueryHolder::BNET_ACCOUNT_CURRENCY));
+    _accountAchievementMgr->LoadFromDB(holder.GetPreparedResult(AccountInfoQueryHolder::BNET_ACCOUNT_ACHIEVEMENT),
+        holder.GetPreparedResult(AccountInfoQueryHolder::BNET_ACCOUNT_ACHIEVEMENT_PROGRESS));
 
     if (!m_inQueue)
         SendAuthResponse(ERROR_OK, false);

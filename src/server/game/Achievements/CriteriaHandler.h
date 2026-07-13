@@ -23,6 +23,7 @@
 #include "Duration.h"
 #include "Hash.h"
 #include "ObjectGuid.h"
+#include <optional>
 #include <span>
 #include <unordered_map>
 #include <vector>
@@ -75,6 +76,18 @@ struct CriteriaTree
 };
 
 typedef std::vector<CriteriaTree const*> CriteriaTreeList;
+
+enum class AchievementCriteriaOwner : uint8
+{
+    Player,
+    Account,
+    Guild
+};
+
+TC_GAME_API AchievementCriteriaOwner GetAchievementCriteriaOwner(AchievementEntry const* achievement);
+TC_GAME_API uint32 GetCriteriaOwnerFlags(CriteriaTreeList const& trees);
+TC_GAME_API bool IsCriteriaTreeForOwner(CriteriaTree const* tree, AchievementCriteriaOwner owner);
+TC_GAME_API std::optional<uint64> GetArchaeologyCriteriaProgressDelta(CriteriaType type);
 
 struct CriteriaProgress
 {
@@ -332,6 +345,7 @@ public:
     static CriteriaMgr* Instance();
 
     CriteriaList const& GetPlayerCriteriaByType(CriteriaType type, uint32 asset) const;
+    CriteriaList const& GetAccountCriteriaByType(CriteriaType type, uint32 asset) const;
 
     CriteriaList const& GetGuildCriteriaByType(CriteriaType type) const
     {
@@ -400,8 +414,10 @@ private:
 
     // store criterias by type to speed up lookup
     static CriteriaList const EmptyCriteriaList;
-    CriteriaList _criteriasByType[size_t(CriteriaType::Count)];
-    std::unordered_map<std::pair<int32, int32>, CriteriaList> _criteriasByAsset;
+    CriteriaList _playerCriteriasByType[size_t(CriteriaType::Count)];
+    CriteriaList _accountCriteriasByType[size_t(CriteriaType::Count)];
+    std::unordered_map<std::pair<int32, int32>, CriteriaList> _playerCriteriasByAsset;
+    std::unordered_map<std::pair<int32, int32>, CriteriaList> _accountCriteriasByAsset;
     CriteriaList _guildCriteriasByType[size_t(CriteriaType::Count)];
     std::unordered_map<std::pair<int32, int32>, CriteriaList> _scenarioCriteriasByTypeAndScenarioId;
     CriteriaList _questObjectiveCriteriasByType[size_t(CriteriaType::Count)];

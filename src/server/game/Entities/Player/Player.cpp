@@ -18610,6 +18610,8 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
 
     // load achievements before anything else to prevent multiple gains for the same achievement/criteria on every loading (as loading does call UpdateCriteria)
     m_achievementMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_ACHIEVEMENTS), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_CRITERIA_PROGRESS));
+    GetSession()->GetAccountAchievementMgr()->MigrateLegacyCharacterData(fields.account);
+    GetSession()->GetAccountAchievementMgr()->ApplyRetroactiveRewards(this);
     m_questObjectiveCriteriaMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_QUEST_STATUS_OBJECTIVES_CRITERIA_PROGRESS));
 
     SetMoney(std::min(fields.money, MAX_MONEY_AMOUNT));
@@ -19273,6 +19275,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
         LearnSpell(BattlePets::SPELL_BATTLE_PET_TRAINING, false);
 
     m_achievementMgr->CheckAllAchievementCriteria(this);
+    GetSession()->GetAccountAchievementMgr()->CheckAllAchievementCriteria(this);
     m_questObjectiveCriteriaMgr->CheckAllQuestObjectiveCriteria(this);
 
     PushQuests();
@@ -21207,6 +21210,7 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     // TODO: Move this out
     GetSession()->GetCollectionMgr()->SaveToDB(loginTransaction);
     GetSession()->GetAccountCurrencyMgr()->SaveToDB(loginTransaction);
+    GetSession()->GetAccountAchievementMgr()->SaveToDB(loginTransaction);
     GetSession()->GetBattlePetMgr()->SaveToDB(loginTransaction);
     GetSession()->SavePlayerDataAccount(loginTransaction);
 
@@ -27848,6 +27852,7 @@ void Player::HandleArchaeologySurvey()
 
                 ++progress;
                 SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSiteProgress, 0).ModifyValue(siteIndex), progress);
+                UpdateCriteria(CriteriaType::FindResearchObject, findGameObjectId);
                 RemoveAurasDueToSpell(SPELL_ARCHAEOLOGY_STANDING_ON_IT);
 
                 // Progress advances at reveal on retail. Generate and retain the next point now so
@@ -27889,7 +27894,10 @@ void Player::HandleArchaeologySurvey()
 
     // Exhaust and replace once every find is collected (retail single-slot replacement).
     if (found && progress >= info->FindCount)
+    {
         ReplaceResearchSite(siteIndex, mapId);
+        UpdateCriteria(CriteriaType::ExhaustAnyResearchSite);
+    }
 }
 
 bool Player::CanUseArchaeologyFind(GameObject const* find) const
@@ -28221,7 +28229,12 @@ void Player::CompleteResearchProjectSolve(ArchaeologySolvePlan const& plan)
     if (GetCurrentResearchProject(plan.BranchID) != int32(plan.ProjectID))
         return;
 
+    ResearchProjectEntry const* project = sResearchProjectStore.LookupEntry(plan.ProjectID);
+    if (!project)
+        return;
+
     RecordCompletedProject(plan.ProjectID);
+    UpdateCriteria(CriteriaType::CompleteAnyResearchProject, project->Rarity, plan.BranchID);
     AdvanceResearchProject(plan.BranchID, plan.ProjectID);
 
     // Solving a project trains Archaeology (retail's main skill-up source for the profession).
@@ -28561,6 +28574,7 @@ void Player::HandleFall(MovementInfo const& movementInfo)
 void Player::ResetAchievements()
 {
     m_achievementMgr->Reset();
+    GetSession()->GetAccountAchievementMgr()->Reset();
 }
 
 void Player::SendRespondInspectAchievements(Player* player) const
@@ -28570,33 +28584,49 @@ void Player::SendRespondInspectAchievements(Player* player) const
 
 uint32 Player::GetAchievementPoints() const
 {
-    return m_achievementMgr->GetAchievementPoints();
+    AccountAchievementMgr const* accountAchievementMgr = GetSession()->GetAccountAchievementMgr();
+    uint32 points = m_achievementMgr->GetAchievementPoints() + accountAchievementMgr->GetAchievementPoints();
+    for (uint32 achievementId : accountAchievementMgr->GetCompletedAchievementIds())
+        if (m_achievementMgr->HasAchieved(achievementId))
+            if (AchievementEntry const* achievement = sAchievementStore.LookupEntry(achievementId))
+                points -= achievement->Points;
+
+    return points;
 }
 
 std::vector<uint32> Player::GetCompletedAchievementIds() const
 {
-    return m_achievementMgr->GetCompletedAchievementIds();
+    std::vector<uint32> achievementIds = m_achievementMgr->GetCompletedAchievementIds();
+    std::unordered_set<uint32> uniqueAchievementIds(achievementIds.begin(), achievementIds.end());
+    for (uint32 achievementId : GetSession()->GetAccountAchievementMgr()->GetCompletedAchievementIds())
+        if (uniqueAchievementIds.insert(achievementId).second)
+            achievementIds.push_back(achievementId);
+
+    return achievementIds;
 }
 
 bool Player::HasAchieved(uint32 achievementId) const
 {
-    return m_achievementMgr->HasAchieved(achievementId);
+    return m_achievementMgr->HasAchieved(achievementId) || GetSession()->GetAccountAchievementMgr()->HasAchieved(achievementId);
 }
 
 void Player::StartCriteria(CriteriaStartEvent startEvent, uint32 entry, Milliseconds timeLost/* = Milliseconds::zero()*/)
 {
     m_achievementMgr->StartCriteria(startEvent, entry, timeLost);
+    GetSession()->GetAccountAchievementMgr()->StartCriteria(startEvent, entry, timeLost);
 }
 
 void Player::FailCriteria(CriteriaFailEvent condition, int32 failAsset)
 {
     m_achievementMgr->FailCriteria(condition, failAsset);
+    GetSession()->GetAccountAchievementMgr()->FailCriteria(condition, failAsset);
     m_questObjectiveCriteriaMgr->FailCriteria(condition, failAsset);
 }
 
 void Player::UpdateCriteria(CriteriaType type, uint64 miscValue1 /*= 0*/, uint64 miscValue2 /*= 0*/, uint64 miscValue3 /*= 0*/, WorldObject* ref /*= nullptr*/)
 {
     m_achievementMgr->UpdateCriteria(type, miscValue1, miscValue2, miscValue3, ref, this);
+    GetSession()->GetAccountAchievementMgr()->UpdateCriteria(type, miscValue1, miscValue2, miscValue3, ref, this);
     m_questObjectiveCriteriaMgr->UpdateCriteria(type, miscValue1, miscValue2, miscValue3, ref, this);
 
     // Update only individual achievement criteria here, otherwise we may get multiple updates
@@ -28613,7 +28643,10 @@ void Player::UpdateCriteria(CriteriaType type, uint64 miscValue1 /*= 0*/, uint64
 
 void Player::CompletedAchievement(AchievementEntry const* entry)
 {
-    m_achievementMgr->CompletedAchievement(entry, this);
+    if (entry->Flags & ACHIEVEMENT_FLAG_ACCOUNT)
+        GetSession()->GetAccountAchievementMgr()->CompletedAchievement(entry, this);
+    else
+        m_achievementMgr->CompletedAchievement(entry, this);
 }
 
 bool Player::ModifierTreeSatisfied(uint32 modifierTreeId) const

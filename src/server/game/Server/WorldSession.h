@@ -42,6 +42,7 @@ class BlackMarketEntry;
 class CollectionMgr;
 class WarbandGroupMgr;
 class AccountCurrencyMgr;
+class AccountAchievementMgr;
 class Creature;
 class InstanceLock;
 class Item;
@@ -1263,6 +1264,7 @@ class TC_GAME_API WorldSession
         CollectionMgr* GetCollectionMgr() const { return _collectionMgr.get(); }
         WarbandGroupMgr* GetWarbandGroupMgr() const { return _warbandGroupMgr.get(); }
         AccountCurrencyMgr* GetAccountCurrencyMgr() const { return _accountCurrencyMgr.get(); }
+        AccountAchievementMgr* GetAccountAchievementMgr() const { return _accountAchievementMgr.get(); }
 
     public:                                                 // opcodes handlers
 
@@ -2108,6 +2110,7 @@ class TC_GAME_API WorldSession
         std::unique_ptr<CollectionMgr> _collectionMgr;
         std::unique_ptr<WarbandGroupMgr> _warbandGroupMgr;
         std::unique_ptr<AccountCurrencyMgr> _accountCurrencyMgr;
+        std::unique_ptr<AccountAchievementMgr> _accountAchievementMgr;
 
         ConnectToKey _instanceConnectKey;
 
