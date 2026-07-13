@@ -40,6 +40,7 @@
 
 class BlackMarketEntry;
 class CollectionMgr;
+class AccountAchievementMgr;
 class Creature;
 class InstanceLock;
 class Item;
@@ -1229,6 +1230,7 @@ class TC_GAME_API WorldSession
         BattlePets::BattlePetMgr* GetBattlePetMgr() const { return _battlePetMgr.get(); }
 
         CollectionMgr* GetCollectionMgr() const { return _collectionMgr.get(); }
+        AccountAchievementMgr* GetAccountAchievementMgr() const { return _accountAchievementMgr.get(); }
 
     public:                                                 // opcodes handlers
 

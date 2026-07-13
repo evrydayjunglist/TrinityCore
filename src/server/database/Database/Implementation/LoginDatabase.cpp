@@ -205,6 +205,13 @@ void LoginDatabaseConnection::DoPrepareStatements()
     PrepareStatement(LOGIN_SEL_BNET_PLAYER_DATA_FLAGS_ACCOUNT, "SELECT storageIndex, mask FROM battlenet_account_player_data_flag WHERE battlenetAccountId = ?", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_DEL_BNET_PLAYER_DATA_FLAGS_ACCOUNT, "DELETE FROM battlenet_account_player_data_flag WHERE battlenetAccountId = ? AND storageIndex = ?", CONNECTION_ASYNC);
     PrepareStatement(LOGIN_INS_BNET_PLAYER_DATA_FLAGS_ACCOUNT, "INSERT INTO battlenet_account_player_data_flag (battlenetAccountId, storageIndex, mask) VALUES (?, ?, ?)", CONNECTION_ASYNC);
+
+    PrepareStatement(LOGIN_SEL_BNET_ACCOUNT_ACHIEVEMENT, "SELECT achievement, date FROM battlenet_account_achievement WHERE battlenetAccountId = ?", CONNECTION_BOTH);
+    PrepareStatement(LOGIN_INS_BNET_ACCOUNT_ACHIEVEMENT, "INSERT INTO battlenet_account_achievement (battlenetAccountId, achievement, date) VALUES (?, ?, ?)", CONNECTION_BOTH);
+    PrepareStatement(LOGIN_DEL_BNET_ACCOUNT_ACHIEVEMENT, "DELETE FROM battlenet_account_achievement WHERE battlenetAccountId = ?", CONNECTION_BOTH);
+    PrepareStatement(LOGIN_SEL_BNET_ACCOUNT_ACHIEVEMENT_PROGRESS, "SELECT criteria, counter, date FROM battlenet_account_achievement_progress WHERE battlenetAccountId = ?", CONNECTION_BOTH);
+    PrepareStatement(LOGIN_INS_BNET_ACCOUNT_ACHIEVEMENT_PROGRESS, "INSERT INTO battlenet_account_achievement_progress (battlenetAccountId, criteria, counter, date) VALUES (?, ?, ?, ?)", CONNECTION_BOTH);
+    PrepareStatement(LOGIN_DEL_BNET_ACCOUNT_ACHIEVEMENT_PROGRESS, "DELETE FROM battlenet_account_achievement_progress WHERE battlenetAccountId = ?", CONNECTION_BOTH);
 }
 
 LoginDatabaseConnection::LoginDatabaseConnection(MySQLConnectionInfo& connInfo, ConnectionFlags connectionFlags) : MySQLConnection(connInfo, connectionFlags)

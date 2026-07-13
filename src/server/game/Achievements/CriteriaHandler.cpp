@@ -54,6 +54,57 @@
 #include "WorldStateMgr.h"
 #include "WowTime.h"
 
+AchievementCriteriaOwner GetAchievementCriteriaOwner(AchievementEntry const* achievement)
+{
+    if (achievement && achievement->Flags & ACHIEVEMENT_FLAG_GUILD)
+        return AchievementCriteriaOwner::Guild;
+    if (achievement && achievement->Flags & ACHIEVEMENT_FLAG_ACCOUNT)
+        return AchievementCriteriaOwner::Account;
+    return AchievementCriteriaOwner::Player;
+}
+
+uint32 GetCriteriaOwnerFlags(CriteriaTreeList const& trees)
+{
+    uint32 flags = 0;
+    for (CriteriaTree const* tree : trees)
+    {
+        if (!tree->Achievement)
+            continue;
+
+        switch (GetAchievementCriteriaOwner(tree->Achievement))
+        {
+            case AchievementCriteriaOwner::Player:
+                flags |= CRITERIA_FLAG_CU_PLAYER;
+                break;
+            case AchievementCriteriaOwner::Account:
+                flags |= CRITERIA_FLAG_CU_ACCOUNT;
+                break;
+            case AchievementCriteriaOwner::Guild:
+                flags |= CRITERIA_FLAG_CU_GUILD;
+                break;
+        }
+    }
+    return flags;
+}
+
+bool IsCriteriaTreeForOwner(CriteriaTree const* tree, AchievementCriteriaOwner owner)
+{
+    return tree->Achievement && GetAchievementCriteriaOwner(tree->Achievement) == owner;
+}
+
+std::optional<uint64> GetArchaeologyCriteriaProgressDelta(CriteriaType type)
+{
+    switch (type)
+    {
+        case CriteriaType::CompleteAnyResearchProject:
+        case CriteriaType::FindResearchObject:
+        case CriteriaType::ExhaustAnyResearchSite:
+            return 1;
+        default:
+            return std::nullopt;
+    }
+}
+
 bool CriteriaData::IsValid(Criteria const* criteria)
 {
     if (DataType >= MAX_CRITERIA_DATA_TYPE)
@@ -504,6 +555,12 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         if (!data->Meets(referencePlayer, ref, uint32(miscValue1), uint32(miscValue2)))
             return;
 
+    if (std::optional<uint64> progressDelta = GetArchaeologyCriteriaProgressDelta(CriteriaType(criteria->Entry->Type)))
+    {
+        SetCriteriaProgress(criteria, *progressDelta, referencePlayer, PROGRESS_ACCUMULATE);
+        return;
+    }
+
     switch (CriteriaType(criteria->Entry->Type))
     {
         // std. case: increment at 1
@@ -569,8 +626,6 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::SellItemsToVendors:
         case CriteriaType::ReachMaxLevel:
         case CriteriaType::LearnTaxiNode:
-            SetCriteriaProgress(criteria, 1, referencePlayer, PROGRESS_ACCUMULATE);
-            break;
         // std case: increment at miscValue1
         case CriteriaType::MoneyEarnedFromSales:
         case CriteriaType::MoneySpentOnRespecs:
@@ -821,7 +876,6 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::CompleteQuestsCountForGuild:
         case CriteriaType::HonorableKillsForGuild:
         case CriteriaType::KillAnyCreatureForGuild:
-        case CriteriaType::CompleteAnyResearchProject:
         case CriteriaType::CompleteGuildChallenge:
         case CriteriaType::CompleteAnyGuildChallenge:
         case CriteriaType::CompletedLFRDungeon:
@@ -845,8 +899,6 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::LevelChangedForGarrisonFollower:
         case CriteriaType::LearnToy:
         case CriteriaType::LearnAnyToy:
-        case CriteriaType::FindResearchObject:
-        case CriteriaType::ExhaustAnyResearchSite:
         case CriteriaType::CompleteInternalCriteria:
         case CriteriaType::CompleteAnyChallengeMode:
         case CriteriaType::KilledAllUnitsInSpawnRegion:
@@ -1183,6 +1235,9 @@ bool CriteriaHandler::IsCompletedCriteria(Criteria const* criteria, uint64 requi
     {
         case CriteriaType::WinBattleground:
         case CriteriaType::KillCreature:
+        case CriteriaType::CompleteAnyResearchProject:
+        case CriteriaType::FindResearchObject:
+        case CriteriaType::ExhaustAnyResearchSite:
         case CriteriaType::ReachLevel:
         case CriteriaType::GuildAttainedLevel:
         case CriteriaType::SkillRaised:
@@ -1614,6 +1669,10 @@ bool CriteriaHandler::RequirementsSatisfied(Criteria const* criteria, uint64 mis
             break;
         case CriteriaType::UseGameobject:
         case CriteriaType::CatchFishInFishingHole:
+            if (!miscValue1 || miscValue1 != uint32(criteria->Entry->Asset.GameObjectID))
+                return false;
+            break;
+        case CriteriaType::FindResearchObject:
             if (!miscValue1 || miscValue1 != uint32(criteria->Entry->Asset.GameObjectID))
                 return false;
             break;
@@ -2080,9 +2139,14 @@ bool CriteriaHandler::ModifierSatisfied(ModifierTreeEntry const* modifier, uint6
             if (referencePlayer->GetRBGPersonalRating() < reqValue)
                 return false;
             break;
-        case ModifierTreeType::ResearchProjectRarity: // 65 NYI
-        case ModifierTreeType::ResearchProjectBranch: // 66 NYI
-            return false;
+        case ModifierTreeType::ResearchProjectRarity: // 65
+            if (miscValue1 != reqValue)
+                return false;
+            break;
+        case ModifierTreeType::ResearchProjectBranch: // 66
+            if (miscValue2 != reqValue)
+                return false;
+            break;
         case ModifierTreeType::WorldStateExpression: // 67
             if (WorldStateExpressionEntry const* worldStateExpression = sWorldStateExpressionStore.LookupEntry(reqValue))
                 return ConditionMgr::IsMeetingWorldStateExpression(referencePlayer->GetMap(), worldStateExpression);
@@ -4603,14 +4667,28 @@ CriteriaList const& CriteriaMgr::GetPlayerCriteriaByType(CriteriaType type, uint
 {
     if (asset && IsCriteriaTypeStoredByAsset(type))
     {
-        auto itr = _criteriasByAsset.find(std::pair<int32, int32>(int32(type), asset));
-        if (itr != _criteriasByAsset.end())
+        auto itr = _playerCriteriasByAsset.find(std::pair<int32, int32>(int32(type), asset));
+        if (itr != _playerCriteriasByAsset.end())
             return itr->second;
 
         return EmptyCriteriaList;
     }
 
-    return _criteriasByType[size_t(type)];
+    return _playerCriteriasByType[size_t(type)];
+}
+
+CriteriaList const& CriteriaMgr::GetAccountCriteriaByType(CriteriaType type, uint32 asset) const
+{
+    if (asset && IsCriteriaTypeStoredByAsset(type))
+    {
+        auto itr = _accountCriteriasByAsset.find(std::pair<int32, int32>(int32(type), asset));
+        if (itr != _accountCriteriasByAsset.end())
+            return itr->second;
+
+        return EmptyCriteriaList;
+    }
+
+    return _accountCriteriasByType[size_t(type)];
 }
 
 CriteriaList const& CriteriaMgr::GetScenarioCriteriaByTypeAndScenario(CriteriaType type, uint32 scenarioId) const
@@ -4700,12 +4778,14 @@ void CriteriaMgr::LoadCriteriaList()
     _criteriasByFailEvent.clear();
     _criteriasByStartEvent.clear();
     _scenarioCriteriasByTypeAndScenarioId.clear();
-    _criteriasByAsset.clear();
+    _playerCriteriasByAsset.clear();
+    _accountCriteriasByAsset.clear();
     for (size_t i = 0; i < size_t(CriteriaType::Count); ++i)
     {
         _questObjectiveCriteriasByType[i].clear();
         _guildCriteriasByType[i].clear();
-        _criteriasByType[i].clear();
+        _playerCriteriasByType[i].clear();
+        _accountCriteriasByType[i].clear();
     }
 
     _criteriaTreeByCriteria.clear();
@@ -4785,6 +4865,7 @@ void CriteriaMgr::LoadCriteriaList()
         criteria.ID = criteriaEntry->ID;
         criteria.Entry = criteriaEntry;
         criteria.Modifier = Trinity::Containers::MapGetValuePtr(_criteriaModifiers, criteriaEntry->ModifierTreeId);
+        criteria.FlagsCu = GetCriteriaOwnerFlags(treeItr->second);
 
         std::vector<uint32> scenarioIds;
 
@@ -4792,37 +4873,27 @@ void CriteriaMgr::LoadCriteriaList()
         {
             const_cast<CriteriaTree*>(tree)->Criteria = &criteria;
 
-            if (AchievementEntry const* achievement = tree->Achievement)
-            {
-                if (achievement->Flags & ACHIEVEMENT_FLAG_GUILD)
-                    criteria.FlagsCu |= CRITERIA_FLAG_CU_GUILD;
-                else if (achievement->Flags & ACHIEVEMENT_FLAG_ACCOUNT)
-                    criteria.FlagsCu |= CRITERIA_FLAG_CU_ACCOUNT;
-                else
-                    criteria.FlagsCu |= CRITERIA_FLAG_CU_PLAYER;
-            }
-            else if (tree->ScenarioStep)
+            if (!tree->Achievement && tree->ScenarioStep)
             {
                 criteria.FlagsCu |= CRITERIA_FLAG_CU_SCENARIO;
                 scenarioIds.push_back(tree->ScenarioStep->ScenarioID);
             }
-            else if (tree->QuestObjective)
+            else if (!tree->Achievement && tree->QuestObjective)
                 criteria.FlagsCu |= CRITERIA_FLAG_CU_QUEST_OBJECTIVE;
         }
 
-        if (criteria.FlagsCu & (CRITERIA_FLAG_CU_PLAYER | CRITERIA_FLAG_CU_ACCOUNT))
+        auto storeOwnedCriteria = [&](auto& criteriasByType, auto& criteriasByAsset)
         {
-            ++criterias;
-            _criteriasByType[criteriaEntry->Type].push_back(&criteria);
+            criteriasByType[criteriaEntry->Type].push_back(&criteria);
             if (IsCriteriaTypeStoredByAsset(CriteriaType(criteriaEntry->Type)))
             {
                 if (CriteriaType(criteriaEntry->Type) != CriteriaType::RevealWorldMapOverlay)
-                    _criteriasByAsset[std::pair<int32, int32>(criteriaEntry->Type, criteriaEntry->Asset.ID)].push_back(&criteria);
+                    criteriasByAsset[std::pair<int32, int32>(criteriaEntry->Type, criteriaEntry->Asset.ID)].push_back(&criteria);
                 else
                 {
                     WorldMapOverlayEntry const* worldOverlayEntry = sWorldMapOverlayStore.LookupEntry(criteriaEntry->Asset.WorldMapOverlayID);
                     if (!worldOverlayEntry)
-                        break;
+                        return;
 
                     for (uint8 j = 0; j < MAX_WORLD_MAP_OVERLAY_AREA_IDX; ++j)
                     {
@@ -4833,11 +4904,23 @@ void CriteriaMgr::LoadCriteriaList()
                                 if (worldOverlayEntry->AreaID[j] == worldOverlayEntry->AreaID[i])
                                     valid = false;
                             if (valid)
-                                _criteriasByAsset[std::pair<int32, int32>(criteriaEntry->Type, worldOverlayEntry->AreaID[j])].push_back(&criteria);
+                                criteriasByAsset[std::pair<int32, int32>(criteriaEntry->Type, worldOverlayEntry->AreaID[j])].push_back(&criteria);
                         }
                     }
                 }
             }
+        };
+
+        if (criteria.FlagsCu & CRITERIA_FLAG_CU_PLAYER)
+        {
+            ++criterias;
+            storeOwnedCriteria(_playerCriteriasByType, _playerCriteriasByAsset);
+        }
+
+        if (criteria.FlagsCu & CRITERIA_FLAG_CU_ACCOUNT)
+        {
+            ++criterias;
+            storeOwnedCriteria(_accountCriteriasByType, _accountCriteriasByAsset);
         }
 
         if (criteria.FlagsCu & CRITERIA_FLAG_CU_GUILD)

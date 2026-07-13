@@ -15,6 +15,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "AchievementMgr.h"
 #include "WorldSession.h"
 #include "Account.h"
 #include "AccountMgr.h"
@@ -148,7 +149,8 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     _timeSyncTimer(0),
     _calendarEventCreationCooldown(0),
     _battlePetMgr(std::make_unique<BattlePets::BattlePetMgr>(this)),
-    _collectionMgr(std::make_unique<CollectionMgr>(this))
+    _collectionMgr(std::make_unique<CollectionMgr>(this)),
+    _accountAchievementMgr(std::make_unique<AccountAchievementMgr>(this))
 {
     if (m_Socket[CONNECTION_TYPE_REALM])
     {
@@ -1322,6 +1324,8 @@ public:
         WARBAND_SCENES,
         PLAYER_DATA_ELEMENTS_ACCOUNT,
         PLAYER_DATA_FLAGS_ACCOUNT,
+        BNET_ACCOUNT_ACHIEVEMENT,
+        BNET_ACCOUNT_ACHIEVEMENT_PROGRESS,
 
         MAX_QUERIES
     };
@@ -1384,6 +1388,13 @@ public:
         stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BNET_PLAYER_DATA_FLAGS_ACCOUNT);
         stmt->setUInt32(0, battlenetAccountId);
         ok = SetPreparedQuery(PLAYER_DATA_FLAGS_ACCOUNT, stmt) && ok;
+        stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BNET_ACCOUNT_ACHIEVEMENT);
+        stmt->setUInt32(0, battlenetAccountId);
+        ok = SetPreparedQuery(BNET_ACCOUNT_ACHIEVEMENT, stmt) && ok;
+
+        stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_BNET_ACCOUNT_ACHIEVEMENT_PROGRESS);
+        stmt->setUInt32(0, battlenetAccountId);
+        ok = SetPreparedQuery(BNET_ACCOUNT_ACHIEVEMENT_PROGRESS, stmt) && ok;
 
         return ok;
     }
@@ -1441,6 +1452,8 @@ void WorldSession::InitializeSessionCallback(LoginDatabaseQueryHolder const& hol
     _collectionMgr->LoadAccountTransmogOutfits(holder.GetPreparedResult(AccountInfoQueryHolder::TRANSMOG_OUTFITS));
     _collectionMgr->LoadAccountWarbandScenes(holder.GetPreparedResult(AccountInfoQueryHolder::WARBAND_SCENES));
     LoadPlayerDataAccount(holder.GetPreparedResult(AccountInfoQueryHolder::PLAYER_DATA_ELEMENTS_ACCOUNT), holder.GetPreparedResult(AccountInfoQueryHolder::PLAYER_DATA_FLAGS_ACCOUNT));
+    _accountAchievementMgr->LoadFromDB(holder.GetPreparedResult(AccountInfoQueryHolder::BNET_ACCOUNT_ACHIEVEMENT),
+        holder.GetPreparedResult(AccountInfoQueryHolder::BNET_ACCOUNT_ACHIEVEMENT_PROGRESS));
 
     if (!m_inQueue)
         SendAuthResponse(ERROR_OK, false);

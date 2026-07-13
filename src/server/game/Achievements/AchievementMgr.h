@@ -22,6 +22,13 @@
 #include "DatabaseEnvFwd.h"
 
 class Guild;
+class WorldSession;
+
+namespace WorldPackets::Achievement
+{
+    class AllAchievementData;
+    class AllAccountCriteria;
+}
 
 struct AchievementReward
 {
@@ -38,6 +45,9 @@ struct AchievementRewardLocale
     std::vector<std::string> Subject;
     std::vector<std::string> Body;
 };
+
+TC_GAME_API bool MergeLegacyAccountCriteriaProgress(CriteriaProgressMap& progressMap, Criteria const* criteria,
+    uint64 counter, std::time_t date, ObjectGuid accountGuid);
 
 struct CompletedAchievementData
 {
@@ -74,6 +84,40 @@ protected:
     uint32 _achievementPoints;
 };
 
+class TC_GAME_API AccountAchievementMgr : public AchievementMgr
+{
+public:
+    explicit AccountAchievementMgr(WorldSession* owner);
+
+    void Reset() override;
+
+    void LoadFromDB(PreparedQueryResult achievementResult, PreparedQueryResult criteriaResult);
+    void SaveToDB(LoginDatabaseTransaction trans);
+    void MigrateLegacyCharacterData(uint32 gameAccountId);
+
+    void SendAllData(Player const* receiver) const override;
+    void AppendAllData(WorldPackets::Achievement::AllAchievementData& achievements,
+        WorldPackets::Achievement::AllAccountCriteria& criteria) const;
+    void ApplyRetroactiveRewards(Player* player) const;
+
+    void CompletedAchievement(AchievementEntry const* entry, Player* referencePlayer) override;
+
+protected:
+    bool CanUpdateCriteriaTree(Criteria const* criteria, CriteriaTree const* tree, Player* referencePlayer) const override;
+    void SendCriteriaUpdate(Criteria const* entry, CriteriaProgress const* progress, Seconds timeElapsed, bool timedCompleted) const override;
+    void SendCriteriaProgressRemoved(uint32 criteriaId) override;
+
+    void SendAchievementEarned(AchievementEntry const* achievement) const;
+
+    void SendPacket(WorldPacket const* data) const override;
+
+    std::string GetOwnerInfo() const override;
+    CriteriaList const& GetCriteriaByType(CriteriaType type, uint32 asset) const override;
+
+private:
+    WorldSession* _owner;
+};
+
 class TC_GAME_API PlayerAchievementMgr : public AchievementMgr
 {
 public:
@@ -94,6 +138,7 @@ public:
     bool ModifierTreeSatisfied(uint32 modifierTreeId) const;
 
 protected:
+    bool CanUpdateCriteriaTree(Criteria const* criteria, CriteriaTree const* tree, Player* referencePlayer) const override;
     void SendCriteriaUpdate(Criteria const* entry, CriteriaProgress const* progress, Seconds timeElapsed, bool timedCompleted) const override;
     void SendCriteriaProgressRemoved(uint32 criteriaId) override;
 
