@@ -183,6 +183,19 @@ void RandomPlayerbotMgr::TriggerSchedulerPass()
 
 void RandomPlayerbotMgr::TryLoginRandomBots()
 {
+    // LoginRosterEntry inserts into _activeRandomBotGuids as soon as login is *requested*.
+    // If the async load later fails, OnLogout never runs, so reclaim orphaned claims that have
+    // neither a live bot session nor a connected player (otherwise MaxRandomBots permanently
+    // underfills until restart).
+    for (auto itr = _activeRandomBotGuids.begin(); itr != _activeRandomBotGuids.end();)
+    {
+        ObjectGuid const& guid = *itr;
+        if (sWorld->FindBotSession(guid) || ObjectAccessor::FindConnectedPlayer(guid))
+            ++itr;
+        else
+            itr = _activeRandomBotGuids.erase(itr);
+    }
+
     size_t const target = GetTargetRandomBotCount();
     if (_activeRandomBotGuids.size() >= target)
         return;

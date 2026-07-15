@@ -578,8 +578,11 @@ class TC_GAME_API World
         // one reserved/master account can legitimately host several simultaneous bot
         // characters (Playerbots AC-likeness fix, see playerbots-bot-session-account-cap-handoff.md).
         WorldSession* FindBotSession(ObjectGuid characterGuid) const;
+        // True when another human or in-world/loading bot session still owns this account.
+        // Used so logout must not wipe siblings' characters.online / account.online flags.
+        bool HasOtherOnlineSessionOnAccount(uint32 accountId, WorldSession const* except) const;
         void AddSession(WorldSession* s);
-        void AddBotSession(WorldSession* s, ObjectGuid characterGuid);
+        bool AddBotSession(WorldSession* s, ObjectGuid characterGuid);
         void RemoveBotSession(ObjectGuid characterGuid);
         void AddInstanceSocket(std::weak_ptr<WorldSocket> sock, uint64 connectToKey);
         void SendAutoBroadcast();

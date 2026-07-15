@@ -293,7 +293,10 @@ WorldSession::~WorldSession()
     while (_recvQueue.next(packet))
         delete packet;
 
-    LoginDatabase.PExecute("UPDATE account SET online = 0 WHERE id = {};", GetAccountId());     // One-time query
+    // Multi-session-per-account bots (and a human sharing an account with master-alt bots) mean
+    // this session's teardown must not clear account.online while a sibling session is still live.
+    if (!sWorld->HasOtherOnlineSessionOnAccount(GetAccountId(), this))
+        LoginDatabase.PExecute("UPDATE account SET online = 0 WHERE id = {};", GetAccountId());     // One-time query
 }
 
 bool WorldSession::PlayerDisconnected() const
@@ -709,6 +712,8 @@ void WorldSession::LogoutPlayer(bool save)
 
     if (_player)
     {
+        ObjectGuid const logoutCharacterGuid = _player->GetGUID();
+
         if (!_player->GetLootGUID().IsEmpty())
             DoLootReleaseAll();
 
@@ -832,10 +837,21 @@ void WorldSession::LogoutPlayer(bool save)
         SendPacket(WorldPackets::Character::LogoutComplete().Write());
         TC_LOG_DEBUG("network", "SESSION: Sent SMSG_LOGOUT_COMPLETE Message");
 
-        //! Since each account can only have one online character at any given time, ensure all characters for active account are marked as offline
-        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_ACCOUNT_ONLINE);
-        stmt->setUInt32(0, GetAccountId());
-        CharacterDatabase.Execute(stmt);
+        // Upstream assumes one online character per account and clears every characters.online
+        // row for the account. This fork allows several simultaneous bot sessions (and a human
+        // + master-alt bots) on one account, so wipe only this character when siblings remain.
+        if (sWorld->HasOtherOnlineSessionOnAccount(GetAccountId(), this))
+        {
+            CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHAR_OFFLINE);
+            stmt->setUInt64(0, logoutCharacterGuid.GetCounter());
+            CharacterDatabase.Execute(stmt);
+        }
+        else
+        {
+            CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_ACCOUNT_ONLINE);
+            stmt->setUInt32(0, GetAccountId());
+            CharacterDatabase.Execute(stmt);
+        }
     }
 
     if (m_Socket[CONNECTION_TYPE_INSTANCE])
