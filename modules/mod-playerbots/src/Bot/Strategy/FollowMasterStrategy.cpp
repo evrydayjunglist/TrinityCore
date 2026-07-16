@@ -39,4 +39,9 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // "guild accept"). Signal + GetGuildIdInvited() poll; accept is idempotent.
     triggers.push_back(new TriggerNode("guild invite signal", { NextAction("guild accept", 100.0f) }));
     triggers.push_back(new TriggerNode("guild invite", { NextAction("guild accept", 100.0f) }));
+
+    // Resurrect request while dead (AC DeadStrategy "accept resurrect"). Master-alt never runs
+    // NewRpg's death band (HasMaster short-circuit), so follow must own this path.
+    triggers.push_back(new TriggerNode("resurrect request signal", { NextAction("accept resurrect", 100.0f) }));
+    triggers.push_back(new TriggerNode("resurrect request", { NextAction("accept resurrect", 100.0f) }));
 }

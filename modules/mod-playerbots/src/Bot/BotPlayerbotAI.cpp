@@ -20,6 +20,7 @@
 #include "Bot/Packet/BotGuildInvitePacket.h"
 #include "Bot/Packet/BotPartyInvitePacket.h"
 #include "Bot/Packet/BotPacketParse.h"
+#include "Bot/Packet/BotResurrectRequestPacket.h"
 #include "Engine.h"
 #include "Group.h"
 #include "Log.h"
@@ -48,6 +49,7 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
     static std::unordered_map<uint32, PacketSignalEntry> const registry = {
         { SMSG_PARTY_INVITE, { "group invite signal", true } },
         { SMSG_GUILD_INVITE, { "guild invite signal", true } },
+        { SMSG_RESURRECT_REQUEST, { "resurrect request signal", true } },
     };
 
     auto itr = registry.find(opcode);
@@ -212,6 +214,35 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                     parsed.GuildGUID.ToString(),
                     parsed.GuildName,
                     parsed.InviterName);
+            break;
+        }
+        case SMSG_RESURRECT_REQUEST:
+        {
+            Playerbots::PacketParse::ResurrectRequestPayload parsed;
+            if (!Playerbots::PacketParse::TryReadResurrectRequest(*signal.Packet, parsed))
+                return;
+
+            // Layer 2: pending resurrection dual vs parsed offerer GUID.
+            Player* bot = GetBot();
+            if (!bot || !bot->IsResurrectRequested() ||
+                !bot->IsResurrectRequestedBy(parsed.ResurrectOffererGUID))
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_RESURRECT_REQUEST Layer-2 mismatch bot={} parsedOfferer={} liveRequested={} verifiedBuild={}",
+                    bot ? bot->GetName() : "?",
+                    parsed.ResurrectOffererGUID.ToString(),
+                    bot && bot->IsResurrectRequested() ? bot->GetResurrectRequesterGUID().ToString() : "none",
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_RESURRECT_REQUEST ok bot={} offerer={} name={} spell={}",
+                    bot->GetName(),
+                    parsed.ResurrectOffererGUID.ToString(),
+                    parsed.Name,
+                    parsed.SpellID);
             break;
         }
         default:

@@ -17,4 +17,11 @@
 
 #include "PassiveStrategy.h"
 
-// Gate 6: passive strategy — no triggers, no movement/combat actions.
+// Gate 6: passive strategy — no movement/combat defaults. Resurrect accept is wired so a dead
+// non-RPG random bot can still accept SMSG_RESURRECT_REQUEST (same dual signal/poll as follow).
+
+void PassiveStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+{
+    triggers.push_back(new TriggerNode("resurrect request signal", { NextAction("accept resurrect", 100.0f) }));
+    triggers.push_back(new TriggerNode("resurrect request", { NextAction("accept resurrect", 100.0f) }));
+}

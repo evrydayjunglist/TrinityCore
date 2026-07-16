@@ -24,6 +24,7 @@
 #include "Bot/Action/GroupActions.h"
 #include "Bot/Action/GuildActions.h"
 #include "Bot/Action/LootAction.h"
+#include "Bot/Action/ResurrectActions.h"
 #include "Bot/Action/NewRpgActions.h"
 #include "Bot/Action/QuestGiverAction.h"
 #include "Bot/Action/TalkToQuestNpcAction.h"
@@ -36,6 +37,7 @@
 #include "Bot/Trigger/GroupTriggers.h"
 #include "Bot/Trigger/GuildTriggers.h"
 #include "Bot/Trigger/NewRpgTriggers.h"
+#include "Bot/Trigger/ResurrectTriggers.h"
 #include "Bot/Trigger/SignalTrigger.h"
 #include "BotPlayerbotAI.h"
 #include "DB2Stores.h"
@@ -72,6 +74,15 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterAction("guild accept", std::make_unique<GuildAcceptAction>(botAI));
     context->RegisterTrigger("guild invite signal", std::make_unique<SignalTrigger>(botAI, "guild invite signal"));
     context->RegisterTrigger("guild invite", std::make_unique<GuildInviteTrigger>(botAI));
+
+    // Accept pending resurrect while dead (AC: DeadStrategy "accept resurrect"). Signal +
+    // IsResurrectRequested() poll; HandleResurrectResponse Response = 0 (Midnight, not AC uint8(1)).
+    // Wired on follow / newrpg / passive — NewRpg death band skips HasMaster(), so master-alt
+    // needs FollowMasterStrategy; solo random needs newrpg/passive.
+    context->RegisterAction("accept resurrect", std::make_unique<AcceptResurrectAction>(botAI));
+    context->RegisterTrigger("resurrect request signal",
+        std::make_unique<SignalTrigger>(botAI, "resurrect request signal"));
+    context->RegisterTrigger("resurrect request", std::make_unique<ResurrectRequestTrigger>(botAI));
 
     // Quest loot + object interaction (AC: OpenLootAction/StoreLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));

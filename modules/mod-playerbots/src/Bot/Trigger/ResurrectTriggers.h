@@ -15,21 +15,21 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_PLAYERBOT_PASSIVE_STRATEGY_H
-#define TRINITY_PLAYERBOT_PASSIVE_STRATEGY_H
+#ifndef TRINITY_PLAYERBOT_RESURRECT_TRIGGERS_H
+#define TRINITY_PLAYERBOT_RESURRECT_TRIGGERS_H
 
-#include "Strategy.h"
+#include "Trigger.h"
 
 class BotPlayerbotAI;
 
-// AC reference: mod-playerbots-master/src/Ai/Base/Strategy/PassiveStrategy.h
-class PassiveStrategy : public Strategy
+// Active while the bot is dead with a pending resurrect request.
+// Poll fallback when payload observation is off or a signal is dropped.
+class ResurrectRequestTrigger : public Trigger
 {
 public:
-    explicit PassiveStrategy(BotPlayerbotAI* botAI) : Strategy(botAI) { }
+    explicit ResurrectRequestTrigger(BotPlayerbotAI* botAI) : Trigger(botAI, "resurrect request") { }
 
-    std::string GetName() override { return "passive"; }
-    void InitTriggers(std::vector<TriggerNode*>& triggers) override;
+    bool IsActive() override;
 };
 
 #endif

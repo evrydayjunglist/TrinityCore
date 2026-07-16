@@ -15,21 +15,29 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_PLAYERBOT_PASSIVE_STRATEGY_H
-#define TRINITY_PLAYERBOT_PASSIVE_STRATEGY_H
+#ifndef TRINITY_BOT_RESURRECT_REQUEST_PACKET_H
+#define TRINITY_BOT_RESURRECT_REQUEST_PACKET_H
 
-#include "Strategy.h"
+#include "ObjectGuid.h"
+#include "WorldPacket.h"
+#include <string>
 
-class BotPlayerbotAI;
-
-// AC reference: mod-playerbots-master/src/Ai/Base/Strategy/PassiveStrategy.h
-class PassiveStrategy : public Strategy
+namespace Playerbots::PacketParse
 {
-public:
-    explicit PassiveStrategy(BotPlayerbotAI* botAI) : Strategy(botAI) { }
-
-    std::string GetName() override { return "passive"; }
-    void InitTriggers(std::vector<TriggerNode*>& triggers) override;
+// Fields mirrored from WorldPackets::Spells::ResurrectRequest::Write() — module-first dual reader.
+struct ResurrectRequestPayload
+{
+    ObjectGuid ResurrectOffererGUID;
+    uint32 ResurrectOffererVirtualRealmAddress = 0;
+    uint32 PetNumber = 0;
+    int32 SpellID = 0;
+    bool UseTimer = false;
+    bool Sickness = false;
+    std::string Name;
 };
+
+// Returns true on Layer-1 success (full consume, no exception). Does not perform Layer 2.
+bool TryReadResurrectRequest(WorldPacket const& packet, ResurrectRequestPayload& out);
+}
 
 #endif
