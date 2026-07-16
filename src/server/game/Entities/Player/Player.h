@@ -1990,6 +1990,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void LearnCustomSpells();
         void LearnDefaultSkills();
         void LearnDefaultSkill(SkillRaceClassInfoEntry const* rcInfo);
+        void LearnSkyridingV1(); // Skyriding V1: auto-grant Skyriding Basics + abilities + Dragonrider Energy on login (retail quest unlock NYI)
         void LearnQuestRewardedSpells();
         void LearnQuestRewardedSpells(Quest const* quest);
         void AddTemporarySpell(uint32 spellId);
