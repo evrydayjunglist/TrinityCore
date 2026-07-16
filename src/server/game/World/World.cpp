@@ -345,9 +345,32 @@ WorldSession* World::FindBotSession(ObjectGuid characterGuid) const
     return itr != m_botSessionsByGuid.end() ? itr->second : nullptr;
 }
 
-void World::AddBotSession(WorldSession* s, ObjectGuid characterGuid)
+bool World::HasOtherOnlineSessionOnAccount(uint32 accountId, WorldSession const* except) const
+{
+    SessionMap::const_iterator human = m_sessions.find(accountId);
+    if (human != m_sessions.end() && human->second && human->second != except)
+        return true;
+
+    for (auto const& [guid, session] : m_botSessionsByGuid)
+    {
+        (void)guid;
+        if (!session || session == except)
+            continue;
+        if (session->GetAccountId() != accountId)
+            continue;
+        // Post-logout bot sessions awaiting UpdateSessions eviction have neither a player nor a
+        // loading GUID — do not treat them as still online for account-wide flag accounting.
+        if (session->GetPlayer() || session->PlayerLoading())
+            return true;
+    }
+
+    return false;
+}
+
+bool World::AddBotSession(WorldSession* s, ObjectGuid characterGuid)
 {
     ASSERT(s && s->IsBotSession());
+    ASSERT(!characterGuid.IsEmpty());
 
     // Bot sessions are tracked per-character (not per-account) in their own map, entirely
     // separate from m_sessions — never queued, never subject to m_sessions' one-session-per-
@@ -357,8 +380,21 @@ void World::AddBotSession(WorldSession* s, ObjectGuid characterGuid)
     // (AC parity; see docs/midnight-assessment/playerbots/playerbots-bot-session-account-cap-handoff.md).
     // Every bot session — reserved-account or master-alt alike — goes through this path; only
     // real human logins ever touch m_sessions/AddSession().
-    m_botSessionsByGuid[characterGuid] = s;
+    //
+    // Refuse overwrite: a second login for the same GUID while the first is still loading (or
+    // awaiting post-logout eviction) would leak the prior WorldSession* and can double-load the
+    // same character through two async HandlePlayerLogin paths.
+    if (m_botSessionsByGuid.contains(characterGuid))
+    {
+        TC_LOG_ERROR("entities.player", "World::AddBotSession: refusing duplicate bot session for {} — existing session still tracked",
+            characterGuid.ToString());
+        delete s;
+        return false;
+    }
+
+    m_botSessionsByGuid.emplace(characterGuid, s);
     s->InitializeSession();
+    return true;
 }
 
 void World::RemoveBotSession(ObjectGuid characterGuid)

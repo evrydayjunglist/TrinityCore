@@ -116,6 +116,14 @@ bool BotSessionMgr::CanStartBotLogin(ChatHandler* handler, ObjectGuid characterG
         return false;
     }
 
+    // Cover the async login window (and the post-LogoutPlayer eviction window) where the World
+    // bot-session map still owns the GUID but BotSessionMgr / ObjectAccessor do not yet.
+    if (sWorld->FindBotSession(characterGuid))
+    {
+        SendBotMessage(handler, "Playerbots: character already has a bot session pending or active.");
+        return false;
+    }
+
     if (Player* existing = ObjectAccessor::FindConnectedPlayer(characterGuid))
     {
         if (handler)
@@ -214,7 +222,14 @@ bool BotSessionMgr::StartBotLogin(ChatHandler* handler, ObjectGuid characterGuid
     WorldSession* session = WorldSession::CreateForBot(accountId, std::move(accountName), security, expansion);
     // Every bot session (reserved-account or master-alt) is tracked in World's GUID-keyed bot
     // map, never World::AddSession()'s account-keyed human map — see World::AddBotSession.
-    sWorld->AddBotSession(session, characterGuid);
+    if (!sWorld->AddBotSession(session, characterGuid))
+    {
+        // AddBotSession deletes `session` on duplicate-GUID refusal.
+        if (policy == LoginPolicy::MasterAlt)
+            _masterByBotCharacterGuid.erase(characterGuid);
+        SendBotMessage(handler, "Playerbots: character already has a bot session pending or active.");
+        return false;
+    }
 
     session->LoginBotCharacter(characterGuid);
 
