@@ -599,12 +599,19 @@ inline uint32 GetRpgDeathCorpseRunTimeoutSeconds()
 // for the SMSG signal layer: the module's ServerScript observer bails immediately when this is
 // off, so the one-line core seam's OnPacketSend dispatch simply finds no interested handler and
 // bot behavior falls back to the per-tick polls. Default on with the module (the layer is inert
-// without registered signal features anyway). Opcode-as-signal only — the observer keys purely on
-// the packet's opcode and never reads its payload (handoff § 0), which is what keeps the feature
-// safe against Midnight wire-format churn.
+// without registered signal features anyway).
 inline bool GetPacketObservationEnabled()
 {
     return sConfigMgr->GetBoolDefault("Playerbots.PacketObservation.Enable", true);
+}
+
+// Gated AC-like payload parse (playerbots-bot-packet-payload-parse-handoff.md). When off, the
+// observation layer stays signal-only (opcode wake-up). When on, registered opcodes also enqueue
+// a packet copy for tick-time Write()-mirrored parse + Layer-2 cross-check. Default OFF until
+// owner soak PASS, then conf.dist flips to 1.
+inline bool GetPacketPayloadParseEnabled()
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.PacketObservation.PayloadParse.Enable", false);
 }
 }
 

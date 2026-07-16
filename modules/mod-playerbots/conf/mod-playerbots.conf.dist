@@ -340,12 +340,22 @@ Playerbots.RpgDeathCorpseRunTimeoutSeconds = 600
 #        Description: Master toggle for the bot outbound-packet (SMSG) observation / signal layer.
 #                     Bot sessions are socketless, so the packets the server would send them are
 #                     normally dropped unobserved; this layer lets the bot AI react to the *fact*
-#                     that a packet was generated, keyed purely by opcode (never by decoding the
-#                     packet payload — that no-parse rule is what keeps the feature safe against
-#                     wire-format churn). When off, the observer bails and bots fall back to their
-#                     per-tick polls. Currently drives one feature: master-alt party-invite accept
-#                     (SMSG_PARTY_INVITE), which also keeps its poll as a fallback.
+#                     that a packet was generated (opcode wake-up). When off, the observer bails
+#                     and bots fall back to their per-tick polls. Currently drives master-alt
+#                     party-invite accept (SMSG_PARTY_INVITE), which also keeps its poll fallback.
 #        Default:     1 - (Enabled)
 #                     0 - (Disabled)
 
 Playerbots.PacketObservation.Enable = 1
+
+#
+#    Playerbots.PacketObservation.PayloadParse.Enable
+#        Description: When 1, registered observation opcodes also enqueue a packet copy for
+#                     tick-time payload parse (TC Write()-mirrored readers + EOF check + live-state
+#                     cross-check where available). When 0, signal-only. See
+#                     playerbots-bot-packet-payload-parse-handoff.md. Default 0 until owner soak;
+#                     flip to 1 after PASS.
+#        Default:     0 - (Disabled — signal-only)
+#                     1 - (Enabled — gated parse for registered opcodes)
+
+Playerbots.PacketObservation.PayloadParse.Enable = 0
