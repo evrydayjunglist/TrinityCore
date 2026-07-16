@@ -48,6 +48,18 @@ public:
     bool IsUseful() override;
 };
 
+// RPG_GO_CAMP travel leg: MoveFarTo the chosen NPC-hub centroid, small nudge on pathing failure.
+// Mirrors NewRpgGoGrindAction; the GO_CAMP -> WANDER_NPC hand-off (mingle on arrival) lives in
+// NewRpgStatusUpdateAction (AC: NewRpgGoCampAction + the status-update < 10yd transition).
+class NewRpgGoCampAction : public NewRpgBaseAction
+{
+public:
+    explicit NewRpgGoCampAction(BotPlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg go camp") { }
+
+    bool Execute(Event event) override;
+    bool IsUseful() override;
+};
+
 // RPG_DO_QUEST: travel to the pursued objective's POI (typed QuestObjective keys), hold with
 // small wanders while kills/collections progress, resolve the next objective or the turn-in
 // blob as state advances, and mark the quest low-priority (abandon set) after a full stay
@@ -63,6 +75,21 @@ public:
 private:
     bool DoIncompleteQuest(NewRpgInfo::DoQuest& data);
     bool DoCompletedQuest(NewRpgInfo::DoQuest& data);
+};
+
+// RPG_WANDER_NPC: AC's lifelike hub mingling (AC: NewRpgWanderNpcAction). Each cycle picks a target
+// via SelectRandomNpcToInteract (an actionable quest giver first — quest acquisition stays the
+// priority — else a not-recently-visited allowed-flag hub NPC), walks up to it, dwells
+// RpgWanderNpcStayTime, then marks it visited and picks the next. Quest givers still transact via
+// the always-on QuestGiverAction (relevance 30) whenever the bot passes within its 80yd radius —
+// this action never accepts itself. Re-rolls to Idle when there's nothing left worth visiting.
+class NewRpgWanderNpcAction : public NewRpgBaseAction
+{
+public:
+    explicit NewRpgWanderNpcAction(BotPlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg wander npc") { }
+
+    bool Execute(Event event) override;
+    bool IsUseful() override;
 };
 
 #endif

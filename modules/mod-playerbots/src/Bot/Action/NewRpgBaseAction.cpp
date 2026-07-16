@@ -18,7 +18,13 @@
 #include "NewRpgBaseAction.h"
 #include "AttackValidity.h"
 #include "Bot/Rpg/GrindLocationCache.h"
+#include "Bot/Rpg/HubLocationCache.h"
 #include "BotPlayerbotAI.h"
+#include "CellImpl.h"
+#include "GameObject.h"
+#include "GossipDef.h"
+#include "GridNotifiers.h"
+#include "GridNotifiersImpl.h"
 #include "Log.h"
 #include "Map.h"
 #include "MotionMaster.h"
@@ -31,7 +37,9 @@
 #include "SafeMovement.h"
 #include "ScriptMgr.h"
 #include "Timer.h"
+#include "UnitDefines.h"
 #include "World.h"
+#include <algorithm>
 #include <cmath>
 
 namespace
@@ -53,6 +61,19 @@ std::vector<float> GenerateRandomWeights(size_t count)
     return weights;
 }
 
+// "Would a terrain/liquid/area query at this position force a synchronous grid+VMAP disk load on
+// the map-update thread?" Bot AI ticks inside Map::Update, so a Map::GetZoneId/GetHeight on a
+// far/cold position routes through TerrainInfo::GetGrid(loadIfMissing=true) → a blocking readFile
+// that can stall the world thread past MaxCoreStuckTime and trip the FreezeDetector. If the grid
+// isn't already resident, DON'T query it — skip the candidate. A created NGrid eagerly loads its
+// terrain+VMAP (Map::EnsureGridCreated), so IsGridLoaded(pos)==true ⇒ the subsequent query is a
+// memory read, never disk. (Public Map API; TerrainInfo::GetGrid/_loadedGrids are private, so this
+// is the correct gate — do not reach into TerrainInfo.)
+inline bool IsBotMapPosQueryable(Player const* bot, Position const& pos)
+{
+    return bot && bot->IsInWorld() && bot->GetMap()->IsGridLoaded(pos);
+}
+
 // Same live-search radius Gate 10's grind behavior uses ("what to attack right now").
 constexpr float RPG_NEARBY_HOSTILE_RADIUS = 30.0f;
 
@@ -70,6 +91,53 @@ bool IsSpotForBotLevel(Player* bot, GrindSpot const& spot)
     uint32 const level = bot->GetLevel();
     return level + GRIND_LEVEL_TOLERANCE >= spot.MinLevel && level <= spot.MaxLevel + GRIND_LEVEL_TOLERANCE;
 }
+
+// AC's PossibleRpgTargetsValue::allowedNpcFlags — the service-NPC set a bot will walk up to and
+// mingle among in WANDER_NPC (innkeeper / gossip / questgiver / flightmaster / banker / trainer /
+// vendor / …). All fit in the low 32 bits of the npcflag field, so one combined mask + a single
+// HasNpcFlag(mask) call (true if ANY bit matches) reproduces AC's per-flag loop.
+constexpr NPCFlags HUB_NPC_ALLOWED_MASK = NPCFlags(
+    UNIT_NPC_FLAG_INNKEEPER | UNIT_NPC_FLAG_GOSSIP | UNIT_NPC_FLAG_QUESTGIVER |
+    UNIT_NPC_FLAG_FLIGHTMASTER | UNIT_NPC_FLAG_BANKER | UNIT_NPC_FLAG_GUILD_BANKER |
+    UNIT_NPC_FLAG_TRAINER_CLASS | UNIT_NPC_FLAG_TRAINER_PROFESSION |
+    UNIT_NPC_FLAG_VENDOR_AMMO | UNIT_NPC_FLAG_VENDOR_FOOD | UNIT_NPC_FLAG_VENDOR_POISON |
+    UNIT_NPC_FLAG_VENDOR_REAGENT | UNIT_NPC_FLAG_AUCTIONEER | UNIT_NPC_FLAG_STABLEMASTER |
+    UNIT_NPC_FLAG_PETITIONER | UNIT_NPC_FLAG_TABARDDESIGNER | UNIT_NPC_FLAG_BATTLEMASTER |
+    UNIT_NPC_FLAG_TRAINER | UNIT_NPC_FLAG_VENDOR | UNIT_NPC_FLAG_REPAIR);
+
+// WANDER_NPC scan grid checks — alive allowed-flag service NPC / spawned GAMEOBJECT_TYPE_QUESTGIVER
+// GO in range. Broader than the seeking slice's quest-giver-only check (givers are a subset of the
+// mask); hostile/spirit-healer/player exclusion (AC's AcceptUnit) is applied per-candidate in the scan.
+class WanderNpcCreatureCheck
+{
+public:
+    WanderNpcCreatureCheck(WorldObject const* obj, float range) : _obj(obj), _range(range) { }
+
+    bool operator()(Creature* creature) const
+    {
+        return creature->IsAlive() && creature->HasNpcFlag(HUB_NPC_ALLOWED_MASK)
+            && _obj->IsWithinDist(creature, _range);
+    }
+
+private:
+    WorldObject const* _obj;
+    float _range;
+};
+
+class SeekQuestGiverGameObjectCheck
+{
+public:
+    SeekQuestGiverGameObjectCheck(WorldObject const* obj, float range) : _obj(obj), _range(range) { }
+
+    bool operator()(GameObject* go) const
+    {
+        return go->isSpawned() && go->GetGoType() == GAMEOBJECT_TYPE_QUESTGIVER && _obj->IsWithinDist(go, _range);
+    }
+
+private:
+    WorldObject const* _obj;
+    float _range;
+};
 }
 
 bool NewRpgBaseAction::MoveFarTo(Position const& dest)
@@ -120,18 +188,31 @@ bool NewRpgBaseAction::MoveFarTo(Position const& dest)
             bot->GetOrientation());
     }
 
-    // Close enough for a single validated leg (AC: dis < pathFinderDis → plain MoveTo).
-    if (disToDest < PATH_FINDER_DIS)
-        return TryMoveToValidatedPoint(bot, dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ());
+    // Progress floor scaled to leg length (D1, obstacle-pathing handoff §5-D1). A short final
+    // approach leg (interaction range) can legitimately close < 5yd, so require only 1yd there;
+    // far legs keep AC's 5yd anti-oscillation floor. INTERACTION_DISTANCE is 5yd and the approach
+    // only fires when the bot is beyond it (WANDER_NPC/QuestGiver both gate on distance first), so
+    // the 1yd floor can never block a legitimate final step (§7). This replaces the old short-leg
+    // early return that used TryMoveToValidatedPoint (minProgress 0) — a zero-progress
+    // PATHFIND_INCOMPLETE endpoint at the bot's own feet used to count as success (candidate A),
+    // burning the tick standing still at the obstacle; now it fails and falls through to the cone.
+    float const minProgress = (disToDest < PATH_FINDER_DIS) ? 1.0f : 5.0f;
 
     // Primary: route toward the true destination and walk the furthest reachable waypoint —
     // partial (PATHFIND_INCOMPLETE) routes past the ~296yd smooth-path cap are exactly what we
     // want here, as long as they actually close the gap (AC's "endDistToDest + 5.0f < disToDest").
-    if (TryMoveTowardValidatedPoint(bot, dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(), 5.0f))
+    if (TryMoveTowardValidatedPoint(bot, dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(), minProgress))
         return true;
 
     // Fallback: sample the forward cone for a reachable stepping stone (AC: 2 samples, ±π/2
     // around the bearing to dest, 0.5–1.0 × pathFinderDis, preferring the more-forward sample).
+    // D2 (§5-D2): short legs reach this now too (the early return above is gone). Scale the sample
+    // distance to the leg so an ~18yd obstacle leg samples ~9–18yd stepping stones instead of
+    // 35–70yd overshoots. For a far leg disToDest >= PATH_FINDER_DIS so coneBaseDis ==
+    // PATH_FINDER_DIS — far-branch behavior is preserved exactly. Each sample still goes through
+    // the full SafeMovement contract, so this finds validated partial routes around the obstacle,
+    // never worse ones (§0). 2-sample cap kept (AC's explicit 3000-bot PathGenerator budget).
+    float const coneBaseDis = std::min(PATH_FINDER_DIS, disToDest);
     float const baseAngle = bot->GetAbsoluteAngle(dest.GetPositionX(), dest.GetPositionY());
     float deltas[2] = { (float(rand_norm()) - 0.5f) * float(M_PI), (float(rand_norm()) - 0.5f) * float(M_PI) };
     if (std::fabs(deltas[1]) < std::fabs(deltas[0]))
@@ -139,7 +220,7 @@ bool NewRpgBaseAction::MoveFarTo(Position const& dest)
 
     for (float delta : deltas)
     {
-        float const sampleDis = (0.5f + float(rand_norm()) * 0.5f) * PATH_FINDER_DIS;
+        float const sampleDis = (0.5f + float(rand_norm()) * 0.5f) * coneBaseDis;
         float const angle = baseAngle + delta;
         float const dx = bot->GetPositionX() + std::cos(angle) * sampleDis;
         float const dy = bot->GetPositionY() + std::sin(angle) * sampleDis;
@@ -227,6 +308,226 @@ bool NewRpgBaseAction::IsQuestCapableDoing(Quest const* quest) const
         return false;
 
     return true;
+}
+
+bool NewRpgBaseAction::HasQuestToAcceptOrReward(WorldObject* questGiver) const
+{
+    Player* bot = GetBot();
+    if (!bot || !questGiver)
+        return false;
+
+    // Rebuild the bot's quest menu for this object (same call the client's gossip window makes).
+    bot->PrepareQuestMenu(questGiver->GetGUID());
+    QuestMenu const& menu = bot->PlayerTalkClass->GetQuestMenu();
+    if (menu.Empty())
+        return false;
+
+    // AC parity (NewRpgBaseAction::HasQuestToAcceptOrReward): a completed quest we can be
+    // rewarded for, or a fresh quest we can take that's worth + capable of doing.
+    for (uint8 i = 0; i < menu.GetMenuItemCount(); ++i)
+    {
+        QuestMenuItem const& item = menu.GetItem(i);
+        Quest const* quest = sObjectMgr->GetQuestTemplate(item.QuestId);
+        if (!quest)
+            continue;
+
+        QuestStatus const status = bot->GetQuestStatus(item.QuestId);
+        if (status == QUEST_STATUS_COMPLETE)
+        {
+            if (bot->CanRewardQuest(quest, false))
+                return true;
+        }
+        else if (status == QUEST_STATUS_NONE)
+        {
+            if (bot->CanTakeQuest(quest, false) && bot->CanAddQuest(quest, false)
+                && IsQuestWorthDoing(quest) && IsQuestCapableDoing(quest))
+                return true;
+        }
+    }
+
+    return false;
+}
+
+bool NewRpgBaseAction::IsQuestUnactionable(uint32 questId) const
+{
+    Player* bot = GetBot();
+    if (!bot || !questId)
+        return false;
+
+    // Already classified this session — cheap re-check.
+    if (_botAI->GetUnactionableQuests().contains(questId))
+        return true;
+
+    // Conservative V1 detection (handoff §4): only the provably-impossible case. A quest sitting
+    // COMPLETE with no quest-ender anywhere in world data can never be turned in by ANY player, so
+    // ignoring it cannot skip real content. INCOMPLETE-but-unachievable is NOT safely detectable
+    // (cross-map objectives are valid) and is left to the POI-timeout → low-priority path.
+    if (bot->GetQuestStatus(questId) != QUEST_STATUS_COMPLETE)
+        return false;
+
+    auto const creatureEnders = sObjectMgr->GetCreatureQuestInvolvedRelationReverseBounds(questId);
+    if (creatureEnders.begin() != creatureEnders.end())
+        return false;
+
+    auto const goEnders = sObjectMgr->GetGOQuestInvolvedRelationReverseBounds(questId);
+    if (goEnders.begin() != goEnders.end())
+        return false;
+
+    // No ender of either kind — record it once so selection/status treat it as ignorable. In
+    // memory only; never DropQuest/AbandonQuest (owner directive).
+    _botAI->GetUnactionableQuests().insert(questId);
+    TC_LOG_DEBUG("playerbots", "[New RPG] {} ignoring unactionable (no-ender COMPLETE) quest {}",
+        bot->GetName(), questId);
+    return true;
+}
+
+void NewRpgBaseAction::ScanWanderNpcTargets(ObjectGuid& nearestGiverOut, std::vector<ObjectGuid>& hubNpcsOut)
+{
+    nearestGiverOut = ObjectGuid();
+    hubNpcsOut.clear();
+
+    Player* bot = GetBot();
+    if (!bot)
+        return;
+
+    float const radius = Playerbots::GetRpgWanderNpcRadius();
+
+    std::list<Creature*> creatures;
+    WanderNpcCreatureCheck creatureCheck(bot, radius);
+    Trinity::CreatureListSearcher<WanderNpcCreatureCheck> creatureSearcher(bot, creatures, creatureCheck);
+    Cell::VisitAllObjects(bot, creatureSearcher, radius);
+
+    std::list<GameObject*> gameObjects;
+    SeekQuestGiverGameObjectCheck goCheck(bot, radius);
+    Trinity::GameObjectListSearcher<SeekQuestGiverGameObjectCheck> goSearcher(bot, gameObjects, goCheck);
+    Cell::VisitAllObjects(bot, goSearcher, radius);
+
+    float bestGiverDistSq = (radius * radius) + 1.0f;
+    std::vector<std::pair<float, ObjectGuid>> hubs; // (distSq, guid), sorted nearest-first below
+
+    auto considerGiver = [&](WorldObject* candidate)
+    {
+        if (!HasQuestToAcceptOrReward(candidate))
+            return;
+
+        float const distSq = bot->GetExactDistSq(*candidate);
+        if (distSq < bestGiverDistSq)
+        {
+            bestGiverDistSq = distSq;
+            nearestGiverOut = candidate->GetGUID();
+        }
+    };
+
+    for (Creature* creature : creatures)
+    {
+        // AC's AcceptUnit exclusions (spirit healers / hostiles); players can't reach this scan.
+        if (creature->IsSpiritService() || bot->IsHostileTo(creature))
+            continue;
+
+        hubs.push_back({ bot->GetExactDistSq(*creature), creature->GetGUID() });
+
+        // A quest giver with something to transact is the priority target (quest acquisition first).
+        if (creature->IsQuestGiver())
+            considerGiver(creature);
+    }
+
+    for (GameObject* go : gameObjects)
+        considerGiver(go);
+
+    std::sort(hubs.begin(), hubs.end(), [](auto const& a, auto const& b) { return a.first < b.first; });
+    hubNpcsOut.reserve(hubs.size());
+    for (auto const& [distSq, guid] : hubs)
+        hubNpcsOut.push_back(guid);
+}
+
+bool NewRpgBaseAction::SelectRandomNpcToInteract(ObjectGuid& targetOut, std::unordered_set<ObjectGuid> const& visited)
+{
+    ObjectGuid nearestGiver;
+    std::vector<ObjectGuid> hubNpcs;
+    ScanWanderNpcTargets(nearestGiver, hubNpcs);
+
+    // Quest acquisition stays the priority (handoff §4): if a giver with an actionable quest is in
+    // range, target it first so the un-stranding behaviour is preserved. QuestGiverAction (rel 30)
+    // does the actual accept/reward once the bot is within its 80yd radius.
+    if (!nearestGiver.IsEmpty())
+    {
+        targetOut = nearestGiver;
+        return true;
+    }
+
+    // Otherwise mingle — but only at a genuine hub (AC's ">= 3 NPCs" rule), and prefer one not
+    // recently dwelt at so the bot cycles through the hub rather than ping-ponging the nearest.
+    if (hubNpcs.size() < HUB_MIN_NPCS)
+        return false;
+
+    for (ObjectGuid const& guid : hubNpcs) // sorted nearest-first
+    {
+        if (!visited.contains(guid))
+        {
+            targetOut = guid;
+            return true;
+        }
+    }
+
+    // Every hub NPC visited this session — restart from the nearest so mingling continues until the
+    // status duration expires (the visited set is cleared when WANDER_NPC is (re-)entered).
+    targetOut = hubNpcs.front();
+    return true;
+}
+
+bool NewRpgBaseAction::SelectRandomHubPos(Position& destOut)
+{
+    Player* bot = GetBot();
+    if (!bot)
+        return false;
+
+    // AC: NewRpgBaseAction::SelectRandomCampPos — hubs from TravelMgr.GetTravelHubs; here the source
+    // is HubLocationCache (built from sObjectMgr creature data the same way GrindLocationCache is).
+    std::vector<HubSpot> const& spots = sHubLocationCache->GetSpotsForMap(bot->GetMapId());
+    if (spots.empty())
+        return false;
+
+    float const range = bot->GetLevel() <= 5 ? 500.0f : 2500.0f;
+
+    std::vector<HubSpot const*> pool;
+    for (HubSpot const& spot : spots)
+    {
+        float const dist = bot->GetExactDist(spot.Pos);
+        if (dist > range)
+            continue;
+
+        // Must actually travel (AC's camp rule): skip a hub the bot is already standing in — those
+        // are handled by WANDER_NPC's local scan, not a GO_CAMP trip.
+        if (dist < 50.0f)
+            continue;
+
+        pool.push_back(&spot);
+    }
+
+    if (pool.empty())
+        return false;
+
+    // Sample-and-check same-zone like SelectRandomGrindPos (Map::GetZoneId is a real terrain query,
+    // so probe a handful rather than zone-filtering the whole pool up front).
+    for (int attempt = 0; attempt < 5; ++attempt)
+    {
+        HubSpot const* spot = pool[urand(0, uint32(pool.size()) - 1)];
+        // Never force a cold VMAP/terrain load on the map tick: skip a candidate whose grid isn't
+        // already resident rather than let GetZoneId block on a disk read (freeze-crash fix).
+        if (!IsBotMapPosQueryable(bot, spot->Pos))
+        {
+            TC_LOG_DEBUG("playerbots", "[New RPG] {} skip hub candidate ({},{},{}) — grid not resident",
+                bot->GetName(), spot->Pos.GetPositionX(), spot->Pos.GetPositionY(), spot->Pos.GetPositionZ());
+            continue;
+        }
+        if (bot->GetMap()->GetZoneId(bot->GetPhaseShift(), spot->Pos) != bot->GetZoneId())
+            continue;
+
+        destOut = spot->Pos;
+        return true;
+    }
+
+    return false;
 }
 
 bool NewRpgBaseAction::OrganizeQuestLog()
@@ -393,6 +694,17 @@ bool NewRpgBaseAction::GetQuestPOIPosAndObjective(uint32 questId, std::vector<PO
         if (bot->GetDistance2d(dx, dy) >= 1500.0f)
             return;
 
+        // Never force a cold VMAP/terrain load on the map tick: if this blob point's grid isn't
+        // already resident, skip it this sweep rather than let GetHeight/GetZoneId block on a disk
+        // read (freeze-crash fix). It is re-sampled next sweep once the world around it is warm.
+        Position const interp(dx, dy, dz);
+        if (!IsBotMapPosQueryable(bot, interp))
+        {
+            TC_LOG_DEBUG("playerbots", "[New RPG] {} skip POI blob point ({},{},{}) — grid not resident",
+                bot->GetName(), dx, dy, dz);
+            return;
+        }
+
         // Refine the interpolated Z to actual ground near it; a blob whose area has no
         // resolvable ground here is not a usable travel target.
         float const groundZ = bot->GetMap()->GetHeight(bot->GetPhaseShift(), dx, dy, dz + 5.0f);
@@ -491,8 +803,14 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> const& candi
                 return Playerbots::GetRpgStatusProbWeightWanderRandom();
             case RPG_GO_GRIND:
                 return Playerbots::GetRpgStatusProbWeightGoGrind();
+            case RPG_GO_CAMP:
+                return Playerbots::GetRpgStatusProbWeightGoCamp();
             case RPG_DO_QUEST:
                 return Playerbots::GetRpgStatusProbWeightDoQuest();
+            case RPG_WANDER_NPC:
+                return Playerbots::GetRpgStatusProbWeightWanderNpc();
+            case RPG_REST:
+                return Playerbots::GetRpgStatusProbWeightRest();
             default:
                 return 0;
         }
@@ -513,13 +831,16 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> const& candi
     }
 
     NewRpgInfo& info = _botAI->GetRpgInfo();
+    Player* bot = GetBot();
 
-    // Safety fallback when nothing is available or all weights are 0. AC sits the bot down in
-    // RPG_REST here; Rest is out of Gate 10b's scope, so wandering doubles as the idle filler
-    // (documented TC adaptation).
+    // Safety fallback when nothing is available or all weights are 0 (AC parity): sit the bot down
+    // in RPG_REST. Reads better than aimless wandering and is AC-correct — WANDER_RANDOM itself
+    // needs a live grind target nearby to even be available, so "nothing to do" -> sit.
     if (availableStatus.empty() || !probSum)
     {
-        info.ChangeToWanderRandom();
+        info.ChangeToRest();
+        if (bot)
+            bot->SetStandState(UNIT_STAND_STATE_SIT);
         return true;
     }
 
@@ -536,11 +857,15 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> const& candi
         }
     }
 
-    Player* bot = GetBot();
     switch (chosenStatus)
     {
         case RPG_WANDER_RANDOM:
             info.ChangeToWanderRandom();
+            return true;
+        case RPG_REST:
+            info.ChangeToRest();
+            if (bot)
+                bot->SetStandState(UNIT_STAND_STATE_SIT);
             return true;
         case RPG_GO_GRIND:
         {
@@ -548,6 +873,18 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> const& candi
             if (SelectRandomGrindPos(dest))
             {
                 info.ChangeToGoGrind(dest);
+                return true;
+            }
+            return false;
+        }
+        case RPG_GO_CAMP:
+        {
+            Position dest;
+            if (SelectRandomHubPos(dest))
+            {
+                info.ChangeToGoCamp(dest);
+                TC_LOG_DEBUG("playerbots", "[New RPG] {} travel to camp ({},{},{})",
+                    bot ? bot->GetName() : "?", dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ());
                 return true;
             }
             return false;
@@ -565,6 +902,12 @@ bool NewRpgBaseAction::RandomChangeStatus(std::vector<NewRpgStatus> const& candi
             }
             return false;
         }
+        case RPG_WANDER_NPC:
+            // Availability already confirmed a giver or a >= 3-NPC hub is in range; the WANDER_NPC
+            // action picks and cycles its own targets (AC parity — ChangeToWanderNpc takes no arg).
+            info.ChangeToWanderNpc();
+            TC_LOG_DEBUG("playerbots", "[New RPG] {} start to wander npc hub", bot ? bot->GetName() : "?");
+            return true;
         default:
             info.ChangeToIdle();
             return true;
@@ -580,21 +923,38 @@ bool NewRpgBaseAction::CheckRpgStatusAvailable(NewRpgStatus status)
     switch (status)
     {
         case RPG_IDLE:
+        case RPG_REST:
+            // REST is always available (AC parity) — it's the "sit down, there's nothing pressing"
+            // filler and the empty-availability fallback.
             return true;
         case RPG_WANDER_RANDOM:
             // AC gates wandering on a live grind target being around — pointless to meander in a
-            // dead area (the RandomChangeStatus fallback still wanders as last resort).
+            // dead area (the RandomChangeStatus fallback sits the bot down as last resort).
             return FindNearbyAttackableUnit(bot, RPG_NEARBY_HOSTILE_RADIUS) != nullptr;
         case RPG_GO_GRIND:
         {
             Position dest;
             return SelectRandomGrindPos(dest);
         }
+        case RPG_GO_CAMP:
+        {
+            Position dest;
+            return SelectRandomHubPos(dest);
+        }
         case RPG_DO_QUEST:
         {
             uint32 questId = 0;
             Quest const* quest = nullptr;
             return SelectRandomDoQuest(questId, quest);
+        }
+        case RPG_WANDER_NPC:
+        {
+            // AC's rule: available when there's an actionable giver to seek (the un-stranding
+            // trigger) OR a genuine hub of >= 3 allowed-flag NPCs to mingle in.
+            ObjectGuid nearestGiver;
+            std::vector<ObjectGuid> hubNpcs;
+            ScanWanderNpcTargets(nearestGiver, hubNpcs);
+            return !nearestGiver.IsEmpty() || hubNpcs.size() >= HUB_MIN_NPCS;
         }
         default:
             return false;
@@ -651,6 +1011,14 @@ bool NewRpgBaseAction::SelectRandomGrindPos(Position& destOut)
     for (int attempt = 0; attempt < 5; ++attempt)
     {
         GrindSpot const* spot = pool[urand(0, uint32(pool.size()) - 1)];
+        // Never force a cold VMAP/terrain load on the map tick: skip a candidate whose grid isn't
+        // already resident rather than let GetZoneId block on a disk read (freeze-crash fix).
+        if (!IsBotMapPosQueryable(bot, spot->Pos))
+        {
+            TC_LOG_DEBUG("playerbots", "[New RPG] {} skip grind candidate ({},{},{}) — grid not resident",
+                bot->GetName(), spot->Pos.GetPositionX(), spot->Pos.GetPositionY(), spot->Pos.GetPositionZ());
+            continue;
+        }
         if (bot->GetMap()->GetZoneId(bot->GetPhaseShift(), spot->Pos) != bot->GetZoneId())
             continue;
 
@@ -677,6 +1045,11 @@ bool NewRpgBaseAction::SelectRandomDoQuest(uint32& questIdOut, Quest const*& que
             continue;
 
         if (lowPriority.contains(questId))
+            continue;
+
+        // Skip provably-unactionable quests (no-ender COMPLETE, e.g. 55660) — classify once and
+        // never re-evaluate them (handoff §4). In-memory only; the quest stays in the bot's log.
+        if (IsQuestUnactionable(questId))
             continue;
 
         std::vector<POIInfo> poiInfo;

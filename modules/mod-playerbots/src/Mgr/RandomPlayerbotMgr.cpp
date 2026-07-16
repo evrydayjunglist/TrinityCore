@@ -19,13 +19,19 @@
 #include "BotSessionMgr.h"
 #include "CharacterCache.h"
 #include "Containers.h"
+#include "DatabaseEnv.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "PlayerbotsConfig.h"
 #include "PlayerbotsDatabaseMgr.h"
+#include "RandomPlayerbotFactory.h"
 #include "World.h"
 #include "WorldSession.h"
+
+#include <chrono>
+#include <set>
+#include <thread>
 
 namespace
 {
@@ -59,11 +65,40 @@ void RandomPlayerbotMgr::Init()
     _saveTimer = 0;
     _schedulerPaused = !Playerbots::GetRandomBotAutologin();
 
+    // Phase A/B: provision reserved bot accounts + level-1 characters (or run the teardown switch).
+    // Idempotent and a no-op unless the random-bot feature is enabled. Returns how many NEW
+    // characters were created this run.
+    uint32 const generated = RandomPlayerbotFactory::GenerateRandomBots();
+
     if (!IsSchedulerEnabled())
         return;
 
     if (Playerbots::GetEnableDatabases() && !sPlayerbotsDatabaseMgr->CheckVersion())
         TC_LOG_WARN("server.loading", "Playerbots: random bot DB enabled but version check failed — scheduler may be limited.");
+
+    // Player::SaveToDB (used by generation) enqueues an ASYNC CharacterDatabase commit, so a
+    // synchronous read issued right after — BuildRoster's SELECT — races the uncommitted INSERTs
+    // and under-counts the roster (and a subsequent login would fail to load the char). When we
+    // just generated characters, drain the async queue first, exactly as AC's RandomPlayerbotFactory
+    // does before its dependent reads. Bounded so a stuck queue can't hang startup; logged either
+    // way (never a silent cap).
+    if (generated > 0)
+    {
+        uint32 const maxWaitMs = 30000;
+        uint32 waited = 0;
+        while (CharacterDatabase.QueueSize() > 0 && waited < maxWaitMs)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            waited += 50;
+        }
+        // QueueSize() == 0 means the last op has been dequeued; a short final sleep lets the worker
+        // finish executing it (AC uses the same 100 ms margin).
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        if (CharacterDatabase.QueueSize() > 0)
+            TC_LOG_WARN("server.loading", "Playerbots: CharacterDatabase still draining after {}ms while building the random-bot roster ({} char(s) just generated) — roster may under-count until next restart.", maxWaitMs, generated);
+        else
+            TC_LOG_INFO("server.loading", "Playerbots: drained CharacterDatabase queue in ~{}ms after generating {} bot character(s) — building roster.", waited, generated);
+    }
 
     BuildRoster();
 }
@@ -72,44 +107,67 @@ void RandomPlayerbotMgr::BuildRoster()
 {
     _roster.clear();
 
-    std::vector<uint32> const accounts = Playerbots::GetRandomBotAccounts();
-    std::vector<std::string> const names = Playerbots::GetRandomBotCharacterNames();
+    // AC-style DB enumeration (RandomPlayerbotFactory model): the roster is every non-deleted
+    // character living on a reserved bot account, across all reservation modes (name prefix,
+    // explicit ids, id range). This supersedes the deprecated RandomBotAccounts /
+    // RandomBotCharacterNames hand-list. See playerbots-random-bot-generation-handoff.md § 5.
+    std::set<uint32> botAccountIds;
 
-    for (size_t i = 0; i < accounts.size(); ++i)
+    std::string const prefix = Playerbots::GetRandomBotAccountPrefix();
+    if (!prefix.empty())
     {
-        uint32 const accountId = accounts[i];
-        if (!Playerbots::IsReservedAccount(accountId))
+        if (QueryResult result = LoginDatabase.PQuery("SELECT id FROM account WHERE username LIKE '{}%'", prefix))
         {
-            TC_LOG_ERROR("server.loading", "Playerbots: RandomBotAccounts entry {} is not a reserved account — skipped.", accountId);
-            continue;
+            do
+            {
+                botAccountIds.insert(result->Fetch()[0].GetUInt32());
+            } while (result->NextRow());
         }
-
-        RandomBotRosterEntry entry;
-        entry.AccountId = accountId;
-
-        if (i < names.size() && !names[i].empty())
-            entry.CharacterName = names[i];
-        else
-        {
-            TC_LOG_WARN("server.loading", "Playerbots: no character name for random bot account {} — set Playerbots.RandomBotCharacterNames.", accountId);
-            continue;
-        }
-
-        entry.CharacterGuid = sCharacterCache->GetCharacterGuidByName(entry.CharacterName);
-        if (entry.CharacterGuid.IsEmpty())
-        {
-            TC_LOG_ERROR("server.loading", "Playerbots: random bot character '{}' not found.", entry.CharacterName);
-            continue;
-        }
-
-        if (sCharacterCache->GetCharacterAccountIdByGuid(entry.CharacterGuid) != accountId)
-        {
-            TC_LOG_ERROR("server.loading", "Playerbots: character '{}' is not on account {}.", entry.CharacterName, accountId);
-            continue;
-        }
-
-        _roster.push_back(std::move(entry));
     }
+
+    for (uint32 id : Playerbots::GetReservedAccountIds())
+        botAccountIds.insert(id);
+
+    uint32 const minId = Playerbots::GetReservedAccountMinId();
+    uint32 const maxId = Playerbots::GetReservedAccountMaxId();
+    if (minId != 0 && maxId != 0 && minId <= maxId)
+    {
+        if (QueryResult result = LoginDatabase.PQuery("SELECT id FROM account WHERE id BETWEEN {} AND {}", minId, maxId))
+        {
+            do
+            {
+                botAccountIds.insert(result->Fetch()[0].GetUInt32());
+            } while (result->NextRow());
+        }
+    }
+
+    if (botAccountIds.empty())
+    {
+        TC_LOG_INFO("server.loading", "Playerbots: no reserved bot accounts configured — random bot roster is empty.");
+        return;
+    }
+
+    for (uint32 accountId : botAccountIds)
+    {
+        QueryResult result = CharacterDatabase.PQuery(
+            "SELECT guid, name FROM characters WHERE account = {} AND deleteInfos_Name IS NULL", accountId);
+        if (!result)
+            continue;
+
+        do
+        {
+            Field* fields = result->Fetch();
+
+            RandomBotRosterEntry entry;
+            entry.AccountId = accountId;
+            entry.CharacterGuid = ObjectGuid::Create<HighGuid::Player>(fields[0].GetUInt64());
+            entry.CharacterName = fields[1].GetString();
+            _roster.push_back(std::move(entry));
+        } while (result->NextRow());
+    }
+
+    TC_LOG_INFO("server.loading", "Playerbots: random bot roster built — {} character(s) across {} reserved account(s).",
+        _roster.size(), botAccountIds.size());
 }
 
 bool RandomPlayerbotMgr::HasRealPlayerOnline() const

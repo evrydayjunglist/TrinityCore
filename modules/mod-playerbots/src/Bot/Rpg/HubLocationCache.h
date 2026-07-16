@@ -15,8 +15,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_PLAYERBOT_GRIND_LOCATION_CACHE_H
-#define TRINITY_PLAYERBOT_GRIND_LOCATION_CACHE_H
+#ifndef TRINITY_PLAYERBOT_HUB_LOCATION_CACHE_H
+#define TRINITY_PLAYERBOT_HUB_LOCATION_CACHE_H
 
 #include "Position.h"
 #include <mutex>
@@ -24,30 +24,33 @@
 #include <unordered_set>
 #include <vector>
 
-// Gate 10, Layer 1 ("where to grind") — lazily built per map, one instance for the whole
-// module (not per-bot). AC reference: mod-playerbots-master/src/Mgr/Travel/TravelMgr.cpp
-// PrepareDestinationCache(), which itself iterates sObjectMgr->GetAllCreatureData() rather
-// than issuing its own SQL query — this cache does the same on TC, so no separate DB
-// round-trip is needed; see playerbots-gate-10-world-rpg-slice-handoff.md § Phase B.
-struct GrindSpot
+// RPG hub-travel layer ("where to go get quests") — the GO_CAMP counterpart of Gate 10's
+// GrindLocationCache, and built exactly the same way (lazily per map, one instance for the whole
+// module, iterating sObjectMgr->GetAllCreatureData() rather than a separate DB round-trip). The
+// only difference from the grind cache is the filter: instead of clustering hostile trash mobs it
+// clusters service-NPC spawns — creatures flagged UNIT_NPC_FLAG_QUESTGIVER — so a cell that holds a
+// genuine town/quest hub (>= HUB_CELL_MIN_SPAWNS givers) surfaces as a travel destination. A bot
+// stranded in a giver-less pocket rolls RPG_GO_CAMP, travels to the nearest such centroid, and then
+// mingles there via RPG_WANDER_NPC. AC reference: NewRpgBaseAction::SelectRandomCampPos over
+// TravelMgr.GetTravelHubs(); this is the TC-native source for those hubs.
+// See playerbots-rpg-hub-travel-lifelike-wander-rest-handoff.md §3.
+struct HubSpot
 {
     Position Pos;
-    bool ScalingAware = false;
-    uint32 MinLevel = 0;
-    uint32 MaxLevel = 0;
 };
 
-class GrindLocationCache
+class HubLocationCache
 {
 public:
-    static GrindLocationCache* instance();
+    static HubLocationCache* instance();
 
-    // Builds the cache for this map on first call (world-restart lifetime after that —
-    // Layer 2's live search always re-validates targets, so a stale cell is harmless).
-    std::vector<GrindSpot> const& GetSpotsForMap(uint32 mapId);
+    // Builds the cache for this map on first call (world-restart lifetime after that — the same
+    // lazy-staleness contract as GrindLocationCache; downstream GO_CAMP travel/arrival always
+    // re-validates against the live world, so a stale centroid is harmless).
+    std::vector<HubSpot> const& GetSpotsForMap(uint32 mapId);
 
 private:
-    GrindLocationCache() = default;
+    HubLocationCache() = default;
 
     void BuildForMap(uint32 mapId);
 
@@ -58,10 +61,10 @@ private:
     // _spotsByMap/_builtMaps goes through this mutex; the build is once-per-map, so after warmup the
     // lock is uncontended and the per-tick cost is a negligible lock around a find().
     std::mutex _mutex;
-    std::unordered_map<uint32, std::vector<GrindSpot>> _spotsByMap;
+    std::unordered_map<uint32, std::vector<HubSpot>> _spotsByMap;
     std::unordered_set<uint32> _builtMaps;
 };
 
-#define sGrindLocationCache GrindLocationCache::instance()
+#define sHubLocationCache HubLocationCache::instance()
 
 #endif

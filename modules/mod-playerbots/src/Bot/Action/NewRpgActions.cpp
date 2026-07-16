@@ -18,11 +18,22 @@
 #include "NewRpgActions.h"
 #include "BotPlayerbotAI.h"
 #include "Log.h"
+#include "ObjectAccessor.h"
+#include "ObjectDefines.h"
 #include "Player.h"
 #include "PlayerbotsConfig.h"
 #include "QuestDef.h"
 #include "Random.h"
 #include "Timer.h"
+
+namespace
+{
+// How close the bot walks up to a hub NPC before it counts as "reached" and starts its dwell (AC:
+// IsWithinInteractionDist). Quest givers are accepted long before this by the always-on
+// QuestGiverAction (relevance 30) within its own 80yd radius, so this distance only shapes the
+// lifelike mingling among non-giver NPCs.
+constexpr float WANDER_NPC_INTERACT_DIST = INTERACTION_DISTANCE;
+}
 
 // AC reference: mod-playerbots-master/src/Ai/World/Rpg/Action/NewRpgAction.cpp — same
 // transition rules and DoQuest flow, TC-native quest APIs (typed objectives, ContentTuning-aware
@@ -38,8 +49,11 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
     switch (info.GetStatus())
     {
         case RPG_IDLE:
-            // Gate 10b subset of AC's candidate list (no camp/npc/rest/flight/pvp yet).
-            return RandomChangeStatus({ RPG_GO_GRIND, RPG_WANDER_RANDOM, RPG_DO_QUEST });
+            // AC's IDLE candidate set minus TravelFlight/OutdoorPvP (out of scope): GO_CAMP travels
+            // to a distant NPC hub, WANDER_NPC mingles locally, REST sits. DO_QUEST stays dominant
+            // via its weight so bots primarily quest rather than loiter.
+            return RandomChangeStatus({ RPG_GO_CAMP, RPG_GO_GRIND, RPG_WANDER_RANDOM, RPG_DO_QUEST,
+                                        RPG_WANDER_NPC, RPG_REST });
         case RPG_GO_GRIND:
         {
             auto const& data = std::get<NewRpgInfo::GoGrind>(info.data);
@@ -47,6 +61,17 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
             if (bot->GetExactDist(data.pos) < 10.0f)
             {
                 info.ChangeToWanderRandom();
+                return true;
+            }
+            break;
+        }
+        case RPG_GO_CAMP:
+        {
+            auto const& data = std::get<NewRpgInfo::GoCamp>(info.data);
+            // GO_CAMP -> WANDER_NPC on arrival at the hub centroid (AC: < 10yd), then mingle there.
+            if (bot->GetExactDist(data.pos) < 10.0f)
+            {
+                info.ChangeToWanderNpc();
                 return true;
             }
             break;
@@ -62,6 +87,25 @@ bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
         case RPG_DO_QUEST:
             // DO_QUEST -> IDLE after the status duration
             if (info.HasStatusPersisted(Playerbots::GetRpgStatusDoQuestDurationMs()))
+            {
+                info.ChangeToIdle();
+                return true;
+            }
+            break;
+        case RPG_WANDER_NPC:
+            // WANDER_NPC -> IDLE after its own duration (AC's statusWanderNpcDuration, 5 min). The
+            // action also re-rolls to Idle when nothing's left worth visiting; this caps the
+            // overall mingle session.
+            if (info.HasStatusPersisted(Playerbots::GetRpgStatusWanderNpcDurationMs()))
+            {
+                info.ChangeToIdle();
+                return true;
+            }
+            break;
+        case RPG_REST:
+            // REST -> IDLE after the rest duration (AC's statusRestDuration, 30s). No SetStandState
+            // needed here — the next status' movement stands the bot automatically (AC parity).
+            if (info.HasStatusPersisted(Playerbots::GetRpgStatusRestDurationMs()))
             {
                 info.ChangeToIdle();
                 return true;
@@ -83,6 +127,27 @@ bool NewRpgGoGrindAction::IsUseful()
 bool NewRpgGoGrindAction::Execute(Event /*event*/)
 {
     if (auto* data = std::get_if<NewRpgInfo::GoGrind>(&_botAI->GetRpgInfo().data))
+    {
+        if (MoveFarTo(data->pos))
+            return true;
+
+        // Small nudge so the next tick's MoveFarTo starts from a slightly different position
+        // (AC keeps it small so it doesn't look like the bot abandoned its destination).
+        return MoveRandomNear(10.0f);
+    }
+
+    return false;
+}
+
+bool NewRpgGoCampAction::IsUseful()
+{
+    Player* bot = GetBot();
+    return bot && bot->IsInWorld() && bot->IsAlive() && !bot->IsInCombat();
+}
+
+bool NewRpgGoCampAction::Execute(Event /*event*/)
+{
+    if (auto* data = std::get_if<NewRpgInfo::GoCamp>(&_botAI->GetRpgInfo().data))
     {
         if (MoveFarTo(data->pos))
             return true;
@@ -137,6 +202,7 @@ bool NewRpgDoQuestAction::DoIncompleteQuest(NewRpgInfo::DoQuest& data)
     if (data.hasPos && data.objectiveId && bot->IsQuestObjectiveComplete(questId, data.objectiveId))
     {
         data.lastReachPOI = 0;
+        data.lastSweep = 0;
         data.hasPos = false;
         data.objectiveId = 0;
     }
@@ -153,6 +219,7 @@ bool NewRpgDoQuestAction::DoIncompleteQuest(NewRpgInfo::DoQuest& data)
 
         POIInfo const& poi = poiInfo[urand(0, uint32(poiInfo.size()) - 1)];
         data.lastReachPOI = 0;
+        data.lastSweep = 0;
         data.pos = poi.pos;
         data.hasPos = true;
         data.objectiveId = poi.objectiveId;
@@ -192,13 +259,54 @@ bool NewRpgDoQuestAction::DoIncompleteQuest(NewRpgInfo::DoQuest& data)
 
         // progress happened, just slowly — clear and re-resolve a (possibly different) POI
         data.lastReachPOI = 0;
+        data.lastSweep = 0;
         data.hasPos = false;
         data.objectiveId = 0;
         return true;
     }
 
+    // Convergence F2 (playerbots-rpg-quest-convergence-fixes-handoff.md § 4-F2): zero progress so
+    // far — don't circle one fixed point for the whole stay window; every sweep interval re-sample
+    // a fresh random-weighted interior point of the same objective blob and walk there, so the bot
+    // actually covers the objective area. That is what lets it *discover* stealthed objective mobs
+    // the retail-like way (patrol until a frontal detect-range encounter happens naturally — the
+    // core's stealth-detection gates are untouched). lastReachPOI is deliberately NOT reset: the
+    // zero-progress abandon budget keeps running across sweep legs, so an impossible quest still
+    // retires on schedule.
+    if (data.objectiveId && bot->GetQuestObjectiveData(questId, data.objectiveId) == 0)
+    {
+        uint32 const lastLeg = data.lastSweep ? data.lastSweep : data.lastReachPOI;
+        if (GetMSTimeDiffToNow(lastLeg) >= Playerbots::GetRpgPoiSweepIntervalMs())
+        {
+            // Each GetQuestPOIPosAndObjective call rolls fresh random weights per blob — keep only
+            // the pursued objective's entries so the sweep stays inside the same objective area.
+            std::vector<POIInfo> poiInfo;
+            if (GetQuestPOIPosAndObjective(questId, poiInfo))
+            {
+                std::vector<POIInfo const*> sameObjective;
+                for (POIInfo const& poi : poiInfo)
+                    if (poi.objectiveId == data.objectiveId)
+                        sameObjective.push_back(&poi);
+
+                if (!sameObjective.empty())
+                {
+                    data.pos = sameObjective[urand(0, uint32(sameObjective.size()) - 1)]->pos;
+                    data.lastSweep = getMSTime();
+                    TC_LOG_DEBUG("playerbots", "[New RPG] {} sweeping to fresh POI point ({},{},{}) for quest {} objective {}",
+                        bot->GetName(), data.pos.GetPositionX(), data.pos.GetPositionY(), data.pos.GetPositionZ(),
+                        questId, data.objectiveId);
+                }
+            }
+        }
+
+        // Walking a committed sweep leg — same SafeMovement MoveFarTo path as the initial travel.
+        if (data.lastSweep && bot->GetExactDist(data.pos) > 10.0f && MoveFarTo(data.pos))
+            return true;
+    }
+
     // At the POI: small ~8yd wanders read as the bot looking around while kills/collections
-    // progress (AC keeps the same small step to avoid pacing back and forth).
+    // progress (AC keeps the same small step to avoid pacing back and forth); between F2 sweep
+    // legs they also provide the frontal-arc turning stealth detection needs.
     return MoveRandomNear(8.0f);
 }
 
@@ -257,4 +365,81 @@ bool NewRpgDoQuestAction::DoCompletedQuest(NewRpgInfo::DoQuest& data)
     }
 
     return false;
+}
+
+bool NewRpgWanderNpcAction::IsUseful()
+{
+    Player* bot = GetBot();
+    return bot && bot->IsInWorld() && bot->IsAlive() && !bot->IsInCombat();
+}
+
+bool NewRpgWanderNpcAction::Execute(Event /*event*/)
+{
+    Player* bot = GetBot();
+    if (!bot)
+        return false;
+
+    NewRpgInfo& info = _botAI->GetRpgInfo();
+    auto* dataPtr = std::get_if<NewRpgInfo::WanderNpc>(&info.data);
+    if (!dataPtr)
+        return false;
+
+    NewRpgInfo::WanderNpc& data = *dataPtr;
+
+    // Need a target (fresh entry, or the previous one was dwelt/cleared): pick the next NPC to
+    // visit — an actionable giver first, else a not-recently-visited hub NPC. Nothing left worth
+    // visiting -> Idle so the status machine re-rolls (AC: ChooseNpcOrGameObjectToInteract empty).
+    if (data.target.IsEmpty())
+    {
+        ObjectGuid next;
+        if (!SelectRandomNpcToInteract(next, data.visited))
+        {
+            info.ChangeToIdle();
+            return true;
+        }
+
+        data.target = next;
+        data.lastReach = 0;
+        return true;
+    }
+
+    // Re-resolve each tick (AC re-fetches via ObjectAccessor — the target may have despawned or
+    // moved out of the grid). Gone -> mark visited, drop the target, pick the next one next tick.
+    WorldObject* target = ObjectAccessor::GetWorldObject(*bot, data.target);
+    if (!target || !target->IsInWorld())
+    {
+        data.visited.insert(data.target);
+        data.target = ObjectGuid();
+        data.lastReach = 0;
+        return true;
+    }
+
+    // Still walking up to it.
+    if (bot->GetExactDist(*target) > WANDER_NPC_INTERACT_DIST)
+    {
+        data.lastReach = 0;
+        if (MoveFarTo(target->GetPosition()))
+            return true;
+
+        // Pathing couldn't commit a leg (NPC in a wall, mmap hiccup) — small step so the next tick
+        // retries from a different spot instead of staring at the NPC (AC's MoveRandomNear(15)).
+        return MoveRandomNear(15.0f);
+    }
+
+    // Reached it. Quest givers are accepted by the always-on QuestGiverAction (relevance 30) — this
+    // action just dwells to read as the bot lingering at the NPC (AC's npcStayTime), then cycles on.
+    if (!data.lastReach)
+    {
+        data.lastReach = getMSTime();
+        return true;
+    }
+
+    if (GetMSTimeDiffToNow(data.lastReach) < Playerbots::GetRpgWanderNpcStayTimeMs())
+        return false; // dwell — let lower-relevance behaviour (or nothing) run this tick
+
+    // Dwelt long enough — move on to the next hub NPC.
+    data.visited.insert(data.target);
+    data.target = ObjectGuid();
+    data.lastReach = 0;
+    return true;
 }

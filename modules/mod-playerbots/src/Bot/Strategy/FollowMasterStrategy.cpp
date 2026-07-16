@@ -24,7 +24,14 @@ std::vector<NextAction> FollowMasterStrategy::GetDefaultActions()
 
 void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
-    // Auto-accept a pending party invite from the master. High relevance so it preempts the
-    // default "follow" the tick the invite lands; the trigger deactivates once accepted.
+    // Auto-accept a pending party invite from the master. Two triggers fire the SAME accept action:
+    //   1. "group invite signal" — SMSG_PARTY_INVITE observed via the packet-observation layer,
+    //      reacted to on the very next tick (playerbots-bot-packet-observation-handoff.md § 5c).
+    //   2. "group invite" — the original per-tick poll of Player::GetGroupInvite(), kept as a
+    //      fallback so the invite is still accepted if the signal is ever lost (bounded queue) or
+    //      packet observation is disabled. Accept is idempotent (the second attempt finds no
+    //      pending invite), so double-firing is benign — "we don't break things".
+    // Both at high relevance so they preempt the default "follow" the tick the invite lands.
+    triggers.push_back(new TriggerNode("group invite signal", { NextAction("accept invitation", 100.0f) }));
     triggers.push_back(new TriggerNode("group invite", { NextAction("accept invitation", 100.0f) }));
 }

@@ -19,10 +19,14 @@
 #include "AiObjectContext.h"
 #include "Bot/Action/AttackAction.h"
 #include "Bot/Action/AttackAnythingAction.h"
+#include "Bot/Action/DeathActions.h"
 #include "Bot/Action/FollowAction.h"
 #include "Bot/Action/GroupActions.h"
+#include "Bot/Action/LootAction.h"
 #include "Bot/Action/NewRpgActions.h"
 #include "Bot/Action/QuestGiverAction.h"
+#include "Bot/Action/TalkToQuestNpcAction.h"
+#include "Bot/Action/UseQuestObjectAction.h"
 #include "Bot/Action/WanderAction.h"
 #include "Bot/Strategy/CombatStrategy.h"
 #include "Bot/Strategy/FollowMasterStrategy.h"
@@ -30,6 +34,7 @@
 #include "Bot/Strategy/PassiveStrategy.h"
 #include "Bot/Trigger/GroupTriggers.h"
 #include "Bot/Trigger/NewRpgTriggers.h"
+#include "Bot/Trigger/SignalTrigger.h"
 #include "BotPlayerbotAI.h"
 #include "DB2Stores.h"
 #include "Log.h"
@@ -49,18 +54,42 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterAction("wander", std::make_unique<WanderAction>(botAI));
     context->RegisterAction("quest giver", std::make_unique<QuestGiverAction>(botAI));
 
-    // Master-alt party join (bot auto-accepts its master's invite). AC drives this off an
-    // SMSG_GROUP_INVITE packet trigger; socketless bots poll Player::GetGroupInvite() instead.
+    // Master-alt party join (bot auto-accepts its master's invite). Two paths both fire the
+    // "accept invitation" action (see FollowMasterStrategy::InitTriggers):
+    //   - "group invite signal": the packet-observation layer's consume-on-read SignalTrigger,
+    //     fired when SMSG_PARTY_INVITE is observed for the bot (reacts on the very next tick). Its
+    //     name matches the opcode registry entry in BotPlayerbotAI.cpp (LookupPacketSignal).
+    //   - "group invite": the original per-tick poll of Player::GetGroupInvite(), kept as a
+    //     fallback so an invite is still accepted if a signal is ever lost or observation is off.
+    // See playerbots-bot-packet-observation-handoff.md § 5c.
+    context->RegisterTrigger("group invite signal", std::make_unique<SignalTrigger>(botAI, "group invite signal"));
     context->RegisterTrigger("group invite", std::make_unique<GroupInviteTrigger>(botAI));
+
+    // Quest loot + object interaction (AC: OpenLootAction/StoreLootAction, InteractWithGameObject).
+    context->RegisterAction("loot", std::make_unique<LootAction>(botAI));
+    context->RegisterAction("use quest object", std::make_unique<UseQuestObjectAction>(botAI));
+    context->RegisterAction("talk to quest npc", std::make_unique<TalkToQuestNpcAction>(botAI));
+
+    // Bot death handling V1 — the corpse run (AC: DeadStrategy / ReleaseSpiritAction /
+    // ReviveFromCorpseAction). Death-state-gated actions in the always-on band above the interact
+    // band; packetless replication of HandleRepopRequest / HandleReclaimCorpse. Solo random bots
+    // only (master-alt death is NYI — see playerbots-bot-death-corpse-run-handoff.md §2).
+    context->RegisterAction("release spirit", std::make_unique<ReleaseSpiritAction>(botAI));
+    context->RegisterAction("run to corpse", std::make_unique<RunToCorpseAction>(botAI));
+    context->RegisterAction("reclaim corpse", std::make_unique<ReclaimCorpseAction>(botAI));
 
     // Gate 10b — RPG state machine (AC: NewRpgActionContext / NewRpgTriggerContext)
     context->RegisterAction("attack anything", std::make_unique<AttackAnythingAction>(botAI));
     context->RegisterAction("new rpg status update", std::make_unique<NewRpgStatusUpdateAction>(botAI));
     context->RegisterAction("new rpg go grind", std::make_unique<NewRpgGoGrindAction>(botAI));
+    context->RegisterAction("new rpg go camp", std::make_unique<NewRpgGoCampAction>(botAI));
     context->RegisterAction("new rpg do quest", std::make_unique<NewRpgDoQuestAction>(botAI));
+    context->RegisterAction("new rpg wander npc", std::make_unique<NewRpgWanderNpcAction>(botAI));
     context->RegisterTrigger("go grind status", std::make_unique<NewRpgStatusTrigger>(botAI, RPG_GO_GRIND));
+    context->RegisterTrigger("go camp status", std::make_unique<NewRpgStatusTrigger>(botAI, RPG_GO_CAMP));
     context->RegisterTrigger("wander random status", std::make_unique<NewRpgStatusTrigger>(botAI, RPG_WANDER_RANDOM));
     context->RegisterTrigger("do quest status", std::make_unique<NewRpgStatusTrigger>(botAI, RPG_DO_QUEST));
+    context->RegisterTrigger("wander npc status", std::make_unique<NewRpgStatusTrigger>(botAI, RPG_WANDER_NPC));
 
     if (Playerbots::GetLogLevel() >= 1 && player)
     {

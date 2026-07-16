@@ -23,10 +23,32 @@
 // SearchQuestGiverAndAcceptOrReward inside every RPG action) and "attack anything" (the kill
 // role AC's always-on grind strategy provides) outrank the status machine so they preempt
 // travel legs whenever they actually have something to do.
+//
+// "use quest object", "talk to quest npc" and "loot" join the same always-on interact band (AC runs
+// its object-use, talk-to and loot behaviours alongside the RPG loop the same way). All bail out of
+// combat via IsUseful, so their ordering vs "attack anything" only matters out of combat — there we
+// want the bot to use a nearby quest object, talk to a nearby quest NPC and pick up quest drops
+// before it wanders off, so they outrank the kill role. TALKTO is the dominant objective type in
+// low-level chains (the whole orc/troll Valley of Trials intro), so this is the unlock that lets a
+// freshly-questing bot actually progress instead of standing at the POI making no progress.
+//
+// The "release spirit" / "run to corpse" / "reclaim corpse" death band sits ABOVE the interact band
+// (relevance 55/54/53 > "quest giver" 30) — bot death handling V1, the corpse run. Each is
+// IsUseful() only in its matching death phase (dead-not-ghost / ghost-far-from-corpse /
+// ghost-on-corpse-past-reclaim-delay), so exactly one is live at a time and only while the bot is
+// dead; a live bot is completely unaffected (interact-band actions already bail when the bot is
+// dead, and every death action bails when it's alive). Mirrors AC's DeadStrategy shape,
+// TC-native/packetless — see playerbots-bot-death-corpse-run-handoff.md.
 std::vector<NextAction> NewRpgStrategy::GetDefaultActions()
 {
     return {
+        NextAction("release spirit", 55.0f),
+        NextAction("run to corpse", 54.0f),
+        NextAction("reclaim corpse", 53.0f),
         NextAction("quest giver", 30.0f),
+        NextAction("use quest object", 25.0f),
+        NextAction("talk to quest npc", 24.0f),
+        NextAction("loot", 22.0f),
         NextAction("attack anything", 20.0f),
         NextAction("new rpg status update", 11.0f)
     };
@@ -36,6 +58,10 @@ void NewRpgStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
     // AC trigger-name vocabulary; handlers point at this fork's registered action names.
     triggers.push_back(new TriggerNode("go grind status", { NextAction("new rpg go grind", 3.0f) }));
+    triggers.push_back(new TriggerNode("go camp status", { NextAction("new rpg go camp", 3.0f) }));
     triggers.push_back(new TriggerNode("wander random status", { NextAction("wander", 3.0f) }));
     triggers.push_back(new TriggerNode("do quest status", { NextAction("new rpg do quest", 3.0f) }));
+    triggers.push_back(new TriggerNode("wander npc status", { NextAction("new rpg wander npc", 3.0f) }));
+    // RPG_REST has no trigger/action (AC parity) — it's a pure timed sit; NewRpgStatusUpdateAction
+    // returns the bot to IDLE after the rest duration and the next status' movement stands it.
 }

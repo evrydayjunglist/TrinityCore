@@ -28,7 +28,6 @@
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "QuestDef.h"
-#include "SafeMovement.h"
 
 namespace
 {
@@ -66,16 +65,22 @@ private:
     float _range;
 };
 
-// Rebuilds the bot's quest menu for this object (same call the client's gossip window
-// triggers) and reports whether anything is actually offerable/turn-in-able right now.
-bool HasActionableQuest(Player* bot, WorldObject* questGiver)
-{
-    bot->PrepareQuestMenu(questGiver->GetGUID());
-    return !bot->PlayerTalkClass->GetQuestMenu().Empty();
-}
+} // namespace
 
-WorldObject* FindNearbyQuestGiver(Player* bot)
+// Convergence fix F1 (playerbots-rpg-quest-convergence-fixes-handoff.md § 4-F1): the per-candidate
+// gate is the strict HasQuestToAcceptOrReward — a COMPLETE quest the bot can be rewarded for, or a
+// NONE quest it can take that's worth + capable of doing. The previous menu-non-empty gate was the
+// giver-anchor ping-pong bug: TC quest menus include turn-in quests the player holds INCOMPLETE
+// (the greyed "come back later" entry, Player::PrepareQuestMenu), so an INCOMPLETE-only ender kept
+// this action permanently useful while InteractWithQuestGiver could never transact anything —
+// hijacking every idle tick into a walk toward the ender. AC parity: ChooseNpcOrGameObjectToInteract
+// only ever targets candidates passing CanInteractWithQuestGiver && HasQuestToAcceptOrReward.
+WorldObject* QuestGiverAction::FindNearbyQuestGiver()
 {
+    Player* bot = GetBot();
+    if (!bot)
+        return nullptr;
+
     std::list<Creature*> creatures;
     QuestGiverCreatureCheck creatureCheck(bot, QUEST_GIVER_SEARCH_RADIUS);
     Trinity::CreatureListSearcher<QuestGiverCreatureCheck> creatureSearcher(bot, creatures, creatureCheck);
@@ -91,7 +96,7 @@ WorldObject* FindNearbyQuestGiver(Player* bot)
 
     auto consider = [&](WorldObject* candidate)
     {
-        if (!HasActionableQuest(bot, candidate))
+        if (!HasQuestToAcceptOrReward(candidate))
             return;
 
         float const distSq = bot->GetExactDistSq(*candidate);
@@ -110,8 +115,6 @@ WorldObject* FindNearbyQuestGiver(Player* bot)
 
     return best;
 }
-
-} // namespace
 
 // Accepts every offerable quest and turns in every completed one at this quest giver,
 // replaying the same server-side checks the client's accept/choose-reward flow uses
@@ -176,7 +179,7 @@ bool QuestGiverAction::IsUseful()
     if (!bot || !bot->IsInWorld() || bot->IsInCombat())
         return false;
 
-    return FindNearbyQuestGiver(bot) != nullptr;
+    return FindNearbyQuestGiver() != nullptr;
 }
 
 bool QuestGiverAction::Execute(Event /*event*/)
@@ -190,7 +193,7 @@ bool QuestGiverAction::Execute(Event /*event*/)
     // the log is nearly full so worthwhile ones still fit.
     OrganizeQuestLog();
 
-    WorldObject* questGiver = FindNearbyQuestGiver(bot);
+    WorldObject* questGiver = FindNearbyQuestGiver();
     if (!questGiver)
         return false;
 
@@ -199,9 +202,13 @@ bool QuestGiverAction::Execute(Event /*event*/)
         if (bot->GetMotionMaster()->GetCurrentMovementGeneratorType() == POINT_MOTION_TYPE)
             return false; // already walking toward a destination this tick
 
-        // Validate via a real mmap path before committing (see SafeMovement.h) — same steep-
-        // terrain clipping risk as Wander/Grind if the approach happens to cross an incline.
-        return TryMoveToValidatedPoint(bot, questGiver->GetPositionX(), questGiver->GetPositionY(), questGiver->GetPositionZ());
+        // Approach via MoveFarTo (obstacle-pathing handoff §5-D2) rather than a bare
+        // TryMoveToValidatedPoint: this was the one raw, fallback-less locomotion call site, so a
+        // failed direct attempt used to leave the bot standing still at an obstacle that tick.
+        // Going through MoveFarTo inherits the same SafeMovement validation plus the D1 progress
+        // guard, the D2 leg-scaled forward-cone stepping-stone fallback, and the shared stuck
+        // accounting every other locomotion site already uses.
+        return MoveFarTo(questGiver->GetPosition());
     }
 
     return InteractWithQuestGiver(questGiver);

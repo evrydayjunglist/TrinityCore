@@ -49,6 +49,18 @@ CMake `string(MAKE_C_IDENTIFIER)` maps directory names to loader symbols:
 - `-DMODULES=dynamic` — build enabled modules as shared libraries under `bin/.../modules/`
 - `-DMODULE_<NAME>=disabled|static|dynamic` — per-module override
 
+> **Validation baseline = all modules (`-DMODULES=static`).** `MODULES=none` is the CMake
+> *default* (modules opt-in), but the project's build/boot/login baseline enables every
+> module (see `docs/midnight-assessment/successful-local-baseline.md`). `MODULES=none` is
+> kept only as a secondary "core still compiles" check.
+>
+> **Sticky per-module cache (2026-07-04 gotcha):** `-DMODULE_<NAME>` is written to the
+> CMake cache and **persists across reconfigures**. A `MODULES=none` build leaves
+> `MODULE_MOD_PLAYERBOTS=disabled`, which a later `-DMODULES=static` will *not* reset —
+> the module is silently compiled out (empty `AddModulesScripts()`) while its `.conf`
+> still loads. Always pass the intended per-module value explicitly, or `-UMODULE_MOD_*`
+> to clear it, and verify the generated `ModulesLoader.cpp` is non-empty.
+
 ```powershell
 .\scripts\build-trinitycore-master.ps1
 

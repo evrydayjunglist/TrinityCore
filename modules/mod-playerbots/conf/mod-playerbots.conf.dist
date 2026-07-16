@@ -24,8 +24,10 @@ Playerbots.Enable = 0
 #   - Bot sessions are tracked per-character, not per-account — a reserved account can host more
 #     than one simultaneous socketless session (multiple GM `.playerbot login` characters, or a
 #     multi-entry random-bot roster on the same account; see Playerbots.RandomBotAccounts below).
-#   - Set explicit Ids OR inclusive MinId/MaxId — Ids takes precedence when non-empty.
-#   - Empty / zero range = policy disabled until configured (.playerbot login rejected).
+#   - Three reservation modes, checked as an OR: explicit Ids, inclusive MinId/MaxId range, and the
+#     RandomBotAccountPrefix name mode (accounts named "<prefix>*" — see Random bot generation below).
+#     An account matching ANY configured mode is reserved.
+#   - All modes empty / zero = policy disabled until configured (.playerbot login rejected).
 #
 Playerbots.ReservedAccount.Ids =
 Playerbots.ReservedAccount.MinId = 0
@@ -79,10 +81,63 @@ Playerbots.MaxRandomBots = 0
 Playerbots.RandomBotAutologin = 0
 Playerbots.DisabledWithoutRealPlayer = 1
 #
-# Comma lists: reserved account ids and matching character names (same order/index — repeat an
-# account id to add another character on it, e.g. multiple bots sharing one reserved account,
-# AC parity, see docs/midnight-assessment/playerbots/playerbots-bot-session-account-cap-handoff.md).
-# Example: account 3 + char Three, account 3 + char Threethree (both live on account 3 at once).
+# Random bot generation (RandomPlayerbotFactory — AC-shaped, TC-native). When Playerbots.Enable=1
+# and MaxRandomBots>0, startup auto-provisions reserved bot accounts named "<prefix><N>" (Bnet-linked)
+# and auto-creates level-1 characters (valid random race/class/gender/appearance/name) until the pool
+# reaches MaxRandomBots. Idempotent: a re-run only creates the shortfall. Generated characters live
+# ONLY on the prefix accounts, which are reserved via the prefix mode below.
+# See docs/midnight-assessment/playerbots/playerbots-random-bot-generation-handoff.md.
+#
+# Account name prefix — also the third reserved-account mode (alongside ReservedAccount.Ids/MinId/MaxId).
+# Empty disables both generation and prefix reservation.
+Playerbots.RandomBotAccountPrefix = rndbot
+# Number of bot accounts to provision. 0 = auto: ceil(MaxRandomBots / CharactersPerAccount realm config).
+# A value below the calculated minimum is warned about and overridden.
+Playerbots.RandomBotAccountCount = 0
+# Give generated accounts a random 10-char password instead of the account name (bots log in
+# socketlessly, so this is purely defense-in-depth).
+Playerbots.RandomBotRandomPassword = 0
+# LOUD, OPT-IN teardown ("regenerate from scratch"): when 1, startup deletes every generated
+# bot-account character AND the bot accounts, then stops the server. Reset to 0 and restart to
+# regenerate. Off by default; never touches human data.
+Playerbots.DeleteRandomBotAccounts = 0
+
+#
+# Special races & classes for generation (Session 1 — allied races; Session 2 — hero classes). See
+# docs/midnight-assessment/playerbots/playerbots-special-races-classes-s1-allied-races-handoff.md and
+# .../playerbots-special-races-classes-s2-hero-classes-handoff.md.
+# Generation sets every bot account's expansion to the realm's, so allied/special races are unlocked.
+#
+# Allied races (Void Elf, Lightforged Draenei, Dark Iron Dwarf, Kul Tiran, Mechagnome, Nightborne,
+# Highmountain Tauren, Mag'har Orc, Zandalari Troll, Vulpera, Earthen, ...). When 1 (default) a
+# generated bot may roll any allied race the realm's expansion allows — detected data-first via
+# ChrRacesFlag::IsAlliedRace, never a hardcoded id list. Set to 0 to generate base races only.
+Playerbots.EnableAlliedRaces = 1
+# Optional curated include-list of race ids a generated bot may roll (comma-separated). Empty
+# (default) = every race the expansion allows (base + allied per EnableAlliedRaces). Non-empty
+# restricts generation to exactly these race ids (still intersected with expansion / disabled-race
+# masks and EnableAlliedRaces). Example: Playerbots.AllowedRaces = 1,2,29,34
+Playerbots.AllowedRaces =
+# Hero classes (Death Knight / Demon Hunter / Evoker) — Session 2. When 1 (default) a generated bot
+# may roll a hero class the realm's expansion allows — detected data-first by the CLASS_* enum, never
+# a hardcoded id list. This also un-gates the Dracthyr race (Evoker's paired race). Set to 0 to
+# generate base + allied classes only.
+# NOTE: hero-class bots currently spawn in their instanced intro scenarios (Acherus / Mardum /
+# Forbidden Reach); the wander strategy can't leave those yet and teaching bots to complete the
+# starting scenarios is future work. Their start level comes from the core StartXPlayerLevel configs.
+Playerbots.EnableHeroClasses = 1
+# AC's AiPlayerbot.DisableDeathKnightLogin analog. When 1, generated bots never roll Death Knight even
+# with EnableHeroClasses on (Demon Hunter / Evoker unaffected). Default 0 (DK enabled), matching AC.
+Playerbots.DisableDeathKnightLogin = 0
+# Optional curated include-list of class ids a generated bot may roll (comma-separated). Empty
+# (default) = every class allowed by the expansion / disabled-class mask / hero-class toggles. Non-empty
+# restricts generation to exactly these class ids. Example (casters only): Playerbots.AllowedClasses = 5,8,9
+Playerbots.AllowedClasses =
+
+#
+# DEPRECATED (superseded by generation + DB-enumerated roster above). The fixed-roster hand-list is
+# no longer read by the roster builder — the roster is now every non-deleted character on the reserved
+# bot accounts. Left here (empty) only so a legacy conf that still sets them doesn't error. Do not use.
 #
 Playerbots.RandomBotAccounts =
 Playerbots.RandomBotCharacterNames =
@@ -132,17 +187,77 @@ Playerbots.RpgStatusProbWeight.GoGrind = 15
 Playerbots.RpgStatusProbWeight.DoQuest = 60
 
 #
+# GoCamp = travel to a distant NPC hub (a cluster of >= 3 quest givers, from the creature spawn
+# data) then mingle there via WanderNpc. This is what lets a bot stranded in a giver-less pocket
+# reach a town and pick up new quests (removes WanderNpc's local ~200yd ceiling). AC weight 15.
+# Weight 0 disables hub travel.
+#
+Playerbots.RpgStatusProbWeight.GoCamp = 15
+
+#
+# WanderNpc = lifelike hub mingling: the bot walks up to nearby service NPCs (innkeeper / vendor /
+# trainer / flightmaster / quest giver / …), dwelling briefly at each. It prefers an actionable
+# quest giver as the target (quest acquisition stays the priority — the always-on quest-giver
+# pickup transacts whenever the bot passes within 80yd), so it also un-strands bots whose log holds
+# nothing actionable (e.g. only the un-turn-in-able junk quest 55660). Weight 0 disables it.
+#
+Playerbots.RpgStatusProbWeight.WanderNpc = 30
+
+#
+# Rest = AC's timed sit: the bot sits down for a short while. Also the fallback when nothing else is
+# available, so it reads as "sitting down when there's nothing to do" instead of aimless wandering.
+# Weight 0 removes it from the idle roll (it is still the empty-availability fallback).
+#
+Playerbots.RpgStatusProbWeight.Rest = 10
+
+#
+# How far (yards) a bot scans for hub NPCs / quest givers when it mingles (WanderNpc). Deliberately
+# wider than the 80yd opportunistic-pickup radius — the point is to reach NPCs that aren't already
+# adjacent, both to seek a giver and to find a >= 3-NPC hub. Bounded [80, 500] so the per-idle grid
+# scan stays cheap at fleet scale.
+#
+Playerbots.RpgWanderNpcRadius = 200.0
+
+#
+# How long (seconds) a bot dwells at each hub NPC before cycling to the next while mingling
+# (WanderNpc) — AC's npcStayTime, default 8.
+#
+Playerbots.RpgWanderNpcStayTime = 8
+
+#
 # How long (seconds) a bot stays in a status before going idle again (AC constants, config
-# keys on this fork): WanderRandom default 300 (5 min), DoQuest default 1800 (30 min).
+# keys on this fork): WanderRandom default 300 (5 min), DoQuest default 1800 (30 min),
+# WanderNpc default 300 (5 min mingling), Rest default 30 (sit).
 #
 Playerbots.RpgStatusDuration.WanderRandom = 300
 Playerbots.RpgStatusDuration.DoQuest = 1800
+Playerbots.RpgStatusDuration.WanderNpc = 300
+Playerbots.RpgStatusDuration.Rest = 30
 
 #
 # How long (seconds) a bot holds at a quest POI with zero objective progress before it marks
 # the quest low-priority (abandons pursuing it) — AC's poiStayTime, default 300 (5 min).
 #
 Playerbots.RpgPoiStayTime = 300
+
+#
+# While parked at a quest objective POI with zero progress, how often (seconds) the bot walks to a
+# fresh random point inside the same objective area instead of circling one fixed spot for the
+# whole stay window. Sweeping the area is how a bot *finds* stealthed objective mobs the way a real
+# player does — stealth detection itself is untouched (still ~10yd frontal at equal level), so
+# finding all of a stealthed pack still takes minutes, by design. The zero-progress abandon budget
+# (RpgPoiStayTime) keeps running across sweep legs. Bounded [10, 120]. Default 25.
+#
+Playerbots.RpgPoiSweepIntervalSeconds = 25
+
+#
+# How close (yards) a *neutral* quest kill target must be for a bot to engage it. The always-on
+# "attack anything" behavior is hostile-only by design (so bots don't grief town wildlife); this
+# additionally lets a bot kill a neutral creature ONLY when a live quest objective wants it dead
+# (e.g. the mottled boars for "Cutting Teeth"). Slightly wider than the 30yd hostile reach so a
+# bot on its objective POI closes on its quest mobs. Bounded [10, 80]. Default 40.
+#
+Playerbots.RpgQuestKillSearchRadius = 40.0
 
 #
 # Maximum incline (degrees, rise over run) a bot will voluntarily walk up while wandering/
@@ -155,4 +270,82 @@ Playerbots.RpgPoiStayTime = 300
 # Lower it if bots still look like they're climbing too much; raise it (up to 55) if they refuse
 # reasonable terrain too often.
 #
-Playerbots.MaxWalkableSlopeDegrees = 45.0
+# Default 35: evidence-grounded from a local player slope-walk sniff (see
+# playerbots-bot-wander-ground-clip-handoff.md section 7). A human's steepest *sustained* head-on
+# climb on the same hill was ~35-37 degrees (steeper isolated readings were the player skirting the
+# edge of the slope, not actually ascending it), whereas an unchecked bot walked a 41 degree pitch.
+#
+Playerbots.MaxWalkableSlopeDegrees = 35.0
+
+#
+# Quest loot + object interaction (playerbots-quest-loot-and-object-interaction-handoff.md).
+# RPG bots pick up quest drops from corpses and use quest-objective gameobjects, using the core's
+# own loot/interaction APIs directly (packetless). Ownership and anti-ninja are enforced by the
+# core exactly as for a real player: a bot only loots corpses it is allowed to loot, and only slots
+# a real looter could take.
+#
+
+#
+# How far (yards) a bot looks for a lootable corpse. Matches the core's own AE-loot reach (30yd).
+#
+Playerbots.LootDistance = 30.0
+
+#
+# When true (default), bots only store loot that starts a quest or fills an item objective in
+# their own log — keeps looting to quest needs and out of the gear/vendor economy. Set to 0 to
+# let bots take everything they're allowed to.
+#
+Playerbots.LootQuestItemsOnly = 1
+
+#
+# Whether bots pick up coin from what they loot (retail bots do; it doesn't fill bags).
+#
+Playerbots.LootMoney = 1
+
+#
+# How close (yards) a bot walks before trying to use a quest-objective gameobject. The core's
+# interaction check enforces the real reach regardless; keep this at or below ~5.
+#
+Playerbots.QuestObjectUseDistance = 5.0
+
+#
+# How close (yards) a bot walks before completing a QUEST_OBJECTIVE_TALKTO objective (the "report
+# to / speak with NPC" step that dominates low-level quest chains). Mirrors QuestObjectUseDistance;
+# the core credit path (Player::TalkedToCreature) enforces no reach itself, so keep this near ~5.
+#
+Playerbots.QuestTalkToDistance = 5.0
+
+#
+# Bot death handling V1 — the corpse run. A dead random/newrpg bot releases its spirit, ghosts to
+# the nearest graveyard, walks back to its own corpse, and reclaims it (50% HP, no sickness), all
+# via the same public Player methods the core repop/reclaim handlers use. Solo random bots only
+# (master-alt/group death, spirit-healer res, other-bot res and self-res are not yet implemented).
+#
+# Seconds to pause after death before releasing the spirit, so the release reads lifelike rather
+# than instant. 0 releases immediately. Bounded [0, 60]. Default 3.
+#
+Playerbots.RpgDeathReleaseDelaySeconds = 3
+
+#
+# How long (seconds) a released ghost tries to *walk* back to its corpse before a one-shot
+# teleport-to-corpse fallback fires (for a corpse across genuinely unwalkable terrain/water).
+# Walking is always the primary path; this only prevents a permanently-stranded ghost. The core
+# ~30s reclaim delay is separate and intentionally not overridable here. Bounded [60, 1800].
+# Default 600.
+#
+Playerbots.RpgDeathCorpseRunTimeoutSeconds = 600
+
+#
+#    Playerbots.PacketObservation.Enable
+#        Description: Master toggle for the bot outbound-packet (SMSG) observation / signal layer.
+#                     Bot sessions are socketless, so the packets the server would send them are
+#                     normally dropped unobserved; this layer lets the bot AI react to the *fact*
+#                     that a packet was generated, keyed purely by opcode (never by decoding the
+#                     packet payload — that no-parse rule is what keeps the feature safe against
+#                     wire-format churn). When off, the observer bails and bots fall back to their
+#                     per-tick polls. Currently drives one feature: master-alt party-invite accept
+#                     (SMSG_PARTY_INVITE), which also keeps its poll as a fallback.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+
+Playerbots.PacketObservation.Enable = 1

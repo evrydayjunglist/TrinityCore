@@ -21,6 +21,7 @@
 #include "MotionMaster.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
+#include "SafeMovement.h"
 #include "Unit.h"
 
 namespace
@@ -74,7 +75,13 @@ bool AttackMyTargetAction::Execute(Event /*event*/)
     // Close to melee range and stay on the target (core ChaseMovementGenerator). MoveChase
     // installs an active-slot generator that supersedes the +follow FollowMovementGenerator, so
     // no explicit follow Clear() is needed. Mirrors AttackAnythingAction (random/newrpg bots) —
-    // without this a master-alt bot only lands hits when the mob walks into it.
-    bot->GetMotionMaster()->MoveChase(target);
+    // without this a master-alt bot only lands hits when the mob walks into it. Same slope gate
+    // as AttackAnythingAction — this action's IsUseful() stays true every tick the master keeps
+    // its target, so an unwalkable approach gets re-checked (and can clear) as the fight moves,
+    // unlike the once-per-engagement AttackAnythingAction check.
+    if (bot->IsWithinMeleeRange(target) ||
+        IsApproachPathWalkable(bot, target->GetPositionX(), target->GetPositionY(), target->GetPositionZ()))
+        bot->GetMotionMaster()->MoveChase(target);
+
     return true;
 }

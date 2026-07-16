@@ -335,6 +335,14 @@ void WorldSession::SendPacket(WorldPacket const* packet, bool forced /*= false*/
 {
     if (IsBotSession())
     {
+        // Playerbots: hand the packet to module observers before dropping it. Bot sessions are
+        // socketless, so nothing is transmitted — but firing the same ServerScript::OnPacketSend
+        // hook real-player sends fire at the bottom of this function lets a module's bot AI observe
+        // the SMSG the server generated for the bot (mod-playerbots' outbound-packet signal layer).
+        // No new hook type, no signature/behavior change for real players (their dispatch below is
+        // untouched), and a no-op when no ServerScript is registered (e.g. MODULES=none).
+        sScriptMgr->OnPacketSend(this, *packet);
+
         TC_LOG_DEBUG("network", "Skipping {} for bot session {}",
             GetOpcodeNameForLogging(static_cast<OpcodeServer>(packet->GetOpcode())), GetPlayerInfo());
         return;

@@ -47,4 +47,18 @@ bool TryMoveToValidatedPoint(Player* bot, float x, float y, float z);
 // instead of burning ticks "moving" to its own feet.
 bool TryMoveTowardValidatedPoint(Player* bot, float x, float y, float z, float minProgress);
 
+// Gate for continuous movement generators (MotionMaster::MoveChase/MoveFollow) that manage their
+// own re-pathing every tick and issue no MovePoint themselves — TryMoveToValidatedPoint's
+// contract doesn't apply directly since there's nothing here to commit. Callers (combat chase,
+// master-alt follow) should check this before starting/continuing to chase or follow and refuse
+// (stand down, same "not this tick" contract as the rest of SafeMovement) rather than calling
+// MoveChase/MoveFollow when the path to the target's current position is unwalkable — otherwise
+// ChaseMovementGenerator/FollowMovementGenerator build their own PathGenerator internally with
+// only the engine's default 55-degree NAV_GROUND filter and no slope ceiling on top, which is
+// exactly the gap that let a bot climb an unrealistic incline while chasing/following instead of
+// wandering. Deliberately skips the water rejection the MovePoint-committing checks above apply
+// (aquatic combat/follow is normal) and only re-validates on demand — it does not itself track or
+// interrupt an already-running chase/follow generator.
+bool IsApproachPathWalkable(Player* bot, float x, float y, float z);
+
 #endif

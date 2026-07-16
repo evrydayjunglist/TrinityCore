@@ -19,23 +19,31 @@
 #define TRINITY_PLAYERBOT_NEW_RPG_INFO_H
 
 #include "Define.h"
+#include "ObjectGuid.h"
 #include "Position.h"
 #include <limits>
 #include <string>
+#include <unordered_set>
 #include <variant>
 
 class Quest;
 
 // Gate 10b — per-bot RPG state machine. AC reference: mod-playerbots-master/src/Ai/World/Rpg/
-// NewRpgInfo.h — same variant-over-payload-structs shape, subset of AC's statuses (GoCamp/
-// WanderNpc/Rest/TravelFlight/OutdoorPvP stay out per the Gate 10b handoff scope; hub/rest/
-// flight need a Midnight zone-level source first).
+// NewRpgInfo.h — same variant-over-payload-structs shape, subset of AC's statuses (TravelFlight/
+// OutdoorPvP stay out per handoff scope — taxi graph / not PvE-focused). RPG_WANDER_NPC added
+// post-Gate-10b (active quest-giver seeking handoff) — the AC status this fork needed to un-strand
+// bots with nothing actionable. RPG_GO_CAMP + RPG_REST added by the hub-travel/lifelike-wander/rest
+// handoff: GO_CAMP travels to a distant NPC hub (HubLocationCache) then hands off to WANDER_NPC to
+// mingle; REST is AC's timed-sit idle filler and the empty-availability fallback.
 enum NewRpgStatus : uint8
 {
     RPG_IDLE          = 0,
     RPG_GO_GRIND      = 1,
     RPG_WANDER_RANDOM = 2,
     RPG_DO_QUEST      = 3,
+    RPG_WANDER_NPC    = 4,
+    RPG_GO_CAMP       = 5,
+    RPG_REST          = 6,
     RPG_STATUS_END
 };
 
@@ -51,8 +59,22 @@ struct NewRpgInfo
         Position pos;
     };
 
+    // RPG_GO_CAMP — travel to a HubLocationCache hub centroid, then hand over to WanderNpc to
+    // mingle there. AC reference: NewRpgInfo.h GoCamp { WorldPosition pos } + SelectRandomCampPos.
+    struct GoCamp
+    {
+        Position pos;
+    };
+
     // RPG_WANDER_RANDOM — small random legs around the current position.
     struct WanderRandom
+    {
+    };
+
+    // RPG_REST — AC-parity timed sit (NewRpgInfo.h Rest{}). No per-state action/trigger: the bot is
+    // sat down (SetStandState(SIT)) on entry and the status-update action returns it to IDLE after
+    // the rest duration; the next status' movement stands it automatically.
+    struct Rest
     {
     };
 
@@ -70,6 +92,23 @@ struct NewRpgInfo
         bool hasPos = false;         // AC compares pos != WorldPosition(); an explicit flag avoids float compares
         bool travelToTurnIn = false; // AC's objectiveIdx == -1 marker: turn-in blob resolved, heading there
         uint32 lastReachPOI = 0;     // ms timestamp of arrival at the POI; 0 = not arrived yet
+        uint32 lastSweep = 0;        // convergence F2: ms timestamp of the last zero-progress area-sweep
+                                     // leg (fresh weighted point in the same objective blob); 0 = none yet.
+                                     // Never feeds the abandon budget — that stays on lastReachPOI.
+    };
+
+    // RPG_WANDER_NPC — AC's lifelike "visit any hub NPC" mingling (NewRpgInfo.h WanderNpc
+    // { ObjectGuid npcOrGo; uint32 lastReach; }). Picks a target on the action side each cycle:
+    // an actionable quest giver first (quest acquisition stays the priority), else a not-recently-
+    // visited allowed-flag hub NPC (innkeeper/vendor/trainer/flightmaster/…). Walks to it, dwells
+    // npcStayTime, then adds it to `visited` and picks the next — cycling through the hub over the
+    // status duration. Quest givers are still accepted opportunistically by the always-on
+    // QuestGiverAction (relevance 30) whenever the bot passes within its 80yd radius.
+    struct WanderNpc
+    {
+        ObjectGuid target;                       // current NPC/GO being visited (re-resolved each tick)
+        uint32 lastReach = 0;                    // ms timestamp of arrival at the target; 0 = en route
+        std::unordered_set<ObjectGuid> visited;  // NPCs already dwelt at this session — cycle past them
     };
 
     NewRpgInfo() : data(Idle{}) { }
@@ -83,15 +122,20 @@ struct NewRpgInfo
     Position moveFarPos;
     bool hasMoveFarPos = false;
 
-    using RpgData = std::variant<Idle, GoGrind, WanderRandom, DoQuest>;
+    using RpgData = std::variant<Idle, GoGrind, GoCamp, WanderRandom, Rest, DoQuest, WanderNpc>;
     RpgData data;
 
     NewRpgStatus GetStatus() const;
     bool HasStatusPersisted(uint32 maxDurationMs) const;
 
     void ChangeToGoGrind(Position pos);
+    void ChangeToGoCamp(Position pos);
     void ChangeToWanderRandom();
+    void ChangeToRest();
     void ChangeToDoQuest(uint32 questId, Quest const* quest);
+    // No pre-chosen target (AC parity): WANDER_NPC picks its own targets on the action side, so
+    // both RandomChangeStatus and the GO_CAMP -> WANDER_NPC arrival transition just enter the state.
+    void ChangeToWanderNpc();
     void ChangeToIdle();
     void Reset();
     void SetMoveFarTo(Position pos);
@@ -108,6 +152,11 @@ struct NewRpgStatistic
     uint32 questAbandoned = 0;
     uint32 questRewarded = 0;
     uint32 questDropped = 0;
+    uint32 itemsLooted = 0;   // quest loot picked up from corpses/objects (LootAction)
+    uint32 objectsUsed = 0;   // quest-objective gameobjects used (UseQuestObjectAction)
+    uint32 questNpcsTalkedTo = 0;  // QUEST_OBJECTIVE_TALKTO objectives credited (TalkToQuestNpcAction)
+    uint32 deaths = 0;    // times the bot released its spirit after dying (ReleaseSpiritAction)
+    uint32 revived = 0;   // times the bot reclaimed its corpse and stood up alive (ReclaimCorpseAction)
 };
 
 #endif

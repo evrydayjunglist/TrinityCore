@@ -23,10 +23,14 @@
 #include "Engine.h"
 #include "PlayerbotAIBase.h"
 #include <memory>
+#include <mutex>
+#include <string>
 #include <unordered_set>
+#include <vector>
 
 class AiObjectContext;
 class Engine;
+class WorldPacket;
 
 // Gate 6: bot AI with AC-shaped Engine + passive strategy.
 class BotPlayerbotAI : public PlayerbotAIBase
@@ -49,6 +53,26 @@ public:
     NewRpgStatistic& GetRpgStatistics() { return _rpgStatistic; }
     std::unordered_set<uint32>& GetLowPriorityQuests() { return _lowPriorityQuest; }
 
+    // Quests proven impossible to complete for ANY player (a COMPLETE quest with no ender
+    // anywhere in world data, e.g. the auto-granted junk 55660 "Time Trials"). Distinct from
+    // the low-priority set (that = "tried a POI, stalled"; this = "provably unactionable").
+    // In-memory only (owner directive: never DropQuest/AbandonQuest/DB-touch); per-session, so
+    // it starts empty each login and a later data fix or new objective handler re-includes the
+    // quest automatically. See playerbots-rpg-active-questgiver-seeking-handoff.md §4.
+    std::unordered_set<uint32>& GetUnactionableQuests() { return _unactionableQuest; }
+
+    // Packet-observation signal layer (playerbots-bot-packet-observation-handoff.md § 5). AC's
+    // PlayerbotAI::HandleBotOutgoingPacket analog. Called from the module's ServerScript observer
+    // on ARBITRARY map/World sender threads (WorldSession::SendPacket runs there) — so it does
+    // nothing but a static opcode->trigger-name registry test and, on a hit, a cheap bounded
+    // enqueue under _signalMutex. Opcode-as-signal ONLY: the packet payload is never read (§ 0).
+    // All reaction happens single-threaded on the bot's own tick (the UpdateAIInternal drain).
+    void HandleBotOutgoingPacket(WorldPacket const& packet);
+
+    // Consume-on-read: tick-thread only (SignalTrigger::IsActive during Engine::DoNextAction). The
+    // first trigger to test its signal name this tick claims it; returns false once consumed.
+    bool ConsumeSignal(std::string const& name);
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -59,6 +83,22 @@ private:
     NewRpgInfo _rpgInfo;
     NewRpgStatistic _rpgStatistic;
     std::unordered_set<uint32> _lowPriorityQuest;
+    std::unordered_set<uint32> _unactionableQuest;
+
+    struct PendingSignal
+    {
+        std::string Name;
+        uint8 TicksRemaining = 0;
+    };
+
+    // Cross-thread signal handoff. _signalQueue is written by HandleBotOutgoingPacket on sender
+    // threads and drained (swapped out) at the top of each tick under _signalMutex. _pendingSignals
+    // is only ever touched on the bot's own tick thread (drain + consume + expire), so it needs no
+    // lock of its own. Signals persist briefly so an engine GCD early-return cannot erase them
+    // before SignalTrigger gets a chance to consume them.
+    std::mutex _signalMutex;
+    std::vector<std::string> _signalQueue;
+    std::vector<PendingSignal> _pendingSignals;
 };
 
 #endif
