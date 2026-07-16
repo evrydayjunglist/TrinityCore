@@ -16,6 +16,7 @@
  */
 
 #include "SafeMovement.h"
+#include "BotMapResidency.h"
 #include "Log.h"
 #include "Map.h"
 #include "MotionMaster.h"
@@ -115,11 +116,29 @@ bool TryMoveValidated(Player* bot, float x, float y, float z, float minProgress)
     if (!bot)
         return false;
 
+    // Class 3: refuse pathfind/MovePoint into a cold grid. Walking the visibility frontier onto
+    // unloaded neighbours is what turns bot density into ProcessRelocationNotifies →
+    // EnsureGridLoaded → VMAP disk I/O on the map tick. Stay inside the already-warm set; callers
+    // re-roll or idle (AC TravelMgr IsGridLoaded residency).
+    if (!IsBotMapPosQueryable(bot, x, y))
+    {
+        TC_LOG_DEBUG("playerbots", "[New RPG][SafeMovement] {} skip cold target ({},{},{}) — grid not resident",
+            bot->GetName(), x, y, z);
+        return false;
+    }
+
     PathGenerator path(bot);
     if (!ValidatePathAndSlope(bot, x, y, z, path))
         return false;
 
     G3D::Vector3 const& end = path.GetActualEndPosition();
+    if (!IsBotMapPosQueryable(bot, end.x, end.y))
+    {
+        TC_LOG_DEBUG("playerbots", "[New RPG][SafeMovement] {} skip cold path end ({},{},{}) — grid not resident",
+            bot->GetName(), end.x, end.y, end.z);
+        return false;
+    }
+
     if (bot->GetMap()->IsInWater(bot->GetPhaseShift(), end.x, end.y, end.z))
         return false; // wander/grind/approach targets should never route a bot into water
 

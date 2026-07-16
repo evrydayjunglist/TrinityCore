@@ -16,6 +16,7 @@
  */
 
 #include "NewRpgActions.h"
+#include "BotMapResidency.h"
 #include "BotPlayerbotAI.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
@@ -128,6 +129,16 @@ bool NewRpgGoGrindAction::Execute(Event /*event*/)
 {
     if (auto* data = std::get_if<NewRpgInfo::GoGrind>(&_botAI->GetRpgInfo().data))
     {
+        Player* bot = GetBot();
+        // Class 3: cold dest — drop the trip rather than nudge forever at the warm frontier.
+        if (!IsBotMapPosQueryable(bot, data->pos))
+        {
+            TC_LOG_DEBUG("playerbots", "[New RPG] {} idle out of GO_GRIND — dest grid not resident",
+                bot ? bot->GetName() : "?");
+            _botAI->GetRpgInfo().ChangeToIdle();
+            return true;
+        }
+
         if (MoveFarTo(data->pos))
             return true;
 
@@ -149,6 +160,16 @@ bool NewRpgGoCampAction::Execute(Event /*event*/)
 {
     if (auto* data = std::get_if<NewRpgInfo::GoCamp>(&_botAI->GetRpgInfo().data))
     {
+        Player* bot = GetBot();
+        // Class 3: cold dest — drop the trip rather than nudge forever at the warm frontier.
+        if (!IsBotMapPosQueryable(bot, data->pos))
+        {
+            TC_LOG_DEBUG("playerbots", "[New RPG] {} idle out of GO_CAMP — dest grid not resident",
+                bot ? bot->GetName() : "?");
+            _botAI->GetRpgInfo().ChangeToIdle();
+            return true;
+        }
+
         if (MoveFarTo(data->pos))
             return true;
 
@@ -227,6 +248,19 @@ bool NewRpgDoQuestAction::DoIncompleteQuest(NewRpgInfo::DoQuest& data)
 
     if (bot->GetExactDist(data.pos) > 10.0f && !data.lastReachPOI)
     {
+        // Class 3: cold POI — clear and let status update pick another objective/quest rather
+        // than pathfind across an unloaded frontier.
+        if (!IsBotMapPosQueryable(bot, data.pos))
+        {
+            TC_LOG_DEBUG("playerbots", "[New RPG] {} clear cold quest POI ({},{},{}) — grid not resident",
+                bot->GetName(), data.pos.GetPositionX(), data.pos.GetPositionY(), data.pos.GetPositionZ());
+            data.hasPos = false;
+            data.objectiveId = 0;
+            data.lastReachPOI = 0;
+            data.lastSweep = 0;
+            return true;
+        }
+
         if (MoveFarTo(data.pos))
             return true;
 
@@ -340,6 +374,15 @@ bool NewRpgDoQuestAction::DoCompletedQuest(NewRpgInfo::DoQuest& data)
 
     if (bot->GetExactDist(data.pos) > 10.0f && !data.lastReachPOI)
     {
+        // Class 3: cold turn-in POI — stop pursuing rather than stampede unloaded grids.
+        if (!IsBotMapPosQueryable(bot, data.pos))
+        {
+            TC_LOG_DEBUG("playerbots", "[New RPG] {} idle out of quest turn-in — dest grid not resident",
+                bot->GetName());
+            _botAI->GetRpgInfo().ChangeToIdle();
+            return true;
+        }
+
         if (MoveFarTo(data.pos))
             return true;
 
