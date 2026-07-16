@@ -22,15 +22,16 @@
 #include "Bot/Rpg/NewRpgInfo.h"
 #include "Engine.h"
 #include "PlayerbotAIBase.h"
+#include "WorldPacket.h"
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_set>
 #include <vector>
 
 class AiObjectContext;
 class Engine;
-class WorldPacket;
 
 // Gate 6: bot AI with AC-shaped Engine + passive strategy.
 class BotPlayerbotAI : public PlayerbotAIBase
@@ -61,12 +62,12 @@ public:
     // quest automatically. See playerbots-rpg-active-questgiver-seeking-handoff.md §4.
     std::unordered_set<uint32>& GetUnactionableQuests() { return _unactionableQuest; }
 
-    // Packet-observation signal layer (playerbots-bot-packet-observation-handoff.md § 5). AC's
-    // PlayerbotAI::HandleBotOutgoingPacket analog. Called from the module's ServerScript observer
-    // on ARBITRARY map/World sender threads (WorldSession::SendPacket runs there) — so it does
-    // nothing but a static opcode->trigger-name registry test and, on a hit, a cheap bounded
-    // enqueue under _signalMutex. Opcode-as-signal ONLY: the packet payload is never read (§ 0).
-    // All reaction happens single-threaded on the bot's own tick (the UpdateAIInternal drain).
+    // Packet-observation signal layer (playerbots-bot-packet-observation-handoff.md § 5;
+    // payload gate: playerbots-bot-packet-payload-parse-handoff.md). Called from the module's
+    // ServerScript observer on ARBITRARY map/World sender threads — so it does nothing but a
+    // static opcode→signal registry test and, on a hit, a cheap bounded enqueue under
+    // _signalMutex (optional WorldPacket copy when PayloadParse is enabled). Typed parse and
+    // Layer-2 cross-checks run only on the bot's own tick.
     void HandleBotOutgoingPacket(WorldPacket const& packet);
 
     // Consume-on-read: tick-thread only (SignalTrigger::IsActive during Engine::DoNextAction). The
@@ -85,11 +86,19 @@ private:
     std::unordered_set<uint32> _lowPriorityQuest;
     std::unordered_set<uint32> _unactionableQuest;
 
+    struct QueuedSignal
+    {
+        std::string Name;
+        std::optional<WorldPacket> Packet; // present when payload parse is enabled for this opcode
+    };
+
     struct PendingSignal
     {
         std::string Name;
         uint8 TicksRemaining = 0;
     };
+
+    void ProcessPayloadOnTick(QueuedSignal& signal);
 
     // Cross-thread signal handoff. _signalQueue is written by HandleBotOutgoingPacket on sender
     // threads and drained (swapped out) at the top of each tick under _signalMutex. _pendingSignals
@@ -97,7 +106,7 @@ private:
     // lock of its own. Signals persist briefly so an engine GCD early-return cannot erase them
     // before SignalTrigger gets a chance to consume them.
     std::mutex _signalMutex;
-    std::vector<std::string> _signalQueue;
+    std::vector<QueuedSignal> _signalQueue;
     std::vector<PendingSignal> _pendingSignals;
 };
 

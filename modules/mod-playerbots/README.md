@@ -493,25 +493,25 @@ Bot sessions are socketless, so every packet the server would send them is dropp
 line, the same hook real-player sends already fire; `IsBotSession()`-scoped, no human-path change,
 inert under `MODULES=none`). `mod_playerbots_server_script` observes that hook and routes bot
 packets to `BotPlayerbotAI::HandleBotOutgoingPacket`, which mirrors AC's `botOutgoingPacketHandlers`
-shape: a static **opcode → trigger-name** registry (`LookupPacketSignal` in `BotPlayerbotAI.cpp`)
+shape: a static **opcode → signal-name** registry (`LookupPacketSignal` in `BotPlayerbotAI.cpp`)
 whose hits are pushed onto a bounded, mutex-guarded per-bot queue. The queue is swapped out on the
-bot's own AI tick into a per-tick fired set, and a consume-on-read `SignalTrigger` turns a delivered
-signal into a normal engine trigger — the triggered *action* then reads live server state through
-public core APIs.
+bot's own AI tick; a consume-on-read `SignalTrigger` turns a delivered signal into a normal engine
+trigger — the triggered *action* then reads live server state through public core APIs.
 
-**THE design rule — opcode-as-signal ONLY; never parse packet payloads.** A captured packet is a
-wake-up signal keyed by its opcode and nothing else — no `packet >>` decode anywhere in module code.
-AC can parse payloads because WotLK 3.3.5's wire format is frozen; this fork tracks Midnight, where
-wire formats churn every build, so payload parsing would reintroduce exactly the standing merge
-liability the socketless/packetless design exists to avoid. Any future feature that genuinely needs
-payload data is a **separate owner decision**, not a drive-by extension. Because a signal can be
-lost (bounded queue, logout race), every signal-driven feature must also stay correct if the signal
-never arrives.
+**Default: opcode-as-signal.** A captured packet is a wake-up keyed by opcode. **Gated payload
+parse** (`Playerbots.PacketObservation.PayloadParse.Enable`, default **on** after owner playtest
+PASS) unlocks Write()-mirrored readers for registered opcodes only, behind the three-layer
+mis-parse gate (EOF/exceptions → live-state cross-check when a dual exists → golden fixture +
+build pin). See
+[`playerbots-bot-packet-payload-parse-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-bot-packet-payload-parse-handoff.md).
+Do not paste WotLK AC `>>` field order.
 
 Threading: `OnPacketSend` runs on arbitrary map/World sender threads, so the observer does nothing
-but a registry test + guarded enqueue; **all reaction happens single-threaded on the bot's tick.**
+but a registry test + guarded enqueue (optional packet copy); **typed parse and reaction happen
+single-threaded on the bot's tick.**
 
-V1 registers **one** entry — `SMSG_PARTY_INVITE → "group invite signal"` — wired to the existing
-master-alt `accept invitation` action. The original `GetGroupInvite()` poll is kept as a fallback
-(accept is idempotent, so double-handling is benign). Master toggle: `Playerbots.PacketObservation.Enable`
-(default on). Full design: [`playerbots-bot-packet-observation-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-bot-packet-observation-handoff.md).
+V1 registers **one** entry — `SMSG_PARTY_INVITE → "group invite signal"` (payload parse when
+enabled) — wired to the existing master-alt `accept invitation` action. The original
+`GetGroupInvite()` poll is kept as a fallback. Master toggle:
+`Playerbots.PacketObservation.Enable` (default on). Full signal design:
+[`playerbots-bot-packet-observation-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-bot-packet-observation-handoff.md).

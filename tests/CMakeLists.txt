@@ -24,7 +24,13 @@ target_link_libraries(tests
 
 target_include_directories(tests
   PRIVATE
-    ${CMAKE_CURRENT_BINARY_DIR})
+    ${CMAKE_CURRENT_BINARY_DIR}
+    # Layer-3 fixtures for mod-playerbots gated payload parse (Write()-mirrored readers).
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src)
+
+target_sources(tests
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotPartyInvitePacket.cpp)
 
 catch_discover_tests(tests)
 
