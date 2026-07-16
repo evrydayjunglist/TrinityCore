@@ -106,6 +106,82 @@ std::optional<uint64> GetArchaeologyCriteriaProgressDelta(CriteriaType type)
     }
 }
 
+std::optional<uint64> GetUnitAccumulateCriteriaProgressDelta(CriteriaType type)
+{
+    // Keep this list out of the UpdateCriteria switch. A prior edit removed the shared
+    // SetCriteriaProgress(..., 1) body and left these labels falling through into the
+    // miscValue1 accumulator, which stalled ReachMaxLevel/HonorLevelIncrease (delta 0)
+    // and massively inflated UseItem/LootAnyItem/WinBattleground/etc. (delta = asset id).
+    switch (type)
+    {
+        case CriteriaType::WinBattleground:
+        case CriteriaType::TotalRespecs:
+        case CriteriaType::LoseDuel:
+        case CriteriaType::ItemsPostedAtAuction:
+        case CriteriaType::AuctionsWon:    /* FIXME: for online player only currently */
+        case CriteriaType::RollAnyNeed:
+        case CriteriaType::RollAnyGreed:
+        case CriteriaType::AbandonAnyQuest:
+        case CriteriaType::BuyTaxi:
+        case CriteriaType::AcceptSummon:
+        case CriteriaType::LootAnyItem:
+        case CriteriaType::ObtainAnyItem:
+        case CriteriaType::DieAnywhere:
+        case CriteriaType::CompleteDailyQuest:
+        case CriteriaType::ParticipateInBattleground:
+        case CriteriaType::DieOnMap:
+        case CriteriaType::DieInInstance:
+        case CriteriaType::KilledByCreature:
+        case CriteriaType::KilledByPlayer:
+        case CriteriaType::DieFromEnviromentalDamage:
+        case CriteriaType::BeSpellTarget:
+        case CriteriaType::GainAura:
+        case CriteriaType::CastSpell:
+        case CriteriaType::LandTargetedSpellOnTarget:
+        case CriteriaType::WinAnyRankedArena:
+        case CriteriaType::UseItem:
+        case CriteriaType::RollNeed:
+        case CriteriaType::RollGreed:
+        case CriteriaType::DoEmote:
+        case CriteriaType::UseGameobject:
+        case CriteriaType::CatchFishInFishingHole:
+        case CriteriaType::WinDuel:
+        case CriteriaType::DeliverKillingBlowToClass:
+        case CriteriaType::DeliverKillingBlowToRace:
+        case CriteriaType::TrackedWorldStateUIModified:
+        case CriteriaType::EarnHonorableKill:
+        case CriteriaType::KillPlayer:
+        case CriteriaType::DeliveredKillingBlow:
+        case CriteriaType::PVPKillInArea:
+        case CriteriaType::WinArena: // This also behaves like CriteriaType::WinAnyRankedArena
+        case CriteriaType::ParticipateInArena:
+        case CriteriaType::PlayerTriggerGameEvent:
+        case CriteriaType::Login:
+        case CriteriaType::AnyoneTriggerGameEventScenario:
+        case CriteriaType::DefeatDungeonEncounterWhileElegibleForLoot:
+        case CriteriaType::CompleteAnyScenario:
+        case CriteriaType::CompleteScenario:
+        case CriteriaType::BattlePetReachLevel:
+        case CriteriaType::ActivelyEarnPetLevel:
+        case CriteriaType::DefeatDungeonEncounter:
+        case CriteriaType::PlaceGarrisonBuilding:
+        case CriteriaType::ActivateAnyGarrisonBuilding:
+        case CriteriaType::LearnAnyHeirloom:
+        case CriteriaType::LearnAnyTransmog:
+        case CriteriaType::HonorLevelIncrease:
+        case CriteriaType::PrestigeLevelIncrease:
+        case CriteriaType::LearnAnyTransmogInSlot:
+        case CriteriaType::CompleteAnyReplayQuest:
+        case CriteriaType::BuyItemsFromVendors:
+        case CriteriaType::SellItemsToVendors:
+        case CriteriaType::ReachMaxLevel:
+        case CriteriaType::LearnTaxiNode:
+            return 1;
+        default:
+            return std::nullopt;
+    }
+}
+
 bool CriteriaData::IsValid(Criteria const* criteria)
 {
     if (DataType >= MAX_CRITERIA_DATA_TYPE)
@@ -562,71 +638,14 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         return;
     }
 
+    if (std::optional<uint64> progressDelta = GetUnitAccumulateCriteriaProgressDelta(CriteriaType(criteria->Entry->Type)))
+    {
+        SetCriteriaProgress(criteria, *progressDelta, referencePlayer, PROGRESS_ACCUMULATE);
+        return;
+    }
+
     switch (CriteriaType(criteria->Entry->Type))
     {
-        // std. case: increment at 1
-        case CriteriaType::WinBattleground:
-        case CriteriaType::TotalRespecs:
-        case CriteriaType::LoseDuel:
-        case CriteriaType::ItemsPostedAtAuction:
-        case CriteriaType::AuctionsWon:    /* FIXME: for online player only currently */
-        case CriteriaType::RollAnyNeed:
-        case CriteriaType::RollAnyGreed:
-        case CriteriaType::AbandonAnyQuest:
-        case CriteriaType::BuyTaxi:
-        case CriteriaType::AcceptSummon:
-        case CriteriaType::LootAnyItem:
-        case CriteriaType::ObtainAnyItem:
-        case CriteriaType::DieAnywhere:
-        case CriteriaType::CompleteDailyQuest:
-        case CriteriaType::ParticipateInBattleground:
-        case CriteriaType::DieOnMap:
-        case CriteriaType::DieInInstance:
-        case CriteriaType::KilledByCreature:
-        case CriteriaType::KilledByPlayer:
-        case CriteriaType::DieFromEnviromentalDamage:
-        case CriteriaType::BeSpellTarget:
-        case CriteriaType::GainAura:
-        case CriteriaType::CastSpell:
-        case CriteriaType::LandTargetedSpellOnTarget:
-        case CriteriaType::WinAnyRankedArena:
-        case CriteriaType::UseItem:
-        case CriteriaType::RollNeed:
-        case CriteriaType::RollGreed:
-        case CriteriaType::DoEmote:
-        case CriteriaType::UseGameobject:
-        case CriteriaType::CatchFishInFishingHole:
-        case CriteriaType::WinDuel:
-        case CriteriaType::DeliverKillingBlowToClass:
-        case CriteriaType::DeliverKillingBlowToRace:
-        case CriteriaType::TrackedWorldStateUIModified:
-        case CriteriaType::EarnHonorableKill:
-        case CriteriaType::KillPlayer:
-        case CriteriaType::DeliveredKillingBlow:
-        case CriteriaType::PVPKillInArea:
-        case CriteriaType::WinArena: // This also behaves like CriteriaType::WinAnyRankedArena
-        case CriteriaType::ParticipateInArena:
-        case CriteriaType::PlayerTriggerGameEvent:
-        case CriteriaType::Login:
-        case CriteriaType::AnyoneTriggerGameEventScenario:
-        case CriteriaType::DefeatDungeonEncounterWhileElegibleForLoot:
-        case CriteriaType::CompleteAnyScenario:
-        case CriteriaType::CompleteScenario:
-        case CriteriaType::BattlePetReachLevel:
-        case CriteriaType::ActivelyEarnPetLevel:
-        case CriteriaType::DefeatDungeonEncounter:
-        case CriteriaType::PlaceGarrisonBuilding:
-        case CriteriaType::ActivateAnyGarrisonBuilding:
-        case CriteriaType::LearnAnyHeirloom:
-        case CriteriaType::LearnAnyTransmog:
-        case CriteriaType::HonorLevelIncrease:
-        case CriteriaType::PrestigeLevelIncrease:
-        case CriteriaType::LearnAnyTransmogInSlot:
-        case CriteriaType::CompleteAnyReplayQuest:
-        case CriteriaType::BuyItemsFromVendors:
-        case CriteriaType::SellItemsToVendors:
-        case CriteriaType::ReachMaxLevel:
-        case CriteriaType::LearnTaxiNode:
         // std case: increment at miscValue1
         case CriteriaType::MoneyEarnedFromSales:
         case CriteriaType::MoneySpentOnRespecs:

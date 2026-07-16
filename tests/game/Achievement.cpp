@@ -108,6 +108,27 @@ TEST_CASE("Archaeology criteria events increment once and filter find assets", "
     CHECK_FALSE(handler.MeetsRequirements(CriteriaType::FindResearchObject, QuestFindGameObject, 0));
 }
 
+TEST_CASE("Unit-accumulate criteria always progress by one, not by asset id", "[Achievement]")
+{
+    // Regression: removing the shared +1 body left these labels falling through into the
+    // miscValue1 accumulator. Call sites pass asset ids (item/spell/map/quest) or 0.
+    CHECK(GetUnitAccumulateCriteriaProgressDelta(CriteriaType::ReachMaxLevel) == 1);
+    CHECK(GetUnitAccumulateCriteriaProgressDelta(CriteriaType::HonorLevelIncrease) == 1);
+    CHECK(GetUnitAccumulateCriteriaProgressDelta(CriteriaType::UseItem) == 1);
+    CHECK(GetUnitAccumulateCriteriaProgressDelta(CriteriaType::LootAnyItem) == 1);
+    CHECK(GetUnitAccumulateCriteriaProgressDelta(CriteriaType::ObtainAnyItem) == 1);
+    CHECK(GetUnitAccumulateCriteriaProgressDelta(CriteriaType::WinBattleground) == 1);
+    CHECK(GetUnitAccumulateCriteriaProgressDelta(CriteriaType::LearnTaxiNode) == 1);
+    CHECK(GetUnitAccumulateCriteriaProgressDelta(CriteriaType::CompleteDailyQuest) == 1);
+    CHECK(GetUnitAccumulateCriteriaProgressDelta(CriteriaType::CastSpell) == 1);
+    CHECK(GetUnitAccumulateCriteriaProgressDelta(CriteriaType::Login) == 1);
+
+    // Money/damage style criteria intentionally accumulate miscValue1 instead.
+    CHECK_FALSE(GetUnitAccumulateCriteriaProgressDelta(CriteriaType::MoneyEarnedFromSales).has_value());
+    CHECK_FALSE(GetUnitAccumulateCriteriaProgressDelta(CriteriaType::GainLevels).has_value());
+    CHECK_FALSE(GetUnitAccumulateCriteriaProgressDelta(CriteriaType::KillCreature).has_value());
+}
+
 TEST_CASE("Archaeology modifiers consume rarity and branch event fields", "[Achievement][Archaeology]")
 {
     TestCriteriaHandler handler;

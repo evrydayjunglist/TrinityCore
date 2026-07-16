@@ -88,6 +88,8 @@ TC_GAME_API AchievementCriteriaOwner GetAchievementCriteriaOwner(AchievementEntr
 TC_GAME_API uint32 GetCriteriaOwnerFlags(CriteriaTreeList const& trees);
 TC_GAME_API bool IsCriteriaTreeForOwner(CriteriaTree const* tree, AchievementCriteriaOwner owner);
 TC_GAME_API std::optional<uint64> GetArchaeologyCriteriaProgressDelta(CriteriaType type);
+// Criteria types that always accumulate exactly +1 (miscValue1 is only an asset/filter, never the delta).
+TC_GAME_API std::optional<uint64> GetUnitAccumulateCriteriaProgressDelta(CriteriaType type);
 
 struct CriteriaProgress
 {
