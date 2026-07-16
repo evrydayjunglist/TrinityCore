@@ -832,6 +832,12 @@ class TC_GAME_API World
         World();
         ~World();
 
+        /// Bot-safe eviction for GUID-keyed sessions (KickPlayer is a socket-only no-op for bots).
+        /// Collects GUIDs first, then RemoveBotSession -> LogoutPlayer; map erase on next UpdateSessions.
+        void LogoutAllBotSessions();
+        void LogoutAllBotSessionsLess(AccountTypes sec);
+        void LogoutBotSessionsOnAccount(uint32 accountId, std::string const& author);
+
         static std::atomic<bool> m_stopEvent;
         static uint8 m_ExitCode;
         uint32 m_ShutdownTimer;

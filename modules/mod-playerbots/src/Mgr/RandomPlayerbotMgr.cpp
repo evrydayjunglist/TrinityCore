@@ -16,6 +16,7 @@
  */
 
 #include "RandomPlayerbotMgr.h"
+#include "AccountMgr.h"
 #include "BotSessionMgr.h"
 #include "CharacterCache.h"
 #include "Containers.h"
@@ -32,6 +33,7 @@
 #include <chrono>
 #include <set>
 #include <thread>
+#include <unordered_set>
 
 namespace
 {
@@ -270,14 +272,28 @@ void RandomPlayerbotMgr::TryLoginRandomBots()
 
     Trinity::Containers::RandomShuffle(candidates);
 
+    // Per-pass cache: CanStartBotLogin also refuses banned accounts, but a banned reserved
+    // account can hold dozens of roster rows — skip the rest of that account this tick.
+    std::unordered_set<uint32> bannedAccountsThisPass;
+
     for (RandomBotRosterEntry const* entry : candidates)
     {
         if (_activeRandomBotGuids.size() >= target)
             break;
 
-        // No account-level skip here on purpose — a reserved account can host several roster
-        // entries (e.g. Three + Threethree both on account 3); the per-character check above
-        // is the correct guard. See playerbots-bot-session-account-cap-handoff.md.
+        if (bannedAccountsThisPass.contains(entry->AccountId))
+            continue;
+
+        std::string accountName;
+        if (AccountMgr::GetName(entry->AccountId, accountName) && AccountMgr::IsBannedAccount(accountName))
+        {
+            bannedAccountsThisPass.insert(entry->AccountId);
+            continue;
+        }
+
+        // No other account-level skip — a reserved account can host several roster entries
+        // (e.g. Three + Threethree both on account 3); per-character tracking is the guard.
+        // See playerbots-bot-session-account-cap-handoff.md.
         LoginRosterEntry(*entry);
     }
 }
