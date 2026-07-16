@@ -110,6 +110,22 @@ bool BotSessionMgr::CanStartBotLogin(ChatHandler* handler, ObjectGuid characterG
         return false;
     }
 
+    // Socketless bot login never hits Battle.net / WorldSocket ban gates. Refuse here so
+    // RandomBotAutologin (and .playerbot login / master-alt) cannot recreate sessions on a
+    // banned account after BanAccount evicted them via RemoveBotSession.
+    {
+        std::string accountName;
+        if (AccountMgr::GetName(accountId, accountName) && AccountMgr::IsBannedAccount(accountName))
+        {
+            if (handler)
+                handler->PSendSysMessage("Playerbots: account %u (%s) is banned.", accountId, accountName.c_str());
+            else if (Playerbots::GetLogLevel() > 0)
+                TC_LOG_DEBUG("playerbots", "Playerbots: refusing bot login for {} — account {} ({}) is banned.",
+                    characterGuid.ToString(), accountId, accountName);
+            return false;
+        }
+    }
+
     if (_sessionsByCharacterGuid.contains(characterGuid))
     {
         SendBotMessage(handler, "Playerbots: character already has an active bot session.");

@@ -2700,6 +2700,48 @@ void World::SendGlobalText(char const* text, WorldSession* self)
     free(buf);
 }
 
+void World::LogoutAllBotSessions()
+{
+    // Copy GUIDs first — RemoveBotSession calls LogoutPlayer immediately; do not mutate the map mid-walk.
+    std::vector<ObjectGuid> guids;
+    guids.reserve(m_botSessionsByGuid.size());
+    for (auto const& [guid, session] : m_botSessionsByGuid)
+        if (session)
+            guids.push_back(guid);
+
+    for (ObjectGuid const& guid : guids)
+        RemoveBotSession(guid);
+}
+
+void World::LogoutAllBotSessionsLess(AccountTypes sec)
+{
+    std::vector<ObjectGuid> guids;
+    guids.reserve(m_botSessionsByGuid.size());
+    for (auto const& [guid, session] : m_botSessionsByGuid)
+        if (session && session->GetSecurity() < sec)
+            guids.push_back(guid);
+
+    for (ObjectGuid const& guid : guids)
+        RemoveBotSession(guid);
+}
+
+void World::LogoutBotSessionsOnAccount(uint32 accountId, std::string const& author)
+{
+    // Same account walk as HasOtherOnlineSessionOnAccount; author-self skip matches BanAccount's human path.
+    std::vector<ObjectGuid> guids;
+    for (auto const& [guid, session] : m_botSessionsByGuid)
+    {
+        if (!session || session->GetAccountId() != accountId)
+            continue;
+        if (!author.empty() && std::string(session->GetPlayerName()) == author)
+            continue;
+        guids.push_back(guid);
+    }
+
+    for (ObjectGuid const& guid : guids)
+        RemoveBotSession(guid);
+}
+
 /// Kick (and save) all players
 void World::KickAll()
 {
@@ -2708,6 +2750,9 @@ void World::KickAll()
     // session not removed at kick and will removed in next update tick
     for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
         itr->second->KickPlayer("World::KickAll");
+
+    // Bots live only in m_botSessionsByGuid — KickPlayer is a no-op for socketless sessions.
+    LogoutAllBotSessions();
 }
 
 /// Kick (and save) all players with security level less `sec`
@@ -2717,6 +2762,8 @@ void World::KickAllLess(AccountTypes sec)
     for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
         if (itr->second->GetSecurity() < sec)
             itr->second->KickPlayer("World::KickAllLess");
+
+    LogoutAllBotSessionsLess(sec);
 }
 
 /// Ban an account or ban an IP address, duration will be parsed using TimeStringToSecs if it is positive, otherwise permban
@@ -2805,6 +2852,9 @@ BanReturn World::BanAccount(BanMode mode, std::string const& nameOrIP, uint32 du
         if (WorldSession* sess = FindSession(account))
             if (std::string(sess->GetPlayerName()) != author)
                 sess->KickPlayer("World::BanAccount Banning account");
+
+        // FindSession is the human m_sessions map only; also evict every GUID-keyed bot on this account.
+        LogoutBotSessionsOnAccount(account, author);
     } while (resultAccounts->NextRow());
 
     LoginDatabase.CommitTransaction(trans);
