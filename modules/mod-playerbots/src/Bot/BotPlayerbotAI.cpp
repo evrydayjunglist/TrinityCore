@@ -17,6 +17,7 @@
 
 #include "BotPlayerbotAI.h"
 #include "AiFactory.h"
+#include "Bot/Packet/BotGuildInvitePacket.h"
 #include "Bot/Packet/BotPartyInvitePacket.h"
 #include "Bot/Packet/BotPacketParse.h"
 #include "Engine.h"
@@ -46,6 +47,7 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
 {
     static std::unordered_map<uint32, PacketSignalEntry> const registry = {
         { SMSG_PARTY_INVITE, { "group invite signal", true } },
+        { SMSG_GUILD_INVITE, { "guild invite signal", true } },
     };
 
     auto itr = registry.find(opcode);
@@ -179,6 +181,36 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                     "BotPacketParse SMSG_PARTY_INVITE ok bot={} inviter={} name={}",
                     bot ? bot->GetName() : "?",
                     parsed.InviterGUID.ToString(),
+                    parsed.InviterName);
+            break;
+        }
+        case SMSG_GUILD_INVITE:
+        {
+            Playerbots::PacketParse::GuildInvitePayload parsed;
+            if (!Playerbots::PacketParse::TryReadGuildInvite(*signal.Packet, parsed))
+                return;
+
+            // Layer 2: pending guild id vs parsed GuildGUID counter (GetGuildIdInvited dual).
+            Player* bot = GetBot();
+            ObjectGuid::LowType const liveInvited = bot ? bot->GetGuildIdInvited() : 0;
+            ObjectGuid::LowType const parsedGuildId = parsed.GuildGUID.GetCounter();
+            if (!liveInvited || liveInvited != parsedGuildId)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_GUILD_INVITE Layer-2 mismatch bot={} parsedGuild={} liveInvited={} verifiedBuild={}",
+                    bot ? bot->GetName() : "?",
+                    parsed.GuildGUID.ToString(),
+                    liveInvited,
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_GUILD_INVITE ok bot={} guild={} name={} inviter={}",
+                    bot ? bot->GetName() : "?",
+                    parsed.GuildGUID.ToString(),
+                    parsed.GuildName,
                     parsed.InviterName);
             break;
         }

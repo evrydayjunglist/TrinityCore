@@ -34,4 +34,9 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // Both at high relevance so they preempt the default "follow" the tick the invite lands.
     triggers.push_back(new TriggerNode("group invite signal", { NextAction("accept invitation", 100.0f) }));
     triggers.push_back(new TriggerNode("group invite", { NextAction("accept invitation", 100.0f) }));
+
+    // Guild invite into the master's guild (AC WorldPacketHandlerStrategy "guild invite" →
+    // "guild accept"). Signal + GetGuildIdInvited() poll; accept is idempotent.
+    triggers.push_back(new TriggerNode("guild invite signal", { NextAction("guild accept", 100.0f) }));
+    triggers.push_back(new TriggerNode("guild invite", { NextAction("guild accept", 100.0f) }));
 }

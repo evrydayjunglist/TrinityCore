@@ -22,6 +22,7 @@
 #include "Bot/Action/DeathActions.h"
 #include "Bot/Action/FollowAction.h"
 #include "Bot/Action/GroupActions.h"
+#include "Bot/Action/GuildActions.h"
 #include "Bot/Action/LootAction.h"
 #include "Bot/Action/NewRpgActions.h"
 #include "Bot/Action/QuestGiverAction.h"
@@ -33,6 +34,7 @@
 #include "Bot/Strategy/NewRpgStrategy.h"
 #include "Bot/Strategy/PassiveStrategy.h"
 #include "Bot/Trigger/GroupTriggers.h"
+#include "Bot/Trigger/GuildTriggers.h"
 #include "Bot/Trigger/NewRpgTriggers.h"
 #include "Bot/Trigger/SignalTrigger.h"
 #include "BotPlayerbotAI.h"
@@ -64,6 +66,12 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     // See playerbots-bot-packet-observation-handoff.md § 5c.
     context->RegisterTrigger("group invite signal", std::make_unique<SignalTrigger>(botAI, "group invite signal"));
     context->RegisterTrigger("group invite", std::make_unique<GroupInviteTrigger>(botAI));
+
+    // Master-alt guild join — same dual signal/poll shape as party invite (AC: "guild invite"
+    // → "guild accept"). Layered payload parse for SMSG_GUILD_INVITE is in BotPlayerbotAI.
+    context->RegisterAction("guild accept", std::make_unique<GuildAcceptAction>(botAI));
+    context->RegisterTrigger("guild invite signal", std::make_unique<SignalTrigger>(botAI, "guild invite signal"));
+    context->RegisterTrigger("guild invite", std::make_unique<GuildInviteTrigger>(botAI));
 
     // Quest loot + object interaction (AC: OpenLootAction/StoreLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));
