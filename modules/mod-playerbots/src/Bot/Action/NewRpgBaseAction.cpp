@@ -17,6 +17,7 @@
 
 #include "NewRpgBaseAction.h"
 #include "AttackValidity.h"
+#include "BotMapResidency.h"
 #include "Bot/Rpg/GrindLocationCache.h"
 #include "Bot/Rpg/HubLocationCache.h"
 #include "BotPlayerbotAI.h"
@@ -59,19 +60,6 @@ std::vector<float> GenerateRandomWeights(size_t count)
     for (float& weight : weights)
         weight /= sum;
     return weights;
-}
-
-// "Would a terrain/liquid/area query at this position force a synchronous grid+VMAP disk load on
-// the map-update thread?" Bot AI ticks inside Map::Update, so a Map::GetZoneId/GetHeight on a
-// far/cold position routes through TerrainInfo::GetGrid(loadIfMissing=true) → a blocking readFile
-// that can stall the world thread past MaxCoreStuckTime and trip the FreezeDetector. If the grid
-// isn't already resident, DON'T query it — skip the candidate. A created NGrid eagerly loads its
-// terrain+VMAP (Map::EnsureGridCreated), so IsGridLoaded(pos)==true ⇒ the subsequent query is a
-// memory read, never disk. (Public Map API; TerrainInfo::GetGrid/_loadedGrids are private, so this
-// is the correct gate — do not reach into TerrainInfo.)
-inline bool IsBotMapPosQueryable(Player const* bot, Position const& pos)
-{
-    return bot && bot->IsInWorld() && bot->GetMap()->IsGridLoaded(pos);
 }
 
 // Same live-search radius Gate 10's grind behavior uses ("what to attack right now").
@@ -145,6 +133,17 @@ bool NewRpgBaseAction::MoveFarTo(Position const& dest)
     Player* bot = GetBot();
     if (!bot)
         return false;
+
+    // Class 3: do not march (or stuck-teleport) toward a cold destination. Picker sites already
+    // skip cold candidates at select time; re-check here so a dest that cooled — or a quest/POI
+    // path that somehow bypassed the picker — cannot drive DelayedUnitRelocation → EnsureGridLoaded
+    // across an unloaded frontier on the map tick (AC TravelMgr IsGridLoaded residency).
+    if (!IsBotMapPosQueryable(bot, dest))
+    {
+        TC_LOG_DEBUG("playerbots", "[New RPG] {} defer MoveFarTo ({},{},{}) — dest grid not resident",
+            bot->GetName(), dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ());
+        return false;
+    }
 
     NewRpgInfo& info = _botAI->GetRpgInfo();
 

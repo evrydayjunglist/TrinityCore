@@ -35,7 +35,8 @@ class Player;
 //
 // Returns true and issues MotionMaster::MovePoint(0, ...) at the validated destination if one was
 // found; returns false (no move issued) if the requested point has no real navmesh route, the
-// route is too steep, or the bot should not go there (e.g. it's underwater) — callers should treat
+// route is too steep, the target/path-end grid is not resident (freeze class 3 — see
+// BotMapResidency.h), or the bot should not go there (e.g. it's underwater) — callers should treat
 // false as "stand still this tick", not retry the same raw coordinates.
 bool TryMoveToValidatedPoint(Player* bot, float x, float y, float z);
 
