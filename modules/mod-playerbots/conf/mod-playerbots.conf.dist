@@ -353,9 +353,9 @@ Playerbots.PacketObservation.Enable = 1
 #        Description: When 1, registered observation opcodes also enqueue a packet copy for
 #                     tick-time payload parse (TC Write()-mirrored readers + EOF check + live-state
 #                     cross-check where available). When 0, signal-only. See
-#                     playerbots-bot-packet-payload-parse-handoff.md. Default 0 until owner soak;
-#                     flip to 1 after PASS.
-#        Default:     0 - (Disabled — signal-only)
-#                     1 - (Enabled — gated parse for registered opcodes)
+#                     playerbots-bot-packet-payload-parse-handoff.md. Default 1 after owner
+#                     playtest PASS (2026-07-16).
+#        Default:     1 - (Enabled — gated parse for registered opcodes)
+#                     0 - (Disabled — signal-only)
 
-Playerbots.PacketObservation.PayloadParse.Enable = 0
+Playerbots.PacketObservation.PayloadParse.Enable = 1

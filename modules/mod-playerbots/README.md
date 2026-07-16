@@ -499,9 +499,10 @@ bot's own AI tick; a consume-on-read `SignalTrigger` turns a delivered signal in
 trigger — the triggered *action* then reads live server state through public core APIs.
 
 **Default: opcode-as-signal.** A captured packet is a wake-up keyed by opcode. **Gated payload
-parse** (`Playerbots.PacketObservation.PayloadParse.Enable`, default off until owner soak) unlocks
-Write()-mirrored readers for registered opcodes only, behind the three-layer mis-parse gate
-(EOF/exceptions → live-state cross-check when a dual exists → golden fixture + build pin). See
+parse** (`Playerbots.PacketObservation.PayloadParse.Enable`, default **on** after owner playtest
+PASS) unlocks Write()-mirrored readers for registered opcodes only, behind the three-layer
+mis-parse gate (EOF/exceptions → live-state cross-check when a dual exists → golden fixture +
+build pin). See
 [`playerbots-bot-packet-payload-parse-handoff.md`](../../docs/midnight-assessment/playerbots/playerbots-bot-packet-payload-parse-handoff.md).
 Do not paste WotLK AC `>>` field order.
 

@@ -611,7 +611,7 @@ inline bool GetPacketObservationEnabled()
 // owner soak PASS, then conf.dist flips to 1.
 inline bool GetPacketPayloadParseEnabled()
 {
-    return sConfigMgr->GetBoolDefault("Playerbots.PacketObservation.PayloadParse.Enable", false);
+    return sConfigMgr->GetBoolDefault("Playerbots.PacketObservation.PayloadParse.Enable", true);
 }
 }
 
