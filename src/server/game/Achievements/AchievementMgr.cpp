@@ -182,6 +182,24 @@ bool MergeLegacyAccountCriteriaProgress(CriteriaProgressMap& progressMap, Criter
     return true;
 }
 
+void CollectChangedAccountAchievementSaveTargets(
+    std::unordered_map<uint32, CompletedAchievementData> const& completedAchievements,
+    CriteriaProgressMap const& criteriaProgress,
+    std::vector<uint32>& outAchievementIds,
+    std::vector<uint32>& outCriteriaIds)
+{
+    outAchievementIds.clear();
+    outCriteriaIds.clear();
+
+    for (auto const& [achievementId, completedAchievement] : completedAchievements)
+        if (completedAchievement.Changed)
+            outAchievementIds.push_back(achievementId);
+
+    for (auto const& [criteriaId, progress] : criteriaProgress)
+        if (progress.Changed)
+            outCriteriaIds.push_back(criteriaId);
+}
+
 AchievementMgr::AchievementMgr() : _achievementPoints(0) { }
 
 AchievementMgr::~AchievementMgr() { }
@@ -432,43 +450,57 @@ void AccountAchievementMgr::LoadFromDB(PreparedQueryResult achievementResult, Pr
 
 void AccountAchievementMgr::SaveToDB(LoginDatabaseTransaction trans)
 {
-    if (std::ranges::any_of(_completedAchievements, [](auto const& pair) { return pair.second.Changed; }))
+    uint32 const battlenetAccountId = _owner->GetBattlenetAccountId();
+    if (!battlenetAccountId)
+        return;
+
+    // Persist only changed rows. Never DELETE the whole battlenet account's achievement set and
+    // rewrite it from this session's memory — playerbots (and any future multi-session account use)
+    // create one WorldSession/AccountAchievementMgr per character. A stale sibling session that
+    // dirties any criteria would otherwise wipe achievements/progress earned on another live session.
+    // Mirror PlayerAchievementMgr::SaveToDB's per-row delete+insert contract.
+    std::vector<uint32> dirtyAchievements;
+    std::vector<uint32> dirtyCriteria;
+    CollectChangedAccountAchievementSaveTargets(_completedAchievements, _criteriaProgress, dirtyAchievements, dirtyCriteria);
+
+    for (uint32 achievementId : dirtyAchievements)
     {
-        LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_BNET_ACCOUNT_ACHIEVEMENT);
-        stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+        CompletedAchievementData& completedAchievement = _completedAchievements.at(achievementId);
+
+        LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_BNET_ACCOUNT_ACHIEVEMENT_BY_ACHIEVEMENT);
+        stmt->setUInt32(0, battlenetAccountId);
+        stmt->setUInt32(1, achievementId);
         trans->Append(stmt);
 
-        for (auto& [achievementId, completedAchievement] : _completedAchievements)
-        {
-            stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_BNET_ACCOUNT_ACHIEVEMENT);
-            stmt->setUInt32(0, _owner->GetBattlenetAccountId());
-            stmt->setUInt32(1, achievementId);
-            stmt->setInt64(2, completedAchievement.Date);
-            trans->Append(stmt);
-            completedAchievement.Changed = false;
-        }
+        stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_BNET_ACCOUNT_ACHIEVEMENT);
+        stmt->setUInt32(0, battlenetAccountId);
+        stmt->setUInt32(1, achievementId);
+        stmt->setInt64(2, completedAchievement.Date);
+        trans->Append(stmt);
+
+        completedAchievement.Changed = false;
     }
 
-    if (std::ranges::any_of(_criteriaProgress, [](auto const& pair) { return pair.second.Changed; }))
+    for (uint32 criteriaId : dirtyCriteria)
     {
-        LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_BNET_ACCOUNT_ACHIEVEMENT_PROGRESS);
-        stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+        CriteriaProgress& progress = _criteriaProgress.at(criteriaId);
+
+        LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_BNET_ACCOUNT_ACHIEVEMENT_PROGRESS_BY_CRITERIA);
+        stmt->setUInt32(0, battlenetAccountId);
+        stmt->setUInt32(1, criteriaId);
         trans->Append(stmt);
 
-        for (auto& [criteriaId, progress] : _criteriaProgress)
+        if (progress.Counter)
         {
-            if (progress.Counter)
-            {
-                stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_BNET_ACCOUNT_ACHIEVEMENT_PROGRESS);
-                stmt->setUInt32(0, _owner->GetBattlenetAccountId());
-                stmt->setUInt32(1, criteriaId);
-                stmt->setUInt64(2, progress.Counter);
-                stmt->setInt64(3, progress.Date);
-                trans->Append(stmt);
-            }
-
-            progress.Changed = false;
+            stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_BNET_ACCOUNT_ACHIEVEMENT_PROGRESS);
+            stmt->setUInt32(0, battlenetAccountId);
+            stmt->setUInt32(1, criteriaId);
+            stmt->setUInt64(2, progress.Counter);
+            stmt->setInt64(3, progress.Date);
+            trans->Append(stmt);
         }
+
+        progress.Changed = false;
     }
 }
 
