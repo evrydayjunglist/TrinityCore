@@ -23,6 +23,8 @@
 class BotPlayerbotAI;
 
 // AC reference: mod-playerbots-master/src/Ai/Base/Strategy/PassiveStrategy.h
+// Gate 6 baseline: no movement/combat defaults. May hold always-on lifecycle accepts
+// (e.g. resurrect request) for bots that keep +passive without NewRpg/Follow.
 class PassiveStrategy : public Strategy
 {
 public:
