@@ -56,6 +56,15 @@ struct CompletedAchievementData
     bool Changed;
 };
 
+// Lists only dirty account achievement / criteria rows. AccountAchievementMgr::SaveToDB must persist
+// exactly these ids with per-row deletes — never a whole-account wipe — so a sibling WorldSession
+// (master-alt bot) cannot erase live progress it never loaded.
+TC_GAME_API void CollectChangedAccountAchievementSaveTargets(
+    std::unordered_map<uint32, CompletedAchievementData> const& completedAchievements,
+    CriteriaProgressMap const& criteriaProgress,
+    std::vector<uint32>& outAchievementIds,
+    std::vector<uint32>& outCriteriaIds);
+
 class TC_GAME_API AchievementMgr : public CriteriaHandler
 {
 public:

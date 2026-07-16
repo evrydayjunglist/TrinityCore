@@ -16,6 +16,10 @@
 #include "AchievementMgr.h"
 #include "DB2Structure.h"
 
+#include <algorithm>
+#include <unordered_map>
+#include <vector>
+
 namespace
 {
     class TestCriteriaHandler final : public CriteriaHandler
@@ -147,4 +151,35 @@ TEST_CASE("Legacy account criteria migration does not double-add durable progres
 
     CHECK_FALSE(MergeLegacyAccountCriteriaProgress(progressMap, &criteria, 3, 20, ObjectGuid::Empty));
     CHECK(progressMap[criteria.ID].Counter == 3);
+}
+
+TEST_CASE("Account achievement saves target only dirty rows", "[Achievement]")
+{
+    // Multi-session contract: a sibling WorldSession must not rewrite clean rows it never changed.
+    // CollectChangedAccountAchievementSaveTargets is what AccountAchievementMgr::SaveToDB persists.
+    std::unordered_map<uint32, CompletedAchievementData> completed;
+    completed[100].Changed = false;
+    completed[100].Date = 1;
+    completed[200].Changed = true;
+    completed[200].Date = 2;
+
+    CriteriaProgressMap progress;
+    progress[11].Changed = false;
+    progress[11].Counter = 9;
+    progress[22].Changed = true;
+    progress[22].Counter = 3;
+    progress[33].Changed = true;
+    progress[33].Counter = 0; // zeroed progress is still a dirty delete target
+
+    std::vector<uint32> dirtyAchievements;
+    std::vector<uint32> dirtyCriteria;
+    CollectChangedAccountAchievementSaveTargets(completed, progress, dirtyAchievements, dirtyCriteria);
+
+    REQUIRE(dirtyAchievements.size() == 1);
+    CHECK(dirtyAchievements[0] == 200);
+
+    REQUIRE(dirtyCriteria.size() == 2);
+    CHECK(std::find(dirtyCriteria.begin(), dirtyCriteria.end(), 22) != dirtyCriteria.end());
+    CHECK(std::find(dirtyCriteria.begin(), dirtyCriteria.end(), 33) != dirtyCriteria.end());
+    CHECK(std::find(dirtyCriteria.begin(), dirtyCriteria.end(), 11) == dirtyCriteria.end());
 }
