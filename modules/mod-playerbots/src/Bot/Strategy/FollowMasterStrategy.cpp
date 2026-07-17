@@ -72,4 +72,9 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // Trade propose/accept (AC WorldPacketHandlerStrategy "trade status" → "accept trade").
     // Signal-only after SMSG_TRADE_STATUS Layer-2 OK for PROPOSED/ACCEPTED; no poll dual.
     triggers.push_back(new TriggerNode("trade status", { NextAction("accept trade", 100.0f) }));
+
+    // Trade item/gold list update (AC WorldPacketHandlerStrategy "trade status extended").
+    // Signal-only after SMSG_TRADE_UPDATED Layer-2 OK; V1 TellMaster on locked NONTRADED only.
+    triggers.push_back(new TriggerNode("trade status extended",
+        { NextAction("trade status extended", 100.0f) }));
 }

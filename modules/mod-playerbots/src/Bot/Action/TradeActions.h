@@ -34,4 +34,16 @@ public:
     bool IsUseful() override;
 };
 
+// Minimal AC "trade status extended" (TradeStatusExtendedAction): TellMaster only when
+// Layer-2 OK stashed a locked TRADE_SLOT_NONTRADED flag. No pick-lock / unlock AI.
+class TradeStatusExtendedAction : public Action
+{
+public:
+    explicit TradeStatusExtendedAction(BotPlayerbotAI* botAI)
+        : Action(botAI, "trade status extended") { }
+
+    bool Execute(Event event) override;
+    bool IsUseful() override;
+};
+
 #endif

@@ -27,11 +27,13 @@
 #include "Bot/Packet/BotPacketParse.h"
 #include "Bot/Packet/BotResurrectRequestPacket.h"
 #include "Bot/Packet/BotTradeStatusPacket.h"
+#include "Bot/Packet/BotTradeUpdatedPacket.h"
 #include "TradeData.h"
 #include "Creature.h"
 #include "DB2Stores.h"
 #include "Engine.h"
 #include "Group.h"
+#include "Item.h"
 #include "ItemDefines.h"
 #include "Log.h"
 #include "Map.h"
@@ -81,6 +83,9 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         // Cleared unless Layer 2 OK and Status is PROPOSED/ACCEPTED (V1 begin/accept).
         // Enable=0 / other statuses: no poll dual for trade window.
         { SMSG_TRADE_STATUS, { "trade status", true } },
+        // AC SMSG_TRADE_STATUS_EXTENDED → Midnight SMSG_TRADE_UPDATED; Cleared unless Layer 2 OK
+        // (and when PayloadParse is off — no poll dual for trade item/gold list).
+        { SMSG_TRADE_UPDATED, { "trade status extended", true } },
     };
 
     auto itr = registry.find(opcode);
@@ -225,12 +230,15 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
     {
         // Parse-gated reactions with no poll dual: do not fire when PayloadParse is off.
         if (signal.Name == "group set leader" || signal.Name == "check mount state" ||
-            signal.Name == "cannot equip" || signal.Name == "trade status")
+            signal.Name == "cannot equip" || signal.Name == "trade status" ||
+            signal.Name == "trade status extended")
         {
             if (signal.Name == "cannot equip")
                 ClearPendingCannotEquipTell();
             if (signal.Name == "trade status")
                 ClearPendingTradeStatus();
+            if (signal.Name == "trade status extended")
+                ClearPendingTradeUpdatedLockedTell();
             signal.Name.clear();
         }
         return;
@@ -692,6 +700,124 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                     uint32(parsed.Status),
                     parsed.Partner.ToString(),
                     parsed.PartnerIsSameBnetAccount ? "yes" : "no");
+            break;
+        }
+        case SMSG_TRADE_UPDATED:
+        {
+            // Cleared unless Layer 2 OK. Enable=0 / mismatch: no poll dual for item/gold list.
+            signal.Name.clear();
+            ClearPendingTradeUpdatedLockedTell();
+
+            Playerbots::PacketParse::TradeUpdatedPayload parsed;
+            if (!Playerbots::PacketParse::TryReadTradeUpdated(*signal.Packet, parsed))
+                return;
+
+            Player* bot = GetBot();
+            TradeData* trade = bot ? bot->GetTradeData() : nullptr;
+            if (!trade)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_TRADE_UPDATED Layer-2 no trade bot={} whichPlayer={} verifiedBuild={}",
+                    bot ? bot->GetName() : "?",
+                    uint32(parsed.WhichPlayer),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            TradeData* view = parsed.WhichPlayer != 0 ? trade->GetTraderData() : trade;
+            if (!view)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_TRADE_UPDATED Layer-2 no view TradeData bot={} whichPlayer={} verifiedBuild={}",
+                    bot->GetName(),
+                    uint32(parsed.WhichPlayer),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            if (parsed.Gold != view->GetMoney() ||
+                parsed.CurrentStateIndex != view->GetServerStateIndex())
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_TRADE_UPDATED Layer-2 mismatch bot={} whichPlayer={} parsedGold={} liveGold={} parsedState={} liveState={} verifiedBuild={}",
+                    bot->GetName(),
+                    uint32(parsed.WhichPlayer),
+                    parsed.Gold,
+                    view->GetMoney(),
+                    parsed.CurrentStateIndex,
+                    view->GetServerStateIndex(),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            // Soft item dual: occupied parsed slots must match live view ItemID/stack.
+            for (WorldPackets::Trade::TradeItem const& tradeItem : parsed.Items)
+            {
+                if (tradeItem.Slot >= TRADE_SLOT_COUNT)
+                {
+                    TC_LOG_ERROR("playerbots.packet",
+                        "BotPacketParse SMSG_TRADE_UPDATED Layer-2 bad Slot bot={} slot={} verifiedBuild={}",
+                        bot->GetName(),
+                        uint32(tradeItem.Slot),
+                        Playerbots::PacketParse::VERIFIED_BUILD);
+                    return;
+                }
+
+                Item* liveItem = view->GetItem(TradeSlots(tradeItem.Slot));
+                if (!liveItem || liveItem->GetEntry() != tradeItem.Item.ItemID ||
+                    int32(liveItem->GetCount()) != tradeItem.StackCount)
+                {
+                    TC_LOG_ERROR("playerbots.packet",
+                        "BotPacketParse SMSG_TRADE_UPDATED Layer-2 item mismatch bot={} slot={} parsedItem={} parsedStack={} liveItem={} liveStack={} verifiedBuild={}",
+                        bot->GetName(),
+                        uint32(tradeItem.Slot),
+                        tradeItem.Item.ItemID,
+                        tradeItem.StackCount,
+                        liveItem ? liveItem->GetEntry() : 0,
+                        liveItem ? int32(liveItem->GetCount()) : 0,
+                        Playerbots::PacketParse::VERIFIED_BUILD);
+                    return;
+                }
+            }
+
+            // ClientStateIndex may race (soft) — log only when DEBUG and mismatched.
+            if (Playerbots::GetLogLevel() >= 1 &&
+                parsed.ClientStateIndex != view->GetClientStateIndex())
+            {
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_TRADE_UPDATED ClientStateIndex soft mismatch bot={} parsed={} live={}",
+                    bot->GetName(),
+                    parsed.ClientStateIndex,
+                    view->GetClientStateIndex());
+            }
+
+            signal.Name = "trade status extended";
+
+            Player* master = GetMaster();
+            Player* trader = trade->GetTrader();
+            bool lockedNonTraded = false;
+            for (WorldPackets::Trade::TradeItem const& tradeItem : parsed.Items)
+            {
+                if (tradeItem.Slot == TRADE_SLOT_NONTRADED && tradeItem.Unwrapped &&
+                    tradeItem.Unwrapped->Lock)
+                {
+                    lockedNonTraded = true;
+                    break;
+                }
+            }
+
+            if (lockedNonTraded && master && trader == master)
+                SetPendingTradeUpdatedLockedTell(true);
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_TRADE_UPDATED ok bot={} whichPlayer={} gold={} state={} items={} lockedNonTradedTell={}",
+                    bot->GetName(),
+                    uint32(parsed.WhichPlayer),
+                    parsed.Gold,
+                    parsed.CurrentStateIndex,
+                    parsed.Items.size(),
+                    GetPendingTradeUpdatedLockedTell() ? "yes" : "no");
             break;
         }
         default:

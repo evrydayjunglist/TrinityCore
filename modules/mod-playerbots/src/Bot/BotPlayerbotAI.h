@@ -99,6 +99,12 @@ public:
     void SetPendingTradeStatus(::TradeStatus status) { _pendingTradeStatus = status; }
     void ClearPendingTradeStatus() { _pendingTradeStatus.reset(); }
 
+    // Locked TRADE_SLOT_NONTRADED tell from SMSG_TRADE_UPDATED Layer-2 OK (master trader).
+    // Cleared after TradeStatusExtendedAction or on Layer fail / Enable=0. Tick-thread only.
+    bool GetPendingTradeUpdatedLockedTell() const { return _pendingTradeUpdatedLockedTell; }
+    void SetPendingTradeUpdatedLockedTell(bool pending) { _pendingTradeUpdatedLockedTell = pending; }
+    void ClearPendingTradeUpdatedLockedTell() { _pendingTradeUpdatedLockedTell = false; }
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -136,6 +142,7 @@ private:
     ObjectGuid _pendingPetitionOffer;
     std::string _pendingCannotEquipTell;
     std::optional<::TradeStatus> _pendingTradeStatus;
+    bool _pendingTradeUpdatedLockedTell = false;
 };
 
 #endif

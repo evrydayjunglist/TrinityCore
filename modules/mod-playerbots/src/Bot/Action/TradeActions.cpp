@@ -119,3 +119,35 @@ bool AcceptTradeAction::Execute(Event /*event*/)
 
     return false;
 }
+
+bool TradeStatusExtendedAction::IsUseful()
+{
+    return _botAI && _botAI->HasMaster() && _botAI->GetBot();
+}
+
+bool TradeStatusExtendedAction::Execute(Event /*event*/)
+{
+    if (!_botAI)
+        return false;
+
+    // Layer-2 OK wake-up always reaches here; tell only for locked NONTRADED + master trader.
+    if (!_botAI->GetPendingTradeUpdatedLockedTell())
+        return true;
+
+    _botAI->ClearPendingTradeUpdatedLockedTell();
+
+    // AC TradeStatusExtendedAction string — pick-lock path stays out of scope.
+    bool const told = _botAI->TellMaster("I can't unlock this item.");
+    if (Playerbots::GetLogLevel() >= 1)
+    {
+        Player* bot = _botAI->GetBot();
+        Player* master = _botAI->GetMaster();
+        TC_LOG_DEBUG("playerbots", "TradeStatusExtendedAction bot={} master={} lockedNonTradedTell={} ok={}",
+            bot ? bot->GetName() : "?",
+            master ? master->GetName() : "none",
+            "I can't unlock this item.",
+            told ? "yes" : "no");
+    }
+
+    return told;
+}

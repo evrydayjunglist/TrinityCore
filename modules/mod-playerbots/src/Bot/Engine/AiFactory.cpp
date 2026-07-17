@@ -134,6 +134,13 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterTrigger("trade status",
         std::make_unique<SignalTrigger>(botAI, "trade status"));
 
+    // Trade item/gold update (AC: "trade status extended"). Midnight SMSG_TRADE_UPDATED;
+    // V1 locked NONTRADED TellMaster only (no pick-lock). FollowMaster V1.
+    context->RegisterAction("trade status extended",
+        std::make_unique<TradeStatusExtendedAction>(botAI));
+    context->RegisterTrigger("trade status extended",
+        std::make_unique<SignalTrigger>(botAI, "trade status extended"));
+
     // Quest loot + object interaction (AC: OpenLootAction/StoreLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));
     context->RegisterAction("use quest object", std::make_unique<UseQuestObjectAction>(botAI));
