@@ -18,6 +18,7 @@
 #include "BotPlayerbotAI.h"
 #include "AiFactory.h"
 #include "Bot/Packet/BotBuyFailedPacket.h"
+#include "Bot/Packet/BotInventoryChangeFailurePacket.h"
 #include "Bot/Packet/BotMoveSetRunSpeedPacket.h"
 #include "Bot/Packet/BotGroupNewLeaderPacket.h"
 #include "Bot/Packet/BotGuildInvitePacket.h"
@@ -72,6 +73,9 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         // AC SMSG_FORCE_RUN_SPEED_CHANGE → Midnight SMSG_MOVE_SET_RUN_SPEED; Cleared unless
         // Layer 2 OK (and when PayloadParse is off — no poll dual for "speed just changed").
         { SMSG_MOVE_SET_RUN_SPEED, { "check mount state", true } },
+        // AC registered the same opcode twice ("cannot equip" / "inventory change failure").
+        // One TC SMSG; V1 fires the strategy-wired name only. Cleared unless Layer 2 OK.
+        { SMSG_INVENTORY_CHANGE_FAILURE, { "cannot equip", true } },
     };
 
     auto itr = registry.find(opcode);
@@ -95,6 +99,12 @@ bool IsKnownBuyResult(BuyResult reason)
         default:
             return false;
     }
+}
+
+bool IsKnownInventoryResult(int32 bagResult)
+{
+    return bagResult >= int32(EQUIP_ERR_OK) &&
+        bagResult <= int32(EQUIP_ERR_NO_SALVAGED_ITEMS_IN_ACCOUNT_BANK);
 }
 
 constexpr size_t BOT_SIGNAL_QUEUE_MAX = 32;
@@ -209,8 +219,13 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
     if (!signal.Packet)
     {
         // Parse-gated reactions with no poll dual: do not fire when PayloadParse is off.
-        if (signal.Name == "group set leader" || signal.Name == "check mount state")
+        if (signal.Name == "group set leader" || signal.Name == "check mount state" ||
+            signal.Name == "cannot equip")
+        {
+            if (signal.Name == "cannot equip")
+                ClearPendingCannotEquipTell();
             signal.Name.clear();
+        }
         return;
     }
 
@@ -516,6 +531,81 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                     bot->GetName(),
                     parsed.Speed,
                     parsed.SequenceIndex);
+            break;
+        }
+        case SMSG_INVENTORY_CHANGE_FAILURE:
+        {
+            // Cleared unless Layer 2 OK + V1 tell map hit — AC second name
+            // ("inventory change failure") is the same reaction; no second FollowMaster trigger.
+            signal.Name.clear();
+            ClearPendingCannotEquipTell();
+
+            Playerbots::PacketParse::InventoryChangeFailurePayload parsed;
+            if (!Playerbots::PacketParse::TryReadInventoryChangeFailure(*signal.Packet, parsed))
+                return;
+
+            if (parsed.BagResult == EQUIP_ERR_OK)
+            {
+                if (Playerbots::GetLogLevel() >= 1)
+                    TC_LOG_DEBUG("playerbots.packet",
+                        "BotPacketParse SMSG_INVENTORY_CHANGE_FAILURE ignored (EQUIP_ERR_OK) bot={}",
+                        GetBot() ? GetBot()->GetName() : "?");
+                return;
+            }
+
+            if (!IsKnownInventoryResult(int32(parsed.BagResult)))
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_INVENTORY_CHANGE_FAILURE Layer-2 unknown BagResult bot={} bagResult={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    int32(parsed.BagResult),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            Player* bot = GetBot();
+            for (ObjectGuid const& itemGuid : parsed.Item)
+            {
+                if (itemGuid.IsEmpty())
+                    continue;
+
+                // Map-local inventory only — do not cold-query remote maps.
+                if (!bot || !bot->GetItemByGuid(itemGuid))
+                {
+                    TC_LOG_ERROR("playerbots.packet",
+                        "BotPacketParse SMSG_INVENTORY_CHANGE_FAILURE Layer-2 item not on bot bot={} item={} bagResult={} verifiedBuild={}",
+                        bot ? bot->GetName() : "?",
+                        itemGuid.ToString(),
+                        int32(parsed.BagResult),
+                        Playerbots::PacketParse::VERIFIED_BUILD);
+                    return;
+                }
+            }
+
+            char const* tell = Playerbots::PacketParse::LookupV1CannotEquipTell(parsed.BagResult);
+            if (!tell)
+            {
+                if (Playerbots::GetLogLevel() >= 1)
+                    TC_LOG_DEBUG("playerbots.packet",
+                        "BotPacketParse SMSG_INVENTORY_CHANGE_FAILURE ok (no V1 tell) bot={} bagResult={}",
+                        bot ? bot->GetName() : "?",
+                        int32(parsed.BagResult));
+                return;
+            }
+
+            SetPendingCannotEquipTell(tell);
+            signal.Name = "cannot equip";
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_INVENTORY_CHANGE_FAILURE ok bot={} bagResult={} tell='{}' item0={} item1={} level={} limitCategory={}",
+                    bot ? bot->GetName() : "?",
+                    int32(parsed.BagResult),
+                    tell,
+                    parsed.Item[0].ToString(),
+                    parsed.Item[1].ToString(),
+                    parsed.Level,
+                    parsed.LimitCategory);
             break;
         }
         default:

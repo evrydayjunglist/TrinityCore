@@ -86,6 +86,12 @@ public:
     void SetPendingPetitionOffer(ObjectGuid guid) { _pendingPetitionOffer = guid; }
     void ClearPendingPetitionOffer() { _pendingPetitionOffer = ObjectGuid::Empty; }
 
+    // Last V1 tell text from SMSG_INVENTORY_CHANGE_FAILURE Layer-2 OK. Cleared after
+    // TellCannotEquipAction runs (or on Layer fail / Enable=0). Tick-thread only.
+    std::string const& GetPendingCannotEquipTell() const { return _pendingCannotEquipTell; }
+    void SetPendingCannotEquipTell(std::string text) { _pendingCannotEquipTell = std::move(text); }
+    void ClearPendingCannotEquipTell() { _pendingCannotEquipTell.clear(); }
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -121,6 +127,7 @@ private:
     std::vector<QueuedSignal> _signalQueue;
     std::vector<PendingSignal> _pendingSignals;
     ObjectGuid _pendingPetitionOffer;
+    std::string _pendingCannotEquipTell;
 };
 
 #endif

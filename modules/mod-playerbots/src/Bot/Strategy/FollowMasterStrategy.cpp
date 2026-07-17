@@ -63,4 +63,9 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // Master mount sync wake-up (AC WorldPacketHandlerStrategy "check mount state").
     // Signal-only after SMSG_MOVE_SET_RUN_SPEED Layer-2 OK; no NonCombat timer poll in V1.
     triggers.push_back(new TriggerNode("check mount state", { NextAction("check mount state", 100.0f) }));
+
+    // Equip / inventory failure (AC WorldPacketHandlerStrategy "cannot equip" →
+    // "tell cannot equip"). Signal-only after SMSG_INVENTORY_CHANGE_FAILURE Layer-2 OK
+    // with a V1 message-map hit; AC duplicate name "inventory change failure" not wired.
+    triggers.push_back(new TriggerNode("cannot equip", { NextAction("tell cannot equip", 100.0f) }));
 }

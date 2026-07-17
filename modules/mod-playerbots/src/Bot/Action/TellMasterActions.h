@@ -39,4 +39,16 @@ private:
     std::string _text;
 };
 
+// AC InventoryChangeFailureAction shape: whisper the pending BagResult tell stashed
+// by SMSG_INVENTORY_CHANGE_FAILURE Layer-2 OK (V1 message subset).
+class TellCannotEquipAction : public Action
+{
+public:
+    explicit TellCannotEquipAction(BotPlayerbotAI* botAI)
+        : Action(botAI, "tell cannot equip") { }
+
+    bool Execute(Event event) override;
+    bool IsUseful() override;
+};
+
 #endif

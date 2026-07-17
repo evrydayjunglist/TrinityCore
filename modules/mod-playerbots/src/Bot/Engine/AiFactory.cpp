@@ -120,6 +120,13 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterTrigger("check mount state",
         std::make_unique<SignalTrigger>(botAI, "check mount state"));
 
+    // Inventory / equip failure tell (AC: "cannot equip" → "tell cannot equip";
+    // duplicate AC row "inventory change failure" = same reaction). One TC opcode
+    // SMSG_INVENTORY_CHANGE_FAILURE; V1 message subset + pending tell. FollowMaster V1.
+    context->RegisterAction("tell cannot equip", std::make_unique<TellCannotEquipAction>(botAI));
+    context->RegisterTrigger("cannot equip",
+        std::make_unique<SignalTrigger>(botAI, "cannot equip"));
+
     // Quest loot + object interaction (AC: OpenLootAction/StoreLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));
     context->RegisterAction("use quest object", std::make_unique<UseQuestObjectAction>(botAI));

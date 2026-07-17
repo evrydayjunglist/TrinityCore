@@ -45,3 +45,34 @@ bool TellMasterAction::Execute(Event /*event*/)
 
     return told;
 }
+
+bool TellCannotEquipAction::IsUseful()
+{
+    return _botAI && _botAI->HasMaster() && _botAI->GetBot() &&
+        !_botAI->GetPendingCannotEquipTell().empty();
+}
+
+bool TellCannotEquipAction::Execute(Event /*event*/)
+{
+    if (!_botAI)
+        return false;
+
+    std::string const text = _botAI->GetPendingCannotEquipTell();
+    _botAI->ClearPendingCannotEquipTell();
+    if (text.empty())
+        return false;
+
+    bool const told = _botAI->TellMaster(text);
+    if (Playerbots::GetLogLevel() >= 1)
+    {
+        Player* bot = _botAI->GetBot();
+        Player* master = _botAI->GetMaster();
+        TC_LOG_DEBUG("playerbots", "TellCannotEquipAction bot={} master={} text='{}' ok={}",
+            bot ? bot->GetName() : "?",
+            master ? master->GetName() : "none",
+            text,
+            told ? "yes" : "no");
+    }
+
+    return told;
+}
