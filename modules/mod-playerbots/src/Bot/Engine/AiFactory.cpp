@@ -24,6 +24,7 @@
 #include "Bot/Action/GroupActions.h"
 #include "Bot/Action/GuildActions.h"
 #include "Bot/Action/LootAction.h"
+#include "Bot/Action/MountActions.h"
 #include "Bot/Action/PetitionActions.h"
 #include "Bot/Action/ResurrectActions.h"
 #include "Bot/Action/TellMasterActions.h"
@@ -112,6 +113,12 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterAction("reset botAI", std::make_unique<ResetAiAction>(botAI));
     context->RegisterTrigger("group set leader",
         std::make_unique<SignalTrigger>(botAI, "group set leader"));
+
+    // Master-alt mount sync (AC: "check mount state"). Midnight wake-up is
+    // SMSG_MOVE_SET_RUN_SPEED; minimal CheckMountStateAction. FollowMaster V1.
+    context->RegisterAction("check mount state", std::make_unique<CheckMountStateAction>(botAI));
+    context->RegisterTrigger("check mount state",
+        std::make_unique<SignalTrigger>(botAI, "check mount state"));
 
     // Quest loot + object interaction (AC: OpenLootAction/StoreLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));

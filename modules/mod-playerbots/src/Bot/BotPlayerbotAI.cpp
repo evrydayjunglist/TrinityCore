@@ -18,6 +18,7 @@
 #include "BotPlayerbotAI.h"
 #include "AiFactory.h"
 #include "Bot/Packet/BotBuyFailedPacket.h"
+#include "Bot/Packet/BotMoveSetRunSpeedPacket.h"
 #include "Bot/Packet/BotGroupNewLeaderPacket.h"
 #include "Bot/Packet/BotGuildInvitePacket.h"
 #include "Bot/Packet/BotPetitionShowSignaturesPacket.h"
@@ -41,6 +42,7 @@
 #include "SharedDefines.h"
 #include "WorldPacket.h"
 #include <algorithm>
+#include <cmath>
 #include <unordered_map>
 
 namespace
@@ -67,6 +69,9 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         // AC SMSG_GROUP_SET_LEADER → Midnight SMSG_GROUP_NEW_LEADER; Cleared unless Layer 2 OK
         // (and when PayloadParse is off — no poll dual for leader name alone).
         { SMSG_GROUP_NEW_LEADER, { "group set leader", true } },
+        // AC SMSG_FORCE_RUN_SPEED_CHANGE → Midnight SMSG_MOVE_SET_RUN_SPEED; Cleared unless
+        // Layer 2 OK (and when PayloadParse is off — no poll dual for "speed just changed").
+        { SMSG_MOVE_SET_RUN_SPEED, { "check mount state", true } },
     };
 
     auto itr = registry.find(opcode);
@@ -204,7 +209,7 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
     if (!signal.Packet)
     {
         // Parse-gated reactions with no poll dual: do not fire when PayloadParse is off.
-        if (signal.Name == "group set leader")
+        if (signal.Name == "group set leader" || signal.Name == "check mount state")
             signal.Name.clear();
         return;
     }
@@ -458,6 +463,59 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                     bot->GetName(),
                     parsed.Name,
                     int32(parsed.PartyIndex));
+            break;
+        }
+        case SMSG_MOVE_SET_RUN_SPEED:
+        {
+            // Cleared unless Layer 2 OK — do not fire "check mount state" on mis-parse / mismatch.
+            signal.Name.clear();
+
+            Playerbots::PacketParse::MoveSetRunSpeedPayload parsed;
+            if (!Playerbots::PacketParse::TryReadMoveSetRunSpeed(*signal.Packet, parsed))
+                return;
+
+            Player* bot = GetBot();
+            if (!bot || parsed.MoverGUID.IsEmpty())
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_MOVE_SET_RUN_SPEED Layer-2 empty mover bot={} verifiedBuild={}",
+                    bot ? bot->GetName() : "?",
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            // Self-session force-set only; ignore (no reaction) if somehow not the bot mover.
+            if (parsed.MoverGUID != bot->GetGUID())
+            {
+                if (Playerbots::GetLogLevel() >= 1)
+                    TC_LOG_DEBUG("playerbots.packet",
+                        "BotPacketParse SMSG_MOVE_SET_RUN_SPEED ignored (not self) bot={} mover={}",
+                        bot->GetName(),
+                        parsed.MoverGUID.ToString());
+                return;
+            }
+
+            constexpr float kRunSpeedEpsilon = 0.01f;
+            float const liveSpeed = bot->GetSpeed(MOVE_RUN);
+            if (std::fabs(parsed.Speed - liveSpeed) > kRunSpeedEpsilon)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_MOVE_SET_RUN_SPEED Layer-2 mismatch bot={} parsedSpeed={} liveSpeed={} verifiedBuild={}",
+                    bot->GetName(),
+                    parsed.Speed,
+                    liveSpeed,
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            signal.Name = "check mount state";
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_MOVE_SET_RUN_SPEED ok bot={} speed={} seq={}",
+                    bot->GetName(),
+                    parsed.Speed,
+                    parsed.SequenceIndex);
             break;
         }
         default:
