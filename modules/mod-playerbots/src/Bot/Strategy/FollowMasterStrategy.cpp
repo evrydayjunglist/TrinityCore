@@ -55,4 +55,8 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // no Player pending-buy poll dual.
     triggers.push_back(new TriggerNode("not enough money", { NextAction("tell not enough money", 100.0f) }));
     triggers.push_back(new TriggerNode("not enough reputation", { NextAction("tell not enough reputation", 100.0f) }));
+
+    // Party leader promoted (AC WorldPacketHandlerStrategy "group set leader" → "reset botAI").
+    // Signal-only after SMSG_GROUP_NEW_LEADER Layer-2 OK; no poll dual for leader name alone.
+    triggers.push_back(new TriggerNode("group set leader", { NextAction("reset botAI", 100.0f) }));
 }

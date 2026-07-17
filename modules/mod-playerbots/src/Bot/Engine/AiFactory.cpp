@@ -107,6 +107,12 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterTrigger("not enough reputation",
         std::make_unique<SignalTrigger>(botAI, "not enough reputation"));
 
+    // Party leader change (AC: "group set leader" → "reset botAI"). Midnight opcode is
+    // SMSG_GROUP_NEW_LEADER; minimal ResetAiAction = ResetStrategies() only. FollowMaster V1.
+    context->RegisterAction("reset botAI", std::make_unique<ResetAiAction>(botAI));
+    context->RegisterTrigger("group set leader",
+        std::make_unique<SignalTrigger>(botAI, "group set leader"));
+
     // Quest loot + object interaction (AC: OpenLootAction/StoreLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));
     context->RegisterAction("use quest object", std::make_unique<UseQuestObjectAction>(botAI));

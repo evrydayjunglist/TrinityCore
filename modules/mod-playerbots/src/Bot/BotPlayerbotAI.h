@@ -115,8 +115,8 @@ private:
     // Cross-thread signal handoff. _signalQueue is written by HandleBotOutgoingPacket on sender
     // threads and drained (swapped out) at the top of each tick under _signalMutex. _pendingSignals
     // is only ever touched on the bot's own tick thread (drain + consume + expire), so it needs no
-    // lock of its own. Signals persist briefly so an engine GCD early-return cannot erase them
-    // before SignalTrigger gets a chance to consume them.
+    // lock of its own. TTL burns only on ticks where Engine::ProcessTriggers ran (not while GCD
+    // blocks DoNextAction), so a follow/GCD window cannot expire signal-only reactions.
     std::mutex _signalMutex;
     std::vector<QueuedSignal> _signalQueue;
     std::vector<PendingSignal> _pendingSignals;

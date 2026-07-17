@@ -175,8 +175,10 @@ void Engine::LogTickThrottled(uint32 diff)
         strategyList.empty() ? "none" : strategyList);
 }
 
-bool Engine::DoNextAction(uint32 diff)
+bool Engine::DoNextAction(uint32 diff, bool& triggersProcessed)
 {
+    triggersProcessed = false;
+
     if (_gcdRemaining > diff)
     {
         _gcdRemaining -= diff;
@@ -191,6 +193,9 @@ bool Engine::DoNextAction(uint32 diff)
         LogTickThrottled(diff);
         return false;
     }
+
+    // Past GCD: SignalTrigger::IsActive may run. Caller may decrement pending-signal TTL.
+    triggersProcessed = true;
 
     std::vector<NextAction> candidates;
     ProcessTriggers(candidates);

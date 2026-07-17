@@ -18,6 +18,7 @@
 #include "BotPlayerbotAI.h"
 #include "AiFactory.h"
 #include "Bot/Packet/BotBuyFailedPacket.h"
+#include "Bot/Packet/BotGroupNewLeaderPacket.h"
 #include "Bot/Packet/BotGuildInvitePacket.h"
 #include "Bot/Packet/BotPetitionShowSignaturesPacket.h"
 #include "Bot/Packet/BotPartyInvitePacket.h"
@@ -63,6 +64,9 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         // Placeholder name rewritten in ProcessPayloadOnTick to AC "not enough money" /
         // "not enough reputation" (or cleared for other BuyResult reasons).
         { SMSG_BUY_FAILED, { "buy failed", true } },
+        // AC SMSG_GROUP_SET_LEADER → Midnight SMSG_GROUP_NEW_LEADER; Cleared unless Layer 2 OK
+        // (and when PayloadParse is off — no poll dual for leader name alone).
+        { SMSG_GROUP_NEW_LEADER, { "group set leader", true } },
     };
 
     auto itr = registry.find(opcode);
@@ -198,7 +202,12 @@ bool BotPlayerbotAI::TellMaster(std::string_view text)
 void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
 {
     if (!signal.Packet)
+    {
+        // Parse-gated reactions with no poll dual: do not fire when PayloadParse is off.
+        if (signal.Name == "group set leader")
+            signal.Name.clear();
         return;
+    }
 
     switch (signal.Packet->GetOpcode())
     {
@@ -412,6 +421,45 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                     int32(parsed.Reason));
             break;
         }
+        case SMSG_GROUP_NEW_LEADER:
+        {
+            // Cleared unless Layer 2 OK — do not fire "reset botAI" on mis-parse / mismatch.
+            signal.Name.clear();
+
+            Playerbots::PacketParse::GroupNewLeaderPayload parsed;
+            if (!Playerbots::PacketParse::TryReadGroupNewLeader(*signal.Packet, parsed))
+                return;
+
+            Player* bot = GetBot();
+            Group* group = bot ? bot->GetGroup() : nullptr;
+            char const* liveLeaderName = group ? group->GetLeaderName() : nullptr;
+            bool const nameOk = group && liveLeaderName && !parsed.Name.empty() &&
+                parsed.Name == liveLeaderName;
+            bool const categoryOk = group &&
+                parsed.PartyIndex == int8(group->GetGroupCategory());
+            if (!nameOk || !categoryOk)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_GROUP_NEW_LEADER Layer-2 mismatch bot={} parsedName='{}' parsedPartyIndex={} liveLeader='{}' liveCategory={} verifiedBuild={}",
+                    bot ? bot->GetName() : "?",
+                    parsed.Name,
+                    int32(parsed.PartyIndex),
+                    liveLeaderName ? liveLeaderName : "none",
+                    group ? int32(group->GetGroupCategory()) : -1,
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            signal.Name = "group set leader";
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_GROUP_NEW_LEADER ok bot={} leader='{}' partyIndex={}",
+                    bot->GetName(),
+                    parsed.Name,
+                    int32(parsed.PartyIndex));
+            break;
+        }
         default:
             break;
     }
@@ -446,8 +494,15 @@ void BotPlayerbotAI::UpdateAIInternal(uint32 diff)
         _pendingSignals.push_back({ std::move(queued.Name), BOT_SIGNAL_TTL_TICKS });
     }
 
+    // Pending-signal TTL must only burn on ticks where ProcessTriggers ran. Default GCD (500ms)
+    // is longer than TTL (3 × ReactDelay ~100ms): signal-only reactions (e.g. "group set leader")
+    // otherwise expire while follow keeps the engine on cooldown — poll duals masked that bug.
+    bool triggersProcessed = false;
     if (_engine)
-        _engine->DoNextAction(diff);
+        _engine->DoNextAction(diff, triggersProcessed);
+
+    if (!triggersProcessed)
+        return;
 
     for (auto itr = _pendingSignals.begin(); itr != _pendingSignals.end();)
     {

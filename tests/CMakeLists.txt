@@ -34,7 +34,8 @@ target_sources(tests
     ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotGuildInvitePacket.cpp
     ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotResurrectRequestPacket.cpp
     ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotPetitionShowSignaturesPacket.cpp
-    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotBuyFailedPacket.cpp)
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotBuyFailedPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotGroupNewLeaderPacket.cpp)
 
 catch_discover_tests(tests)
 

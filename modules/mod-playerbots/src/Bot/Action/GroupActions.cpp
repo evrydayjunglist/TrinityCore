@@ -78,3 +78,27 @@ bool AcceptInvitationAction::Execute(Event /*event*/)
     // ResetStrategies), so in-group following is already active — no strategy change needed here.
     return joined;
 }
+
+bool ResetAiAction::IsUseful()
+{
+    return _botAI && _botAI->GetBot();
+}
+
+bool ResetAiAction::Execute(Event /*event*/)
+{
+    if (!_botAI)
+        return false;
+
+    // V1: AC WorldPacketHandlerStrategy "group set leader" → "reset botAI" intent only.
+    // Full AC ResetAiAction (FindNewMaster / repository wipe / TellMaster) stays out of scope.
+    _botAI->ResetStrategies();
+
+    if (Playerbots::GetLogLevel() >= 1)
+    {
+        Player* bot = _botAI->GetBot();
+        TC_LOG_DEBUG("playerbots", "ResetAiAction bot={} strategies reset",
+            bot ? bot->GetName() : "?");
+    }
+
+    return true;
+}
