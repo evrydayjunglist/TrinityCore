@@ -28,6 +28,7 @@
 #include "Bot/Action/PetitionActions.h"
 #include "Bot/Action/ResurrectActions.h"
 #include "Bot/Action/ItemPushResultAction.h"
+#include "Bot/Action/LootRollWonAction.h"
 #include "Bot/Action/TellMasterActions.h"
 #include "Bot/Action/TradeActions.h"
 #include "Bot/Action/NewRpgActions.h"
@@ -154,6 +155,12 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterAction("item push result", std::make_unique<ItemPushResultAction>(botAI));
     context->RegisterTrigger("item push result",
         std::make_unique<SignalTrigger>(botAI, "item push result"));
+
+    // Group Need/Greed roll result (AC: "loot roll won" → equip upgrades; equip out of scope).
+    // Midnight SMSG_LOOT_ROLL_WON; FollowMaster V1 signal + optional self-winner TellMaster.
+    context->RegisterAction("loot roll won", std::make_unique<LootRollWonAction>(botAI));
+    context->RegisterTrigger("loot roll won",
+        std::make_unique<SignalTrigger>(botAI, "loot roll won"));
 
     // Quest loot open + object interaction (AC: OpenLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));

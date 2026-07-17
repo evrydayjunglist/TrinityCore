@@ -91,4 +91,9 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // unlock/open/equip chain out of scope). Signal-only after SMSG_ITEM_PUSH_RESULT Layer-2 OK.
     triggers.push_back(new TriggerNode("item push result",
         { NextAction("item push result", 100.0f) }));
+
+    // Group Need/Greed result (AC WorldPacketHandlerStrategy "loot roll won" → equip upgrades;
+    // equip out of scope). Signal-only after SMSG_LOOT_ROLL_WON Layer-2 OK; optional self-won tell.
+    triggers.push_back(new TriggerNode("loot roll won",
+        { NextAction("loot roll won", 100.0f) }));
 }

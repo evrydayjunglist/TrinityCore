@@ -16,32 +16,15 @@
  */
 
 #include "BotLootResponsePacket.h"
+#include "BotLootItemData.h"
 #include "BotPacketParse.h"
-#include "ItemPacketsCommon.h"
 #include "Loot.h"
-#include "LootItemType.h"
 #include "PacketOperators.h"
 
 namespace Playerbots::PacketParse
 {
 namespace
 {
-void ReadLootItemData(ByteBuffer& data, WorldPackets::Loot::LootItemData& out)
-{
-    // Mirror WorldPackets::Loot::operator<<(LootItemData) field order exactly.
-    uint8 typeRaw = 0;
-    data >> WorldPackets::Bits<2>(typeRaw);
-    data >> WorldPackets::Bits<3>(out.UIType);
-    data >> WorldPackets::Bits<1>(out.CanTradeToTapList);
-    data.ResetBitPos();
-
-    out.Type = static_cast<::LootItemType>(typeRaw);
-    data >> out.Loot;
-    data >> out.Quantity;
-    data >> out.LootItemType;
-    data >> out.LootListID;
-}
-
 void ReadLootCurrency(ByteBuffer& data, WorldPackets::Loot::LootCurrency& out)
 {
     // Mirror WorldPackets::Loot::operator<<(LootCurrency) field order exactly.

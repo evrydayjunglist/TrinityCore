@@ -137,6 +137,17 @@ public:
     void SetPendingItemPush(PendingItemPush push) { _pendingItemPush = std::move(push); }
     void ClearPendingItemPush() { _pendingItemPush.reset(); }
 
+    // SMSG_LOOT_ROLL_WON stash for V1 "loot roll won" optional self-winner TellMaster.
+    // Cleared after LootRollWonAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingLootRollWon
+    {
+        ObjectGuid Winner;
+        uint32 ItemID = 0;
+    };
+    std::optional<PendingLootRollWon> const& GetPendingLootRollWon() const { return _pendingLootRollWon; }
+    void SetPendingLootRollWon(PendingLootRollWon pending) { _pendingLootRollWon = std::move(pending); }
+    void ClearPendingLootRollWon() { _pendingLootRollWon.reset(); }
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -177,6 +188,7 @@ private:
     bool _pendingTradeUpdatedLockedTell = false;
     std::optional<PendingLootStore> _pendingLootStore;
     std::optional<PendingItemPush> _pendingItemPush;
+    std::optional<PendingLootRollWon> _pendingLootRollWon;
 };
 
 #endif

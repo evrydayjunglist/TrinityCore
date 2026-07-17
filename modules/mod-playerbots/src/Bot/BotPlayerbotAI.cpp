@@ -28,6 +28,7 @@
 #include "Bot/Packet/BotResurrectRequestPacket.h"
 #include "Bot/Packet/BotItemPushResultPacket.h"
 #include "Bot/Packet/BotLootResponsePacket.h"
+#include "Bot/Packet/BotLootRollWonPacket.h"
 #include "Bot/Packet/BotTradeStatusPacket.h"
 #include "Bot/Packet/BotTradeUpdatedPacket.h"
 #include "Loot.h"
@@ -93,6 +94,8 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         { SMSG_LOOT_RESPONSE, { "loot response", true } },
         // Cleared unless Layer 2 OK on self inventory dual. Enable=0 / party broadcast: no poll dual.
         { SMSG_ITEM_PUSH_RESULT, { "item push result", true } },
+        // Cleared unless Layer 2 OK (RollType/Winner + soft group/GetLootRoll). Enable=0: no poll dual.
+        { SMSG_LOOT_ROLL_WON, { "loot roll won", true } },
     };
 
     auto itr = registry.find(opcode);
@@ -239,7 +242,7 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
         if (signal.Name == "group set leader" || signal.Name == "check mount state" ||
             signal.Name == "cannot equip" || signal.Name == "trade status" ||
             signal.Name == "trade status extended" || signal.Name == "loot response" ||
-            signal.Name == "item push result")
+            signal.Name == "item push result" || signal.Name == "loot roll won")
         {
             if (signal.Name == "cannot equip")
                 ClearPendingCannotEquipTell();
@@ -251,6 +254,8 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                 ClearPendingLootStore();
             if (signal.Name == "item push result")
                 ClearPendingItemPush();
+            if (signal.Name == "loot roll won")
+                ClearPendingLootRollWon();
             signal.Name.clear();
         }
         return;
@@ -977,6 +982,76 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                     parsed.QuantityInInventory,
                     parsed.ProxyItemID,
                     parsed.Created ? "yes" : "no");
+            break;
+        }
+        case SMSG_LOOT_ROLL_WON:
+        {
+            // Cleared unless Layer 2 OK. Enable=0 / mismatch: no poll dual (roll usually already gone).
+            signal.Name.clear();
+            ClearPendingLootRollWon();
+
+            Playerbots::PacketParse::LootRollWonPayload parsed;
+            if (!Playerbots::PacketParse::TryReadLootRollWon(*signal.Packet, parsed))
+                return;
+
+            if (!Playerbots::PacketParse::IsKnownLootRollWonRollType(parsed.RollType))
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_LOOT_ROLL_WON Layer-2 unknown RollType bot={} rollType={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    uint32(parsed.RollType),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            if (parsed.Winner.IsEmpty())
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_LOOT_ROLL_WON Layer-2 empty Winner bot={} lootObj={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    parsed.LootObj.ToString(),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            Player* bot = GetBot();
+            if (!bot)
+                return;
+
+            bool const liveRoll = bot->GetLootRoll(parsed.LootObj, parsed.Item.LootListID) != nullptr;
+            bool const selfWinner = parsed.Winner == bot->GetGUID();
+            Group const* group = bot->GetGroup();
+            bool const groupDual = group && (selfWinner || group->IsMember(parsed.Winner));
+            if (!liveRoll && !groupDual && !selfWinner)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_LOOT_ROLL_WON Layer-2 mismatch bot={} winner={} lootObj={} listId={} inGroup={} verifiedBuild={}",
+                    bot->GetName(),
+                    parsed.Winner.ToString(),
+                    parsed.LootObj.ToString(),
+                    uint32(parsed.Item.LootListID),
+                    group ? "yes" : "no",
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            // Soft ItemID: zero is unusual but not a hard Layer-2 fail (currency/edge).
+            PendingLootRollWon stash;
+            stash.Winner = parsed.Winner;
+            stash.ItemID = parsed.Item.Loot.ItemID;
+            SetPendingLootRollWon(std::move(stash));
+            signal.Name = "loot roll won";
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_LOOT_ROLL_WON ok bot={} winner={} itemId={} roll={} rollType={} uiType={} self={}",
+                    bot->GetName(),
+                    parsed.Winner.ToString(),
+                    parsed.Item.Loot.ItemID,
+                    parsed.Roll,
+                    uint32(parsed.RollType),
+                    uint32(parsed.Item.UIType),
+                    selfWinner ? "yes" : "no");
             break;
         }
         default:
