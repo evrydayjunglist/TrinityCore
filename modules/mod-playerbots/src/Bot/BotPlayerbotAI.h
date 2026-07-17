@@ -124,6 +124,19 @@ public:
     void SetPendingLootStore(PendingLootStore store) { _pendingLootStore = std::move(store); }
     void ClearPendingLootStore() { _pendingLootStore.reset(); }
 
+    // Self SMSG_ITEM_PUSH_RESULT stash for V1 "item push result" quest TellMaster.
+    // Cleared after ItemPushResultAction or on Layer fail / Enable=0 / non-self. Tick-thread only.
+    struct PendingItemPush
+    {
+        uint32 ItemID = 0;
+        int32 ProxyItemID = 0;
+        int32 Quantity = 0;
+        int32 QuantityInInventory = 0;
+    };
+    std::optional<PendingItemPush> const& GetPendingItemPush() const { return _pendingItemPush; }
+    void SetPendingItemPush(PendingItemPush push) { _pendingItemPush = std::move(push); }
+    void ClearPendingItemPush() { _pendingItemPush.reset(); }
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -163,6 +176,7 @@ private:
     std::optional<::TradeStatus> _pendingTradeStatus;
     bool _pendingTradeUpdatedLockedTell = false;
     std::optional<PendingLootStore> _pendingLootStore;
+    std::optional<PendingItemPush> _pendingItemPush;
 };
 
 #endif

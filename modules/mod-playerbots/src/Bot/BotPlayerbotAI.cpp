@@ -26,6 +26,7 @@
 #include "Bot/Packet/BotPartyInvitePacket.h"
 #include "Bot/Packet/BotPacketParse.h"
 #include "Bot/Packet/BotResurrectRequestPacket.h"
+#include "Bot/Packet/BotItemPushResultPacket.h"
 #include "Bot/Packet/BotLootResponsePacket.h"
 #include "Bot/Packet/BotTradeStatusPacket.h"
 #include "Bot/Packet/BotTradeUpdatedPacket.h"
@@ -90,6 +91,8 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         { SMSG_TRADE_UPDATED, { "trade status extended", true } },
         // Cleared unless Layer 2 OK and Acquired (V1 store). Enable=0 / !Acquired: no poll dual.
         { SMSG_LOOT_RESPONSE, { "loot response", true } },
+        // Cleared unless Layer 2 OK on self inventory dual. Enable=0 / party broadcast: no poll dual.
+        { SMSG_ITEM_PUSH_RESULT, { "item push result", true } },
     };
 
     auto itr = registry.find(opcode);
@@ -235,7 +238,8 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
         // Parse-gated reactions with no poll dual: do not fire when PayloadParse is off.
         if (signal.Name == "group set leader" || signal.Name == "check mount state" ||
             signal.Name == "cannot equip" || signal.Name == "trade status" ||
-            signal.Name == "trade status extended" || signal.Name == "loot response")
+            signal.Name == "trade status extended" || signal.Name == "loot response" ||
+            signal.Name == "item push result")
         {
             if (signal.Name == "cannot equip")
                 ClearPendingCannotEquipTell();
@@ -245,6 +249,8 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                 ClearPendingTradeUpdatedLockedTell();
             if (signal.Name == "loot response")
                 ClearPendingLootStore();
+            if (signal.Name == "item push result")
+                ClearPendingItemPush();
             signal.Name.clear();
         }
         return;
@@ -906,6 +912,71 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                     parsed.Coins,
                     parsed.Items.size(),
                     parsed.AELooting ? "yes" : "no");
+            break;
+        }
+        case SMSG_ITEM_PUSH_RESULT:
+        {
+            // Cleared unless Layer 2 OK on self. Enable=0 / party broadcast / mismatch: no poll dual.
+            signal.Name.clear();
+            ClearPendingItemPush();
+
+            Playerbots::PacketParse::ItemPushResultPayload parsed;
+            if (!Playerbots::PacketParse::TryReadItemPushResult(*signal.Packet, parsed))
+                return;
+
+            Player* bot = GetBot();
+            if (!bot)
+                return;
+
+            // Party BroadcastPacket from SendNewItem: expected noise — ignore, no Layer-2 ERROR.
+            if (parsed.PlayerGUID != bot->GetGUID())
+            {
+                if (Playerbots::GetLogLevel() >= 1)
+                    TC_LOG_DEBUG("playerbots.packet",
+                        "BotPacketParse SMSG_ITEM_PUSH_RESULT ignore (non-self) bot={} player={}",
+                        bot->GetName(),
+                        parsed.PlayerGUID.ToString());
+                return;
+            }
+
+            bool const quantityOk = parsed.Quantity >= 1 || (parsed.Created && parsed.Quantity >= 0);
+            bool const itemGuidOk = parsed.ItemGUID.IsEmpty() || bot->GetItemByGuid(parsed.ItemGUID) != nullptr;
+            bool const itemIdOk = parsed.Item.ItemID != 0;
+            bool const countOk = !itemIdOk ||
+                int32(bot->GetItemCount(parsed.Item.ItemID)) == parsed.QuantityInInventory;
+
+            if (!quantityOk || !itemGuidOk || !itemIdOk || !countOk)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_ITEM_PUSH_RESULT Layer-2 mismatch bot={} itemId={} qty={} qtyInv={} itemGuid={} liveCount={} created={} verifiedBuild={}",
+                    bot->GetName(),
+                    parsed.Item.ItemID,
+                    parsed.Quantity,
+                    parsed.QuantityInInventory,
+                    parsed.ItemGUID.ToString(),
+                    itemIdOk ? bot->GetItemCount(parsed.Item.ItemID) : 0u,
+                    parsed.Created ? "yes" : "no",
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            PendingItemPush stash;
+            stash.ItemID = parsed.Item.ItemID;
+            stash.ProxyItemID = parsed.ProxyItemID;
+            stash.Quantity = parsed.Quantity;
+            stash.QuantityInInventory = parsed.QuantityInInventory;
+            SetPendingItemPush(std::move(stash));
+            signal.Name = "item push result";
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_ITEM_PUSH_RESULT ok bot={} itemId={} qty={} qtyInv={} proxy={} created={}",
+                    bot->GetName(),
+                    parsed.Item.ItemID,
+                    parsed.Quantity,
+                    parsed.QuantityInInventory,
+                    parsed.ProxyItemID,
+                    parsed.Created ? "yes" : "no");
             break;
         }
         default:

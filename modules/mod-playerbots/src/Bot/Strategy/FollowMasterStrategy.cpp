@@ -86,4 +86,9 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // Acquired loot window (AC WorldPacketHandlerStrategy "loot response" → "store loot").
     // Signal-only after SMSG_LOOT_RESPONSE Layer-2 OK + Acquired; Handle* store, no poll dual.
     triggers.push_back(new TriggerNode("loot response", { NextAction("store loot", 100.0f) }));
+
+    // Self item grant (AC WorldPacketHandlerStrategy "item push result" → quest tell;
+    // unlock/open/equip chain out of scope). Signal-only after SMSG_ITEM_PUSH_RESULT Layer-2 OK.
+    triggers.push_back(new TriggerNode("item push result",
+        { NextAction("item push result", 100.0f) }));
 }

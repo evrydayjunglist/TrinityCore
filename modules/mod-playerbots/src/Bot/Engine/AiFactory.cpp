@@ -27,6 +27,7 @@
 #include "Bot/Action/MountActions.h"
 #include "Bot/Action/PetitionActions.h"
 #include "Bot/Action/ResurrectActions.h"
+#include "Bot/Action/ItemPushResultAction.h"
 #include "Bot/Action/TellMasterActions.h"
 #include "Bot/Action/TradeActions.h"
 #include "Bot/Action/NewRpgActions.h"
@@ -147,6 +148,12 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterAction("store loot", std::make_unique<StoreLootAction>(botAI));
     context->RegisterTrigger("loot response",
         std::make_unique<SignalTrigger>(botAI, "loot response"));
+
+    // Inventory item-granted wake-up (AC: "item push result" → quest tell; unlock/open/equip
+    // out of scope). Midnight SMSG_ITEM_PUSH_RESULT; FollowMaster V1 signal + optional quest tell.
+    context->RegisterAction("item push result", std::make_unique<ItemPushResultAction>(botAI));
+    context->RegisterTrigger("item push result",
+        std::make_unique<SignalTrigger>(botAI, "item push result"));
 
     // Quest loot open + object interaction (AC: OpenLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));

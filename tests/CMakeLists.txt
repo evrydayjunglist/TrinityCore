@@ -40,7 +40,8 @@ target_sources(tests
     ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotInventoryChangeFailurePacket.cpp
     ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotTradeStatusPacket.cpp
     ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotTradeUpdatedPacket.cpp
-    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotLootResponsePacket.cpp)
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotLootResponsePacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotItemPushResultPacket.cpp)
 
 catch_discover_tests(tests)
 
