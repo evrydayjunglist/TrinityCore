@@ -881,6 +881,28 @@ void WorldSession::KickPlayer(std::string_view reason)
 {
     TC_LOG_INFO("network.kick", "{} kicked with reason: {}", GetPlayerInfo(), reason);
 
+    // Socketless bot sessions never close anything via m_Socket, so the human KickPlayer path
+    // is a no-op for them. BanCharacter / .kick / character erase all call KickPlayer and would
+    // leave the bot Player* in-world (and erase/rename can DeleteFromDB while still live).
+    // Evict through RemoveBotSession -> LogoutPlayer, matching KickAll / BanAccount.
+    if (IsBotSession())
+    {
+        ObjectGuid characterGuid;
+        if (Player* player = GetPlayer())
+            characterGuid = player->GetGUID();
+        else if (!m_playerLoading.IsEmpty())
+            characterGuid = m_playerLoading;
+        else if (m_GUIDLow)
+            characterGuid = ObjectGuid::Create<HighGuid::Player>(m_GUIDLow);
+
+        if (!characterGuid.IsEmpty())
+            sWorld->RemoveBotSession(characterGuid);
+        else
+            TC_LOG_ERROR("network.kick", "WorldSession::KickPlayer: bot session has no character GUID to evict (account {})",
+                GetAccountId());
+        return;
+    }
+
     for (std::shared_ptr<WorldSocket> const& socket : m_Socket)
     {
         if (socket)

@@ -832,7 +832,8 @@ class TC_GAME_API World
         World();
         ~World();
 
-        /// Bot-safe eviction for GUID-keyed sessions (KickPlayer is a socket-only no-op for bots).
+        /// Bulk bot eviction helpers (KickAll / KickAllLess / BanAccount). Single-session kicks go
+        /// through WorldSession::KickPlayer, which now also RemoveBotSession for IsBotSession().
         /// Collects GUIDs first, then RemoveBotSession -> LogoutPlayer; map erase on next UpdateSessions.
         void LogoutAllBotSessions();
         void LogoutAllBotSessionsLess(AccountTypes sec);

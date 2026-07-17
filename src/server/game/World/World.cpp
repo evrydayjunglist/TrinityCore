@@ -403,10 +403,9 @@ void World::RemoveBotSession(ObjectGuid characterGuid)
     if (itr == m_botSessionsByGuid.end() || !itr->second)
         return;
 
-    // Bot sessions have no socket, so WorldSession::KickPlayer() (which only closes sockets) is a
-    // no-op for them. LogoutPlayer() is what actually clears the session's player, which lets
-    // WorldSession::Update()'s IsBotSession() branch signal removal - the per-tick bot-session
-    // loop below then safely erases + deletes, exactly like the human RemoveSession() path above.
+    // LogoutPlayer() clears the session's player so WorldSession::Update()'s IsBotSession() branch
+    // signals removal - the per-tick bot-session loop below then safely erases + deletes.
+    // WorldSession::KickPlayer routes IsBotSession() here (socket close alone is a no-op for bots).
     // Mirrors modules/mod-playerbots/src/Mgr/BotSessionMgr.cpp's LogoutBotSession, so this is safe
     // to call even from within the target session's own call stack.
     itr->second->LogoutPlayer(true);
@@ -2751,7 +2750,7 @@ void World::KickAll()
     for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
         itr->second->KickPlayer("World::KickAll");
 
-    // Bots live only in m_botSessionsByGuid — KickPlayer is a no-op for socketless sessions.
+    // Bots live only in m_botSessionsByGuid — walk that map; KickPlayer on humans above is socket-only.
     LogoutAllBotSessions();
 }
 
