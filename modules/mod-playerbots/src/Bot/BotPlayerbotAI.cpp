@@ -29,6 +29,7 @@
 #include "Bot/Packet/BotItemPushResultPacket.h"
 #include "Bot/Packet/BotLootResponsePacket.h"
 #include "Bot/Packet/BotLootRollWonPacket.h"
+#include "Bot/Packet/BotStartLootRollPacket.h"
 #include "Bot/Packet/BotTradeStatusPacket.h"
 #include "Bot/Packet/BotTradeUpdatedPacket.h"
 #include "Loot.h"
@@ -96,6 +97,8 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         { SMSG_ITEM_PUSH_RESULT, { "item push result", true } },
         // Cleared unless Layer 2 OK (RollType/Winner + soft group/GetLootRoll). Enable=0: no poll dual.
         { SMSG_LOOT_ROLL_WON, { "loot roll won", true } },
+        // Cleared unless Layer 2 OK (GROUP/NBG Method + live GetLootRoll). Enable=0: no poll dual.
+        { SMSG_START_LOOT_ROLL, { "master loot roll", true } },
     };
 
     auto itr = registry.find(opcode);
@@ -242,7 +245,8 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
         if (signal.Name == "group set leader" || signal.Name == "check mount state" ||
             signal.Name == "cannot equip" || signal.Name == "trade status" ||
             signal.Name == "trade status extended" || signal.Name == "loot response" ||
-            signal.Name == "item push result" || signal.Name == "loot roll won")
+            signal.Name == "item push result" || signal.Name == "loot roll won" ||
+            signal.Name == "master loot roll")
         {
             if (signal.Name == "cannot equip")
                 ClearPendingCannotEquipTell();
@@ -256,6 +260,8 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                 ClearPendingItemPush();
             if (signal.Name == "loot roll won")
                 ClearPendingLootRollWon();
+            if (signal.Name == "master loot roll")
+                ClearPendingMasterLootRoll();
             signal.Name.clear();
         }
         return;
@@ -1052,6 +1058,62 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                     uint32(parsed.RollType),
                     uint32(parsed.Item.UIType),
                     selfWinner ? "yes" : "no");
+            break;
+        }
+        case SMSG_START_LOOT_ROLL:
+        {
+            // Cleared unless Layer 2 OK. Enable=0 / mismatch: no poll dual.
+            signal.Name.clear();
+            ClearPendingMasterLootRoll();
+
+            Playerbots::PacketParse::StartLootRollPayload parsed;
+            if (!Playerbots::PacketParse::TryReadStartLootRoll(*signal.Packet, parsed))
+                return;
+
+            if (!Playerbots::PacketParse::IsStartLootRollMethod(parsed.Method))
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_START_LOOT_ROLL Layer-2 unexpected Method bot={} method={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    uint32(parsed.Method),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            Player* bot = GetBot();
+            if (!bot)
+                return;
+
+            if (!bot->GetLootRoll(parsed.LootObj, parsed.Item.LootListID))
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_START_LOOT_ROLL Layer-2 no live GetLootRoll bot={} lootObj={} listId={} verifiedBuild={}",
+                    bot->GetName(),
+                    parsed.LootObj.ToString(),
+                    uint32(parsed.Item.LootListID),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            // Soft duals (do not hard-fail): group, ItemID, MapID, ValidRolls.
+            PendingMasterLootRoll stash;
+            stash.LootObj = parsed.LootObj;
+            stash.LootListID = parsed.Item.LootListID;
+            stash.ItemID = parsed.Item.Loot.ItemID;
+            SetPendingMasterLootRoll(std::move(stash));
+            signal.Name = "master loot roll";
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_START_LOOT_ROLL ok bot={} lootObj={} listId={} itemId={} method={} validRolls={} mapId={} uiType={}",
+                    bot->GetName(),
+                    parsed.LootObj.ToString(),
+                    uint32(parsed.Item.LootListID),
+                    parsed.Item.Loot.ItemID,
+                    uint32(parsed.Method),
+                    uint32(parsed.ValidRolls),
+                    parsed.MapID,
+                    uint32(parsed.Item.UIType));
             break;
         }
         default:

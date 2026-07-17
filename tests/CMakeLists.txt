@@ -43,7 +43,8 @@ target_sources(tests
     ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotLootResponsePacket.cpp
     ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotLootItemData.cpp
     ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotItemPushResultPacket.cpp
-    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotLootRollWonPacket.cpp)
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotLootRollWonPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotStartLootRollPacket.cpp)
 
 catch_discover_tests(tests)
 

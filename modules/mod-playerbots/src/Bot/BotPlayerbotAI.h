@@ -148,6 +148,18 @@ public:
     void SetPendingLootRollWon(PendingLootRollWon pending) { _pendingLootRollWon = std::move(pending); }
     void ClearPendingLootRollWon() { _pendingLootRollWon.reset(); }
 
+    // SMSG_START_LOOT_ROLL stash for V1 "master loot roll" Pass via HandleLootRoll.
+    // Cleared after MasterLootRollAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingMasterLootRoll
+    {
+        ObjectGuid LootObj;
+        uint8 LootListID = 0;
+        uint32 ItemID = 0;
+    };
+    std::optional<PendingMasterLootRoll> const& GetPendingMasterLootRoll() const { return _pendingMasterLootRoll; }
+    void SetPendingMasterLootRoll(PendingMasterLootRoll pending) { _pendingMasterLootRoll = std::move(pending); }
+    void ClearPendingMasterLootRoll() { _pendingMasterLootRoll.reset(); }
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -189,6 +201,7 @@ private:
     std::optional<PendingLootStore> _pendingLootStore;
     std::optional<PendingItemPush> _pendingItemPush;
     std::optional<PendingLootRollWon> _pendingLootRollWon;
+    std::optional<PendingMasterLootRoll> _pendingMasterLootRoll;
 };
 
 #endif

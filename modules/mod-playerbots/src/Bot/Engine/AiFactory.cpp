@@ -29,6 +29,7 @@
 #include "Bot/Action/ResurrectActions.h"
 #include "Bot/Action/ItemPushResultAction.h"
 #include "Bot/Action/LootRollWonAction.h"
+#include "Bot/Action/MasterLootRollAction.h"
 #include "Bot/Action/TellMasterActions.h"
 #include "Bot/Action/TradeActions.h"
 #include "Bot/Action/NewRpgActions.h"
@@ -161,6 +162,12 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterAction("loot roll won", std::make_unique<LootRollWonAction>(botAI));
     context->RegisterTrigger("loot roll won",
         std::make_unique<SignalTrigger>(botAI, "loot roll won"));
+
+    // Group Need/Greed roll start (AC: "master loot roll" → CountRollVote matrix).
+    // Midnight SMSG_START_LOOT_ROLL; FollowMaster V1 Pass via HandleLootRoll (master-safe).
+    context->RegisterAction("master loot roll", std::make_unique<MasterLootRollAction>(botAI));
+    context->RegisterTrigger("master loot roll",
+        std::make_unique<SignalTrigger>(botAI, "master loot roll"));
 
     // Quest loot open + object interaction (AC: OpenLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));
