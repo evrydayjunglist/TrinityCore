@@ -23,6 +23,7 @@
 #include "Engine.h"
 #include "ObjectGuid.h"
 #include "PlayerbotAIBase.h"
+#include "SharedDefines.h"
 #include "WorldPacket.h"
 #include <memory>
 #include <mutex>
@@ -92,6 +93,12 @@ public:
     void SetPendingCannotEquipTell(std::string text) { _pendingCannotEquipTell = std::move(text); }
     void ClearPendingCannotEquipTell() { _pendingCannotEquipTell.clear(); }
 
+    // Last Layer-2-OK SMSG_TRADE_STATUS for V1 accept-trade (PROPOSED / ACCEPTED). Cleared
+    // after AcceptTradeAction runs (or on Layer fail / Enable=0). Tick-thread only.
+    std::optional<::TradeStatus> GetPendingTradeStatus() const { return _pendingTradeStatus; }
+    void SetPendingTradeStatus(::TradeStatus status) { _pendingTradeStatus = status; }
+    void ClearPendingTradeStatus() { _pendingTradeStatus.reset(); }
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -128,6 +135,7 @@ private:
     std::vector<PendingSignal> _pendingSignals;
     ObjectGuid _pendingPetitionOffer;
     std::string _pendingCannotEquipTell;
+    std::optional<::TradeStatus> _pendingTradeStatus;
 };
 
 #endif

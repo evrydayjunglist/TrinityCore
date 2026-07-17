@@ -68,4 +68,8 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // "tell cannot equip"). Signal-only after SMSG_INVENTORY_CHANGE_FAILURE Layer-2 OK
     // with a V1 message-map hit; AC duplicate name "inventory change failure" not wired.
     triggers.push_back(new TriggerNode("cannot equip", { NextAction("tell cannot equip", 100.0f) }));
+
+    // Trade propose/accept (AC WorldPacketHandlerStrategy "trade status" → "accept trade").
+    // Signal-only after SMSG_TRADE_STATUS Layer-2 OK for PROPOSED/ACCEPTED; no poll dual.
+    triggers.push_back(new TriggerNode("trade status", { NextAction("accept trade", 100.0f) }));
 }

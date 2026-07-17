@@ -26,6 +26,8 @@
 #include "Bot/Packet/BotPartyInvitePacket.h"
 #include "Bot/Packet/BotPacketParse.h"
 #include "Bot/Packet/BotResurrectRequestPacket.h"
+#include "Bot/Packet/BotTradeStatusPacket.h"
+#include "TradeData.h"
 #include "Creature.h"
 #include "DB2Stores.h"
 #include "Engine.h"
@@ -76,6 +78,9 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         // AC registered the same opcode twice ("cannot equip" / "inventory change failure").
         // One TC SMSG; V1 fires the strategy-wired name only. Cleared unless Layer 2 OK.
         { SMSG_INVENTORY_CHANGE_FAILURE, { "cannot equip", true } },
+        // Cleared unless Layer 2 OK and Status is PROPOSED/ACCEPTED (V1 begin/accept).
+        // Enable=0 / other statuses: no poll dual for trade window.
+        { SMSG_TRADE_STATUS, { "trade status", true } },
     };
 
     auto itr = registry.find(opcode);
@@ -220,10 +225,12 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
     {
         // Parse-gated reactions with no poll dual: do not fire when PayloadParse is off.
         if (signal.Name == "group set leader" || signal.Name == "check mount state" ||
-            signal.Name == "cannot equip")
+            signal.Name == "cannot equip" || signal.Name == "trade status")
         {
             if (signal.Name == "cannot equip")
                 ClearPendingCannotEquipTell();
+            if (signal.Name == "trade status")
+                ClearPendingTradeStatus();
             signal.Name.clear();
         }
         return;
@@ -606,6 +613,85 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                     parsed.Item[1].ToString(),
                     parsed.Level,
                     parsed.LimitCategory);
+            break;
+        }
+        case SMSG_TRADE_STATUS:
+        {
+            // Cleared unless Layer 2 OK + V1 Status (PROPOSED / ACCEPTED). Other statuses
+            // parse-ok DEBUG only (COMPLETE/CANCELLED may race TradeData clear — OK).
+            signal.Name.clear();
+            ClearPendingTradeStatus();
+
+            Playerbots::PacketParse::TradeStatusPayload parsed;
+            if (!Playerbots::PacketParse::TryReadTradeStatus(*signal.Packet, parsed))
+                return;
+
+            if (!Playerbots::PacketParse::IsKnownTradeStatus(parsed.Status))
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_TRADE_STATUS Layer-2 unknown Status bot={} status={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    uint32(parsed.Status),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            Player* bot = GetBot();
+            TradeData* trade = bot ? bot->GetTradeData() : nullptr;
+            Player* trader = trade ? trade->GetTrader() : nullptr;
+
+            if (parsed.Status == TRADE_STATUS_PROPOSED)
+            {
+                if (parsed.Partner.IsEmpty() || !trade || !trader ||
+                    parsed.Partner != trader->GetGUID())
+                {
+                    TC_LOG_ERROR("playerbots.packet",
+                        "BotPacketParse SMSG_TRADE_STATUS Layer-2 PROPOSED mismatch bot={} partner={} liveTrader={} verifiedBuild={}",
+                        bot ? bot->GetName() : "?",
+                        parsed.Partner.ToString(),
+                        trader ? trader->GetGUID().ToString() : "none",
+                        Playerbots::PacketParse::VERIFIED_BUILD);
+                    return;
+                }
+
+                SetPendingTradeStatus(TRADE_STATUS_PROPOSED);
+                signal.Name = "trade status";
+            }
+            else if (parsed.Status == TRADE_STATUS_ACCEPTED)
+            {
+                // Prefer live TradeData while accept is in flight; if already cleared, parse-only.
+                if (!trade || !trader)
+                {
+                    if (Playerbots::GetLogLevel() >= 1)
+                        TC_LOG_DEBUG("playerbots.packet",
+                            "BotPacketParse SMSG_TRADE_STATUS ok (ACCEPTED, no live trade) bot={}",
+                            bot ? bot->GetName() : "?");
+                    return;
+                }
+
+                SetPendingTradeStatus(TRADE_STATUS_ACCEPTED);
+                signal.Name = "trade status";
+            }
+            else
+            {
+                // INITIATED / COMPLETE / CANCELLED / … — Layer-2 OK when Status known.
+                // TradeData may already be gone on COMPLETE/CANCELLED; do not Layer-2 ERROR.
+                if (Playerbots::GetLogLevel() >= 1)
+                    TC_LOG_DEBUG("playerbots.packet",
+                        "BotPacketParse SMSG_TRADE_STATUS ok (no V1 AI) bot={} status={} hasTrade={}",
+                        bot ? bot->GetName() : "?",
+                        uint32(parsed.Status),
+                        trade ? "yes" : "no");
+                return;
+            }
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_TRADE_STATUS ok bot={} status={} partner={} sameBnet={}",
+                    bot ? bot->GetName() : "?",
+                    uint32(parsed.Status),
+                    parsed.Partner.ToString(),
+                    parsed.PartnerIsSameBnetAccount ? "yes" : "no");
             break;
         }
         default:

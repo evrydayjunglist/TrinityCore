@@ -28,6 +28,7 @@
 #include "Bot/Action/PetitionActions.h"
 #include "Bot/Action/ResurrectActions.h"
 #include "Bot/Action/TellMasterActions.h"
+#include "Bot/Action/TradeActions.h"
 #include "Bot/Action/NewRpgActions.h"
 #include "Bot/Action/QuestGiverAction.h"
 #include "Bot/Action/TalkToQuestNpcAction.h"
@@ -126,6 +127,12 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterAction("tell cannot equip", std::make_unique<TellCannotEquipAction>(botAI));
     context->RegisterTrigger("cannot equip",
         std::make_unique<SignalTrigger>(botAI, "cannot equip"));
+
+    // Trade window (AC: "trade status" → "accept trade"). Midnight SMSG_TRADE_STATUS;
+    // V1 master-alt begin (PROPOSED) + accept (ACCEPTED) only. FollowMaster V1.
+    context->RegisterAction("accept trade", std::make_unique<AcceptTradeAction>(botAI));
+    context->RegisterTrigger("trade status",
+        std::make_unique<SignalTrigger>(botAI, "trade status"));
 
     // Quest loot + object interaction (AC: OpenLootAction/StoreLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));
