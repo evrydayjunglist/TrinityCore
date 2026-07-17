@@ -15,23 +15,25 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_PLAYERBOT_PASSIVE_STRATEGY_H
-#define TRINITY_PLAYERBOT_PASSIVE_STRATEGY_H
+#ifndef TRINITY_BOT_BUY_FAILED_PACKET_H
+#define TRINITY_BOT_BUY_FAILED_PACKET_H
 
-#include "Strategy.h"
+#include "ItemDefines.h"
+#include "ObjectGuid.h"
+#include "WorldPacket.h"
 
-class BotPlayerbotAI;
-
-// AC reference: mod-playerbots-master/src/Ai/Base/Strategy/PassiveStrategy.h
-// Gate 6 baseline: no movement/combat defaults. May hold always-on lifecycle accepts
-// (resurrect request, petition sign) for bots that keep +passive without NewRpg/Follow.
-class PassiveStrategy : public Strategy
+namespace Playerbots::PacketParse
 {
-public:
-    explicit PassiveStrategy(BotPlayerbotAI* botAI) : Strategy(botAI) { }
-
-    std::string GetName() override { return "passive"; }
-    void InitTriggers(std::vector<TriggerNode*>& triggers) override;
+// Fields mirrored from WorldPackets::Item::BuyFailed::Write().
+struct BuyFailedPayload
+{
+    ObjectGuid VendorGUID;
+    uint32 Muid = 0u;
+    BuyResult Reason = BUY_ERR_CANT_FIND_ITEM;
 };
+
+// Returns true on Layer-1 success (full consume, no exception). Does not perform Layer 2.
+bool TryReadBuyFailed(WorldPacket const& packet, BuyFailedPayload& out);
+}
 
 #endif

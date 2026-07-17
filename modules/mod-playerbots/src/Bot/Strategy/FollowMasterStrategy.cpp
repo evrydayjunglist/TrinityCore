@@ -44,4 +44,15 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // NewRpg's death band (HasMaster short-circuit), so follow must own this path.
     triggers.push_back(new TriggerNode("resurrect request signal", { NextAction("accept resurrect", 100.0f) }));
     triggers.push_back(new TriggerNode("resurrect request", { NextAction("accept resurrect", 100.0f) }));
+
+    // Master-offered guild charter (AC WorldPacketHandlerStrategy "petition offer" →
+    // "petition sign"). Signal + weak stash poll; Choice = 0 via HandleSignPetition.
+    triggers.push_back(new TriggerNode("petition offer signal", { NextAction("petition sign", 100.0f) }));
+    triggers.push_back(new TriggerNode("petition offer", { NextAction("petition sign", 100.0f) }));
+
+    // Vendor buy failed (AC WorldPacketHandlerStrategy "not enough money" /
+    // "not enough reputation" → tell). Signal-only after SMSG_BUY_FAILED Reason dispatch;
+    // no Player pending-buy poll dual.
+    triggers.push_back(new TriggerNode("not enough money", { NextAction("tell not enough money", 100.0f) }));
+    triggers.push_back(new TriggerNode("not enough reputation", { NextAction("tell not enough reputation", 100.0f) }));
 }

@@ -233,7 +233,13 @@ void DelayedUnitRelocation::Visit(PlayerMapType &m)
             continue;
 
         PlayerRelocationNotifier relocate(*player);
-        Cell::VisitAllObjects(viewPoint, relocate, i_radius, false);
+        // dont_load=true: honour Cell::VisitAllObjects default and the outer ProcessRelocationNotifies
+        // SetNoCreate. Explicit false here cold-loads every visibility-neighbour grid (terrain/VMAP/MMAP
+        // disk I/O) on the map tick — under high Player density (e.g. playerbots) that serialises into
+        // FreezeDetector aborts (class 3). Visibility for not-yet-loaded cells catches up when those
+        // grids become resident via enter-cell / EnsureGridLoadedForActiveObject. See
+        // playerbots-freeze-relocation-visibility-cold-load-handoff.md § C2.
+        Cell::VisitAllObjects(viewPoint, relocate, i_radius, true);
         relocate.SendToSelf();
     }
 }

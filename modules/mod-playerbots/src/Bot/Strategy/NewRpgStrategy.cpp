@@ -60,6 +60,10 @@ void NewRpgStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("resurrect request signal", { NextAction("accept resurrect", 100.0f) }));
     triggers.push_back(new TriggerNode("resurrect request", { NextAction("accept resurrect", 100.0f) }));
 
+    // Guild charter offer (AC "petition offer" → "petition sign") for random/newrpg bots.
+    triggers.push_back(new TriggerNode("petition offer signal", { NextAction("petition sign", 100.0f) }));
+    triggers.push_back(new TriggerNode("petition offer", { NextAction("petition sign", 100.0f) }));
+
     // AC trigger-name vocabulary; handlers point at this fork's registered action names.
     triggers.push_back(new TriggerNode("go grind status", { NextAction("new rpg go grind", 3.0f) }));
     triggers.push_back(new TriggerNode("go camp status", { NextAction("new rpg go camp", 3.0f) }));

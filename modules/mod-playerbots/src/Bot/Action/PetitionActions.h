@@ -15,23 +15,22 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_PLAYERBOT_PASSIVE_STRATEGY_H
-#define TRINITY_PLAYERBOT_PASSIVE_STRATEGY_H
+#ifndef TRINITY_PLAYERBOT_PETITION_ACTIONS_H
+#define TRINITY_PLAYERBOT_PETITION_ACTIONS_H
 
-#include "Strategy.h"
+#include "Action.h"
 
 class BotPlayerbotAI;
 
-// AC reference: mod-playerbots-master/src/Ai/Base/Strategy/PassiveStrategy.h
-// Gate 6 baseline: no movement/combat defaults. May hold always-on lifecycle accepts
-// (resurrect request, petition sign) for bots that keep +passive without NewRpg/Follow.
-class PassiveStrategy : public Strategy
+// AC: PetitionSignAction — sign a master-offered guild charter (V1 master-alt only).
+// Socketless bots call TC HandleSignPetition (Choice = 0 accept; not AC CMSG_PETITION_SIGN bytes).
+class PetitionSignAction : public Action
 {
 public:
-    explicit PassiveStrategy(BotPlayerbotAI* botAI) : Strategy(botAI) { }
+    explicit PetitionSignAction(BotPlayerbotAI* botAI) : Action(botAI, "petition sign") { }
 
-    std::string GetName() override { return "passive"; }
-    void InitTriggers(std::vector<TriggerNode*>& triggers) override;
+    bool Execute(Event event) override;
+    bool IsUseful() override;
 };
 
 #endif

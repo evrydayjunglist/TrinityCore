@@ -26,6 +26,9 @@
 #include "DB2Stores.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
+#include "Opcodes.h"
+#include "PetitionMgr.h"
+#include "PetitionPackets.h"
 #include "Player.h"
 #include "PlayerbotMgr.h"
 #include "Playerbots.h"
@@ -36,6 +39,7 @@
 #include "RandomPlayerbotMgr.h"
 #include "RBAC.h"
 #include "Util.h"
+#include "WorldPacket.h"
 #include "WorldSession.h"
 
 namespace
@@ -189,11 +193,19 @@ public:
             { "stop",   HandlePlayerbotRndbotStopCommand,   rbac::RBAC_PERM_COMMAND_GM, Console::No },
         };
 
+        // Playtest harness: Midnight client greys out charter "Request Signature" for socketless
+        // bots even when account/faction/range are valid — force the real HandleOfferPetition path.
+        static ChatCommandTable playerbotsPetitionCommandTable =
+        {
+            { "offer", HandlePlayerbotPetitionOfferCommand, rbac::RBAC_PERM_COMMAND_GM, Console::No },
+        };
+
         static ChatCommandTable playerbotsCommandTable =
         {
             { "bot",    playerbotsBotCommandTable },
             { "rndbot", playerbotsRndbotCommandTable },
             { "account", playerbotsAccountCommandTable },
+            { "petition", playerbotsPetitionCommandTable },
             // TC extensions (socketless GM bots on reserved accounts — Gates 3–4):
             { "login",  HandlePlayerbotsLoginCommand,     rbac::RBAC_PERM_COMMAND_GM,   Console::No },
             { "logout", HandlePlayerbotsLogoutCommand,    rbac::RBAC_PERM_COMMAND_GM,   Console::No },
@@ -272,6 +284,52 @@ public:
         if (filterName.empty())
             handler->SendSysMessage("Playerbots: GM — .playerbot login/logout. Master-alt — .playerbot bot add/remove/list/logout. Tip: '.playerbot status <name>' or target a bot to inspect just one.");
 
+        return true;
+    }
+
+    static bool HandlePlayerbotPetitionOfferCommand(ChatHandler* handler, Optional<std::string> targetName)
+    {
+        if (!Playerbots::IsEnabled())
+        {
+            handler->SendSysMessage("Playerbots: module loaded, disabled (Playerbots.Enable = 0).");
+            return true;
+        }
+
+        Player* offerer = handler->GetPlayer();
+        if (!offerer || !offerer->GetSession())
+        {
+            handler->SendSysMessage("Playerbots: .playerbot petition offer requires an in-game session.");
+            return false;
+        }
+
+        Player* target = nullptr;
+        if (targetName && !targetName->empty())
+            target = ObjectAccessor::FindPlayerByName(*targetName);
+        else
+            target = handler->getSelectedPlayer();
+
+        if (!target)
+        {
+            handler->SendSysMessage("Playerbots: select a player or pass a name (.playerbot petition offer Sada).");
+            return false;
+        }
+
+        Petition const* petition = sPetitionMgr->GetPetitionByOwner(offerer->GetGUID());
+        if (!petition)
+        {
+            handler->SendSysMessage("Playerbots: you have no open guild petition (buy/register a charter first).");
+            return false;
+        }
+
+        WorldPacket data(CMSG_OFFER_PETITION);
+        WorldPackets::Petition::OfferPetition packet(std::move(data));
+        packet.ItemGUID = petition->PetitionGuid;
+        packet.TargetPlayer = target->GetGUID();
+        offerer->GetSession()->HandleOfferPetition(packet);
+
+        handler->PSendSysMessage(
+            "Playerbots: offered petition '%s' to %s via HandleOfferPetition (client Request Signature bypass).",
+            petition->PetitionName.c_str(), target->GetName().c_str());
         return true;
     }
 

@@ -21,12 +21,14 @@
 #include "AiObjectContext.h"
 #include "Bot/Rpg/NewRpgInfo.h"
 #include "Engine.h"
+#include "ObjectGuid.h"
 #include "PlayerbotAIBase.h"
 #include "WorldPacket.h"
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
 
@@ -74,6 +76,16 @@ public:
     // first trigger to test its signal name this tick claims it; returns false once consumed.
     bool ConsumeSignal(std::string const& name);
 
+    // Minimal AC TellMaster shape: whisper to master. No-master → DEBUG only (no say spam).
+    // Tick-thread only.
+    bool TellMaster(std::string_view text);
+
+    // Last Layer-2-OK SMSG_PETITION_SHOW_SIGNATURES item GUID (master-offered charter). Cleared
+    // after PetitionSignAction runs. Tick-thread only.
+    ObjectGuid GetPendingPetitionOffer() const { return _pendingPetitionOffer; }
+    void SetPendingPetitionOffer(ObjectGuid guid) { _pendingPetitionOffer = guid; }
+    void ClearPendingPetitionOffer() { _pendingPetitionOffer = ObjectGuid::Empty; }
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -108,6 +120,7 @@ private:
     std::mutex _signalMutex;
     std::vector<QueuedSignal> _signalQueue;
     std::vector<PendingSignal> _pendingSignals;
+    ObjectGuid _pendingPetitionOffer;
 };
 
 #endif

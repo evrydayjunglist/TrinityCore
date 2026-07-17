@@ -17,18 +17,27 @@
 
 #include "BotPlayerbotAI.h"
 #include "AiFactory.h"
+#include "Bot/Packet/BotBuyFailedPacket.h"
 #include "Bot/Packet/BotGuildInvitePacket.h"
+#include "Bot/Packet/BotPetitionShowSignaturesPacket.h"
 #include "Bot/Packet/BotPartyInvitePacket.h"
 #include "Bot/Packet/BotPacketParse.h"
 #include "Bot/Packet/BotResurrectRequestPacket.h"
+#include "Creature.h"
+#include "DB2Stores.h"
 #include "Engine.h"
 #include "Group.h"
+#include "ItemDefines.h"
 #include "Log.h"
+#include "Map.h"
+#include "ObjectMgr.h"
 #include "Opcodes.h"
+#include "PetitionMgr.h"
 #include "Player.h"
 #include "PlayerbotsConfig.h"
 #include "Random.h"
 #include "RandomPlayerbotMgr.h"
+#include "SharedDefines.h"
 #include "WorldPacket.h"
 #include <algorithm>
 #include <unordered_map>
@@ -50,10 +59,33 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         { SMSG_PARTY_INVITE, { "group invite signal", true } },
         { SMSG_GUILD_INVITE, { "guild invite signal", true } },
         { SMSG_RESURRECT_REQUEST, { "resurrect request signal", true } },
+        { SMSG_PETITION_SHOW_SIGNATURES, { "petition offer signal", true } },
+        // Placeholder name rewritten in ProcessPayloadOnTick to AC "not enough money" /
+        // "not enough reputation" (or cleared for other BuyResult reasons).
+        { SMSG_BUY_FAILED, { "buy failed", true } },
     };
 
     auto itr = registry.find(opcode);
     return itr != registry.end() ? &itr->second : nullptr;
+}
+
+bool IsKnownBuyResult(BuyResult reason)
+{
+    switch (reason)
+    {
+        case BUY_ERR_CANT_FIND_ITEM:
+        case BUY_ERR_ITEM_ALREADY_SOLD:
+        case BUY_ERR_NOT_ENOUGHT_MONEY:
+        case BUY_ERR_SELLER_DONT_LIKE_YOU:
+        case BUY_ERR_DISTANCE_TOO_FAR:
+        case BUY_ERR_ITEM_SOLD_OUT:
+        case BUY_ERR_CANT_CARRY_MORE:
+        case BUY_ERR_RANK_REQUIRE:
+        case BUY_ERR_REPUTATION_REQUIRE:
+            return true;
+        default:
+            return false;
+    }
 }
 
 constexpr size_t BOT_SIGNAL_QUEUE_MAX = 32;
@@ -143,6 +175,23 @@ bool BotPlayerbotAI::ConsumeSignal(std::string const& name)
         return false;
 
     _pendingSignals.erase(itr);
+    return true;
+}
+
+bool BotPlayerbotAI::TellMaster(std::string_view text)
+{
+    Player* bot = GetBot();
+    Player* master = GetMaster();
+    if (!bot || !master)
+    {
+        if (Playerbots::GetLogLevel() >= 1)
+            TC_LOG_DEBUG("playerbots", "TellMaster skipped (no master) bot={} text='{}'",
+                bot ? bot->GetName() : "?",
+                text);
+        return false;
+    }
+
+    bot->Whisper(text, LANG_UNIVERSAL, master);
     return true;
 }
 
@@ -245,6 +294,124 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                     parsed.SpellID);
             break;
         }
+        case SMSG_PETITION_SHOW_SIGNATURES:
+        {
+            Playerbots::PacketParse::PetitionShowSignaturesPayload parsed;
+            if (!Playerbots::PacketParse::TryReadPetitionShowSignatures(*signal.Packet, parsed))
+                return;
+
+            // Layer 2: PetitionMgr item/owner dual (+ PetitionID == item counter).
+            Petition const* petition = sPetitionMgr->GetPetition(parsed.Item);
+            bool const layer2Ok = petition
+                && petition->OwnerGuid == parsed.Owner
+                && int32(parsed.Item.GetCounter()) == parsed.PetitionID;
+            if (!layer2Ok)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_PETITION_SHOW_SIGNATURES Layer-2 mismatch bot={} parsedItem={} parsedOwner={} petitionId={} liveOwner={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    parsed.Item.ToString(),
+                    parsed.Owner.ToString(),
+                    parsed.PetitionID,
+                    petition ? petition->OwnerGuid.ToString() : "none",
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            SetPendingPetitionOffer(parsed.Item);
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_PETITION_SHOW_SIGNATURES ok bot={} item={} owner={} petitionId={} signatures={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    parsed.Item.ToString(),
+                    parsed.Owner.ToString(),
+                    parsed.PetitionID,
+                    parsed.Signatures.size());
+            break;
+        }
+        case SMSG_BUY_FAILED:
+        {
+            // AC registered BUY_ERR_* as fake opcodes; TC sends one SMSG_BUY_FAILED — dispatch
+            // by Reason to AC signal names. Clear placeholder for non-V1 reasons.
+            signal.Name.clear();
+
+            Playerbots::PacketParse::BuyFailedPayload parsed;
+            if (!Playerbots::PacketParse::TryReadBuyFailed(*signal.Packet, parsed))
+                return;
+
+            if (!IsKnownBuyResult(parsed.Reason))
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_BUY_FAILED Layer-2 unknown Reason bot={} reason={} muid={} vendor={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    int32(parsed.Reason),
+                    parsed.Muid,
+                    parsed.VendorGUID.ToString(),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            // V1 accept path: money / reputation only. Other known reasons parse-ok then ignore.
+            if (parsed.Reason != BUY_ERR_NOT_ENOUGHT_MONEY && parsed.Reason != BUY_ERR_REPUTATION_REQUIRE)
+            {
+                if (Playerbots::GetLogLevel() >= 1)
+                    TC_LOG_DEBUG("playerbots.packet",
+                        "BotPacketParse SMSG_BUY_FAILED ignored (non-V1 Reason) bot={} reason={} muid={}",
+                        GetBot() ? GetBot()->GetName() : "?",
+                        int32(parsed.Reason),
+                        parsed.Muid);
+                return;
+            }
+
+            Player* bot = GetBot();
+            if (parsed.Muid != 0)
+            {
+                bool const itemOk = sObjectMgr->GetItemTemplate(parsed.Muid) != nullptr;
+                bool const currencyOk = sCurrencyTypesStore.LookupEntry(parsed.Muid) != nullptr;
+                if (!itemOk && !currencyOk)
+                {
+                    TC_LOG_ERROR("playerbots.packet",
+                        "BotPacketParse SMSG_BUY_FAILED Layer-2 unknown Muid bot={} muid={} reason={} verifiedBuild={}",
+                        bot ? bot->GetName() : "?",
+                        parsed.Muid,
+                        int32(parsed.Reason),
+                        Playerbots::PacketParse::VERIFIED_BUILD);
+                    return;
+                }
+            }
+
+            if (!parsed.VendorGUID.IsEmpty())
+            {
+                // Map-local only — do not cold-query remote maps (map-thread guardrails).
+                Map* map = bot ? bot->GetMap() : nullptr;
+                Creature* vendor = map ? map->GetCreature(parsed.VendorGUID) : nullptr;
+                if (!vendor)
+                {
+                    TC_LOG_ERROR("playerbots.packet",
+                        "BotPacketParse SMSG_BUY_FAILED Layer-2 vendor not on bot map bot={} vendor={} reason={} verifiedBuild={}",
+                        bot ? bot->GetName() : "?",
+                        parsed.VendorGUID.ToString(),
+                        int32(parsed.Reason),
+                        Playerbots::PacketParse::VERIFIED_BUILD);
+                    return;
+                }
+            }
+
+            signal.Name = (parsed.Reason == BUY_ERR_NOT_ENOUGHT_MONEY)
+                ? "not enough money"
+                : "not enough reputation";
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_BUY_FAILED ok bot={} signal='{}' vendor={} muid={} reason={}",
+                    bot ? bot->GetName() : "?",
+                    signal.Name,
+                    parsed.VendorGUID.ToString(),
+                    parsed.Muid,
+                    int32(parsed.Reason));
+            break;
+        }
         default:
             break;
     }
@@ -261,6 +428,11 @@ void BotPlayerbotAI::UpdateAIInternal(uint32 diff)
     for (QueuedSignal& queued : drained)
     {
         ProcessPayloadOnTick(queued);
+
+        // Buy-failed clears Name on non-V1 / Layer fail; placeholder "buy failed" must never
+        // reach pending (PayloadParse off, or rewrite skipped).
+        if (queued.Name.empty() || queued.Name == "buy failed")
+            continue;
 
         if (_pendingSignals.size() >= BOT_SIGNAL_PENDING_MAX)
         {

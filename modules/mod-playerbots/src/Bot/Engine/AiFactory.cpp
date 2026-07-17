@@ -24,7 +24,9 @@
 #include "Bot/Action/GroupActions.h"
 #include "Bot/Action/GuildActions.h"
 #include "Bot/Action/LootAction.h"
+#include "Bot/Action/PetitionActions.h"
 #include "Bot/Action/ResurrectActions.h"
+#include "Bot/Action/TellMasterActions.h"
 #include "Bot/Action/NewRpgActions.h"
 #include "Bot/Action/QuestGiverAction.h"
 #include "Bot/Action/TalkToQuestNpcAction.h"
@@ -37,6 +39,7 @@
 #include "Bot/Trigger/GroupTriggers.h"
 #include "Bot/Trigger/GuildTriggers.h"
 #include "Bot/Trigger/NewRpgTriggers.h"
+#include "Bot/Trigger/PetitionTriggers.h"
 #include "Bot/Trigger/ResurrectTriggers.h"
 #include "Bot/Trigger/SignalTrigger.h"
 #include "BotPlayerbotAI.h"
@@ -83,6 +86,26 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterTrigger("resurrect request signal",
         std::make_unique<SignalTrigger>(botAI, "resurrect request signal"));
     context->RegisterTrigger("resurrect request", std::make_unique<ResurrectRequestTrigger>(botAI));
+
+    // Guild charter sign (AC: "petition offer" → "petition sign"). Layered parse stashes Item
+    // GUID; HandleSignPetition Choice = 0. Wired follow + newrpg + passive: same-account
+    // master-alts cannot use client Request Signature; GM `.playerbot login` uses +passive.
+    context->RegisterAction("petition sign", std::make_unique<PetitionSignAction>(botAI));
+    context->RegisterTrigger("petition offer signal",
+        std::make_unique<SignalTrigger>(botAI, "petition offer signal"));
+    context->RegisterTrigger("petition offer", std::make_unique<PetitionOfferTrigger>(botAI));
+
+    // Vendor buy-failed tell-master (AC: "not enough money" / "not enough reputation" →
+    // TellMasterAction fixed strings). One TC opcode SMSG_BUY_FAILED; Reason dispatch in
+    // ProcessPayloadOnTick. FollowMaster V1 only (master-alt vendor playtest).
+    context->RegisterAction("tell not enough money",
+        std::make_unique<TellMasterAction>(botAI, "tell not enough money", "Not enough money"));
+    context->RegisterAction("tell not enough reputation",
+        std::make_unique<TellMasterAction>(botAI, "tell not enough reputation", "Not enough reputation"));
+    context->RegisterTrigger("not enough money",
+        std::make_unique<SignalTrigger>(botAI, "not enough money"));
+    context->RegisterTrigger("not enough reputation",
+        std::make_unique<SignalTrigger>(botAI, "not enough reputation"));
 
     // Quest loot + object interaction (AC: OpenLootAction/StoreLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));

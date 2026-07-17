@@ -15,23 +15,22 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_PLAYERBOT_PASSIVE_STRATEGY_H
-#define TRINITY_PLAYERBOT_PASSIVE_STRATEGY_H
+#ifndef TRINITY_PLAYERBOT_PETITION_TRIGGERS_H
+#define TRINITY_PLAYERBOT_PETITION_TRIGGERS_H
 
-#include "Strategy.h"
+#include "Trigger.h"
 
 class BotPlayerbotAI;
 
-// AC reference: mod-playerbots-master/src/Ai/Base/Strategy/PassiveStrategy.h
-// Gate 6 baseline: no movement/combat defaults. May hold always-on lifecycle accepts
-// (resurrect request, petition sign) for bots that keep +passive without NewRpg/Follow.
-class PassiveStrategy : public Strategy
+// Active while Layer-2 left a pending master-offered petition GUID on the bot AI.
+// Weak poll fallback when the consume-on-read signal expires before the action runs;
+// does not poll GetPetitionByOwner alone (that would fire whenever the master holds a charter).
+class PetitionOfferTrigger : public Trigger
 {
 public:
-    explicit PassiveStrategy(BotPlayerbotAI* botAI) : Strategy(botAI) { }
+    explicit PetitionOfferTrigger(BotPlayerbotAI* botAI) : Trigger(botAI, "petition offer") { }
 
-    std::string GetName() override { return "passive"; }
-    void InitTriggers(std::vector<TriggerNode*>& triggers) override;
+    bool IsActive() override;
 };
 
 #endif

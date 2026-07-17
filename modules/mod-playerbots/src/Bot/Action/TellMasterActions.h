@@ -15,23 +15,28 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_PLAYERBOT_PASSIVE_STRATEGY_H
-#define TRINITY_PLAYERBOT_PASSIVE_STRATEGY_H
+#ifndef TRINITY_PLAYERBOT_TELL_MASTER_ACTIONS_H
+#define TRINITY_PLAYERBOT_TELL_MASTER_ACTIONS_H
 
-#include "Strategy.h"
+#include "Action.h"
+#include <string>
+#include <utility>
 
 class BotPlayerbotAI;
 
-// AC reference: mod-playerbots-master/src/Ai/Base/Strategy/PassiveStrategy.h
-// Gate 6 baseline: no movement/combat defaults. May hold always-on lifecycle accepts
-// (resurrect request, petition sign) for bots that keep +passive without NewRpg/Follow.
-class PassiveStrategy : public Strategy
+// Minimal AC TellMasterAction shape: whisper a fixed string to the master.
+// No AC security/facing / TellMasterNoFacing port — V1 whisper only.
+class TellMasterAction : public Action
 {
 public:
-    explicit PassiveStrategy(BotPlayerbotAI* botAI) : Strategy(botAI) { }
+    TellMasterAction(BotPlayerbotAI* botAI, std::string name, std::string text)
+        : Action(botAI, std::move(name)), _text(std::move(text)) { }
 
-    std::string GetName() override { return "passive"; }
-    void InitTriggers(std::vector<TriggerNode*>& triggers) override;
+    bool Execute(Event event) override;
+    bool IsUseful() override;
+
+private:
+    std::string _text;
 };
 
 #endif
