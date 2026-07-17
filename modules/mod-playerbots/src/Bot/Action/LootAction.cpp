@@ -24,61 +24,22 @@
 #include "ItemTemplate.h"
 #include "Log.h"
 #include "Loot.h"
+#include "LootPackets.h"
+#include "LootQuestFilter.h"
 #include "MotionMaster.h"
 #include "ObjectDefines.h"
-#include "ObjectMgr.h"
+#include "Opcodes.h"
 #include "Player.h"
 #include "PlayerbotsConfig.h"
-#include "QuestDef.h"
 #include "SafeMovement.h"
-#include "SpellAuraDefines.h"
-#include "Util.h"
+#include "WorldPacket.h"
 #include "WorldSession.h"
 
-// AC reference: mod-playerbots-master/src/Ai/Base/Actions/LootAction.cpp (OpenLootAction::DoLoot,
-// StoreLootAction::Execute/IsLootAllowed). TC-native/packetless adaptations are documented in
-// LootAction.h and inline below.
+// AC reference: mod-playerbots-master OpenLootAction / StoreLootAction. Open stays SendLoot for
+// now; store is Handle*-only via StoreLootAction (see packetless-retirement inventory).
 
 namespace
 {
-// AC's IsLootAllowed quest core: an item is worth storing if it starts a quest, or it satisfies an
-// incomplete ITEM objective in one of the bot's own quests. Everything else is left on the corpse
-// in the default (quest-only) mode so looting never becomes gear/vendor churn (Gate 18 scope).
-bool IsQuestRelevantItem(Player* bot, uint32 itemId)
-{
-    if (!itemId)
-        return false;
-
-    if (ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId))
-        if (proto->GetStartQuest() != 0)
-            return true;
-
-    for (uint16 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
-    {
-        uint32 const questId = bot->GetQuestSlotQuestId(slot);
-        if (!questId)
-            continue;
-
-        Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
-        if (!quest)
-            continue;
-
-        for (QuestObjective const& objective : quest->Objectives)
-        {
-            if (objective.Type != QUEST_OBJECTIVE_ITEM)
-                continue;
-
-            if (uint32(objective.ObjectID) != itemId)
-                continue;
-
-            if (!bot->IsQuestObjectiveComplete(slot, quest, objective))
-                return true;
-        }
-    }
-
-    return false;
-}
-
 bool LootHasRelevantItem(Player* bot, Loot const* loot, bool questOnly)
 {
     if (!loot)
@@ -93,7 +54,7 @@ bool LootHasRelevantItem(Player* bot, Loot const* loot, bool questOnly)
         if (!slotType || (*slotType != LOOT_SLOT_TYPE_ALLOW_LOOT && *slotType != LOOT_SLOT_TYPE_OWNER))
             continue;
 
-        if (questOnly && !IsQuestRelevantItem(bot, item.itemid))
+        if (questOnly && !Playerbots::IsQuestRelevantLootItem(bot, item.itemid))
             continue;
 
         // Don't count a corpse as worth approaching if the bot can't actually store the item
@@ -165,63 +126,6 @@ Creature* FindNearbyLootableCorpse(Player* bot, float range, bool questOnly)
 
     return result;
 }
-
-// Stores every allowed, quest-relevant slot from every loot window currently open on the bot, then
-// closes those windows — the packetless equivalent of the client's autostore-then-release flow
-// (WorldSession::HandleAutostoreLootItemOpcode + HandleLootMoneyOpcode + DoLootRelease). Returns how
-// many item slots were taken. The AE view is copied first because StoreLootItem/DoLootRelease mutate
-// it as loot is consumed.
-uint32 StoreOpenLoot(Player* bot, bool questOnly, bool lootMoney)
-{
-    uint32 stored = 0;
-
-    std::unordered_map<ObjectGuid, Loot*> const view = bot->GetAELootView();
-    std::vector<Loot*> toRelease;
-    toRelease.reserve(view.size());
-
-    for (auto const& [lootGuid, loot] : view)
-    {
-        if (!loot)
-            continue;
-
-        // Money (single-player branch of HandleLootMoneyOpcode — bots are solo).
-        if (lootMoney && loot->gold > 0)
-        {
-            uint64 const goldMod = CalculatePct(loot->gold,
-                bot->GetTotalAuraModifierByMiscValue(SPELL_AURA_MOD_MONEY_GAIN, 1));
-            bot->ModifyMoney(loot->gold + goldMod);
-            bot->UpdateCriteria(CriteriaType::MoneyLootedFromCreatures, loot->gold);
-            loot->NotifyMoneyRemoved(bot->GetMap());
-            loot->LootMoney();
-        }
-
-        ObjectGuid const owner = loot->GetOwnerGUID();
-        for (LootItem const& item : loot->items)
-        {
-            if (item.is_looted)
-                continue;
-
-            Optional<LootSlotType> const slotType = item.GetUiTypeForPlayer(bot, *loot);
-            if (!slotType || (*slotType != LOOT_SLOT_TYPE_ALLOW_LOOT && *slotType != LOOT_SLOT_TYPE_OWNER))
-                continue;
-
-            if (questOnly && !IsQuestRelevantItem(bot, item.itemid))
-                continue;
-
-            // StoreLootItem re-checks HasAllowedLooter / blocked / roll-winner and applies quest
-            // credit as the item enters the bag; lootSlot is the LootListId.
-            bot->StoreLootItem(owner, item.LootListId, loot);
-            ++stored;
-        }
-
-        toRelease.push_back(loot);
-    }
-
-    for (Loot* loot : toRelease)
-        bot->GetSession()->DoLootRelease(loot);
-
-    return stored;
-}
 } // namespace
 
 bool LootAction::IsUseful()
@@ -234,11 +138,8 @@ bool LootAction::IsUseful()
     if (bot->IsInCombat())
         return false;
 
-    // A window left open (e.g. a gameobject the UseQuestObjectAction just opened) still needs
-    // draining, even if no fresh corpse is nearby.
-    if (!bot->GetAELootView().empty())
-        return true;
-
+    // Open windows are drained by StoreLootAction after SMSG_LOOT_RESPONSE — do not poll AE view
+    // here (that was the old packetless drain wake-up).
     return FindNearbyLootableCorpse(bot, Playerbots::GetLootDistance(), Playerbots::GetLootQuestItemsOnly()) != nullptr;
 }
 
@@ -249,48 +150,99 @@ bool LootAction::Execute(Event /*event*/)
         return false;
 
     bool const questOnly = Playerbots::GetLootQuestItemsOnly();
-    bool const lootMoney = Playerbots::GetLootMoney();
 
-    // 1) Drain anything already open (GO loot opened last tick, or a corpse we opened and haven't
-    //    finished). This is a no-op when the view is empty.
-    uint32 looted = StoreOpenLoot(bot, questOnly, lootMoney);
-
-    // 2) Find a fresh corpse to open.
     Creature* corpse = FindNearbyLootableCorpse(bot, Playerbots::GetLootDistance(), questOnly);
     if (!corpse)
-    {
-        _botAI->GetRpgStatistics().itemsLooted += looted;
-        return looted > 0;
-    }
+        return false;
 
-    // 3) Walk into interaction range if needed (same SafeMovement contract Wander/Grind/QuestGiver
-    //    use — never hand a raw point to MotionMaster without a validated navmesh route).
+    // Walk into interaction range if needed (same SafeMovement contract Wander/Grind/QuestGiver
+    // use — never hand a raw point to MotionMaster without a validated navmesh route).
     if (bot->GetDistance(corpse) > INTERACTION_DISTANCE - 1.0f)
     {
         if (bot->GetMotionMaster()->GetCurrentMovementGeneratorType() == POINT_MOTION_TYPE)
-            return looted > 0; // already walking somewhere this tick
+            return true; // already walking somewhere this tick
 
-        if (TryMoveToValidatedPoint(bot, corpse->GetPositionX(), corpse->GetPositionY(), corpse->GetPositionZ()))
-            return true;
-
-        _botAI->GetRpgStatistics().itemsLooted += looted;
-        return looted > 0;
+        return TryMoveToValidatedPoint(bot, corpse->GetPositionX(), corpse->GetPositionY(),
+            corpse->GetPositionZ());
     }
 
-    // 4) In range: open the corpse (registers it in the AE loot view, packetless — the SMSG the
-    //    core emits is harmlessly dropped by the socketless bot session) and store from it.
-    if (Loot* loot = corpse->GetLootForPlayer(bot))
+    // In range: open only. Store/money/release run via SMSG_LOOT_RESPONSE → StoreLootAction.
+    Loot* loot = corpse->GetLootForPlayer(bot);
+    if (!loot)
+        return false;
+
+    bot->SendLoot(*loot);
+
+    if (Playerbots::GetLogLevel() >= 1)
+        TC_LOG_DEBUG("playerbots", "LootAction bot={} opened loot on {}",
+            bot->GetName(), corpse->GetName());
+
+    return true;
+}
+
+bool StoreLootAction::IsUseful()
+{
+    return _botAI && _botAI->GetPendingLootStore().has_value();
+}
+
+bool StoreLootAction::Execute(Event /*event*/)
+{
+    if (!_botAI)
+        return false;
+
+    std::optional<BotPlayerbotAI::PendingLootStore> const pending = _botAI->GetPendingLootStore();
+    _botAI->ClearPendingLootStore();
+    if (!pending)
+        return false;
+
+    Player* bot = _botAI->GetBot();
+    if (!bot || !bot->GetSession())
+        return false;
+
+    bool const questOnly = Playerbots::GetLootQuestItemsOnly();
+    bool const lootMoney = Playerbots::GetLootMoney();
+    uint32 stored = 0;
+
+    if (lootMoney && pending->Coins > 0)
     {
-        bot->SendLoot(*loot);
-        looted += StoreOpenLoot(bot, questOnly, lootMoney);
+        WorldPacket moneyPacket(CMSG_LOOT_MONEY);
+        WorldPackets::Loot::LootMoney money(std::move(moneyPacket));
+        bot->GetSession()->HandleLootMoneyOpcode(money);
     }
 
-    if (looted)
+    for (BotPlayerbotAI::PendingLootStore::ItemSlot const& slot : pending->Items)
     {
-        _botAI->GetRpgStatistics().itemsLooted += looted;
-        TC_LOG_DEBUG("playerbots", "[New RPG] {} looted {} quest item(s) from {}",
-            bot->GetName(), looted, corpse->GetName());
+        if (slot.UIType != LOOT_SLOT_TYPE_ALLOW_LOOT && slot.UIType != LOOT_SLOT_TYPE_OWNER)
+            continue;
+
+        if (questOnly && !Playerbots::IsQuestRelevantLootItem(bot, slot.ItemID))
+            continue;
+
+        WorldPacket itemPacket(CMSG_LOOT_ITEM);
+        WorldPackets::Loot::LootItem lootItem(std::move(itemPacket));
+        WorldPackets::Loot::LootRequest req;
+        req.Object = pending->LootObj;
+        req.LootListID = slot.LootListID;
+        lootItem.Loot.push_back(req);
+        bot->GetSession()->HandleAutostoreLootItemOpcode(lootItem);
+        ++stored;
     }
+
+    WorldPacket releasePacket(CMSG_LOOT_RELEASE);
+    WorldPackets::Loot::LootRelease release(std::move(releasePacket));
+    release.Unit = pending->Owner;
+    bot->GetSession()->HandleLootReleaseOpcode(release);
+
+    if (stored)
+        _botAI->GetRpgStatistics().itemsLooted += stored;
+
+    if (Playerbots::GetLogLevel() >= 1)
+        TC_LOG_DEBUG("playerbots", "StoreLootAction bot={} owner={} lootObj={} coins={} stored={}",
+            bot->GetName(),
+            pending->Owner.ToString(),
+            pending->LootObj.ToString(),
+            pending->Coins,
+            stored);
 
     return true;
 }

@@ -19,7 +19,12 @@
 
 std::vector<NextAction> FollowMasterStrategy::GetDefaultActions()
 {
-    return { NextAction("follow", 1.0f) };
+    // "loot" find/open (SendLoot) outranks follow when a nearby corpse is worth taking;
+    // store/money/release is signal-driven ("loot response" → "store loot").
+    return {
+        NextAction("loot", 22.0f),
+        NextAction("follow", 1.0f)
+    };
 }
 
 void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
@@ -77,4 +82,8 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // Signal-only after SMSG_TRADE_UPDATED Layer-2 OK; V1 TellMaster on locked NONTRADED only.
     triggers.push_back(new TriggerNode("trade status extended",
         { NextAction("trade status extended", 100.0f) }));
+
+    // Acquired loot window (AC WorldPacketHandlerStrategy "loot response" → "store loot").
+    // Signal-only after SMSG_LOOT_RESPONSE Layer-2 OK + Acquired; Handle* store, no poll dual.
+    triggers.push_back(new TriggerNode("loot response", { NextAction("store loot", 100.0f) }));
 }

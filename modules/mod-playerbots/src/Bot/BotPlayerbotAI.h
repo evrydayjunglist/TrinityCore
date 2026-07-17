@@ -105,6 +105,25 @@ public:
     void SetPendingTradeUpdatedLockedTell(bool pending) { _pendingTradeUpdatedLockedTell = pending; }
     void ClearPendingTradeUpdatedLockedTell() { _pendingTradeUpdatedLockedTell = false; }
 
+    // Acquired SMSG_LOOT_RESPONSE stash for V1 "store loot" (Handle* path). Cleared after
+    // StoreLootAction or on Layer fail / Enable=0 / !Acquired. Tick-thread only.
+    struct PendingLootStore
+    {
+        ObjectGuid Owner;
+        ObjectGuid LootObj;
+        uint32 Coins = 0;
+        struct ItemSlot
+        {
+            uint8 LootListID = 0;
+            uint32 ItemID = 0;
+            uint8 UIType = 0;
+        };
+        std::vector<ItemSlot> Items;
+    };
+    std::optional<PendingLootStore> const& GetPendingLootStore() const { return _pendingLootStore; }
+    void SetPendingLootStore(PendingLootStore store) { _pendingLootStore = std::move(store); }
+    void ClearPendingLootStore() { _pendingLootStore.reset(); }
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -143,6 +162,7 @@ private:
     std::string _pendingCannotEquipTell;
     std::optional<::TradeStatus> _pendingTradeStatus;
     bool _pendingTradeUpdatedLockedTell = false;
+    std::optional<PendingLootStore> _pendingLootStore;
 };
 
 #endif

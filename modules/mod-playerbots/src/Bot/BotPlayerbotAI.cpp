@@ -26,8 +26,10 @@
 #include "Bot/Packet/BotPartyInvitePacket.h"
 #include "Bot/Packet/BotPacketParse.h"
 #include "Bot/Packet/BotResurrectRequestPacket.h"
+#include "Bot/Packet/BotLootResponsePacket.h"
 #include "Bot/Packet/BotTradeStatusPacket.h"
 #include "Bot/Packet/BotTradeUpdatedPacket.h"
+#include "Loot.h"
 #include "TradeData.h"
 #include "Creature.h"
 #include "DB2Stores.h"
@@ -86,6 +88,8 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         // AC SMSG_TRADE_STATUS_EXTENDED → Midnight SMSG_TRADE_UPDATED; Cleared unless Layer 2 OK
         // (and when PayloadParse is off — no poll dual for trade item/gold list).
         { SMSG_TRADE_UPDATED, { "trade status extended", true } },
+        // Cleared unless Layer 2 OK and Acquired (V1 store). Enable=0 / !Acquired: no poll dual.
+        { SMSG_LOOT_RESPONSE, { "loot response", true } },
     };
 
     auto itr = registry.find(opcode);
@@ -231,7 +235,7 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
         // Parse-gated reactions with no poll dual: do not fire when PayloadParse is off.
         if (signal.Name == "group set leader" || signal.Name == "check mount state" ||
             signal.Name == "cannot equip" || signal.Name == "trade status" ||
-            signal.Name == "trade status extended")
+            signal.Name == "trade status extended" || signal.Name == "loot response")
         {
             if (signal.Name == "cannot equip")
                 ClearPendingCannotEquipTell();
@@ -239,6 +243,8 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                 ClearPendingTradeStatus();
             if (signal.Name == "trade status extended")
                 ClearPendingTradeUpdatedLockedTell();
+            if (signal.Name == "loot response")
+                ClearPendingLootStore();
             signal.Name.clear();
         }
         return;
@@ -818,6 +824,88 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                     parsed.CurrentStateIndex,
                     parsed.Items.size(),
                     GetPendingTradeUpdatedLockedTell() ? "yes" : "no");
+            break;
+        }
+        case SMSG_LOOT_RESPONSE:
+        {
+            // Cleared unless Layer 2 OK + Acquired. Enable=0 / !Acquired / mismatch: no poll dual.
+            signal.Name.clear();
+            ClearPendingLootStore();
+
+            Playerbots::PacketParse::LootResponsePayload parsed;
+            if (!Playerbots::PacketParse::TryReadLootResponse(*signal.Packet, parsed))
+                return;
+
+            if (!Playerbots::PacketParse::IsKnownLootError(parsed.FailureReason))
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_LOOT_RESPONSE Layer-1 unknown FailureReason bot={} reason={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    uint32(parsed.FailureReason),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            // Failure / no-loot path: parse-ok, no store, no Layer-2 ERROR.
+            if (!parsed.Acquired)
+            {
+                if (Playerbots::GetLogLevel() >= 1)
+                    TC_LOG_DEBUG("playerbots.packet",
+                        "BotPacketParse SMSG_LOOT_RESPONSE ok (!Acquired) bot={} owner={} reason={}",
+                        GetBot() ? GetBot()->GetName() : "?",
+                        parsed.Owner.ToString(),
+                        uint32(parsed.FailureReason));
+                return;
+            }
+
+            Player* bot = GetBot();
+            if (!bot)
+                return;
+
+            // GetLootByWorldObjectGUID matches Loot::GetOwnerGUID (parsed.Owner), not LootObj key.
+            bool const guidDual =
+                bot->GetLootGUID() == parsed.Owner ||
+                bot->GetAELootView().contains(parsed.LootObj) ||
+                bot->GetLootByWorldObjectGUID(parsed.Owner) != nullptr;
+
+            if (!guidDual)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_LOOT_RESPONSE Layer-2 mismatch bot={} owner={} lootObj={} lootGuid={} verifiedBuild={}",
+                    bot->GetName(),
+                    parsed.Owner.ToString(),
+                    parsed.LootObj.ToString(),
+                    bot->GetLootGUID().ToString(),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            PendingLootStore stash;
+            stash.Owner = parsed.Owner;
+            stash.LootObj = parsed.LootObj;
+            stash.Coins = parsed.Coins;
+            stash.Items.reserve(parsed.Items.size());
+            for (WorldPackets::Loot::LootItemData const& item : parsed.Items)
+            {
+                PendingLootStore::ItemSlot slot;
+                slot.LootListID = item.LootListID;
+                slot.ItemID = item.Loot.ItemID;
+                slot.UIType = item.UIType;
+                stash.Items.push_back(slot);
+            }
+
+            SetPendingLootStore(std::move(stash));
+            signal.Name = "loot response";
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_LOOT_RESPONSE ok bot={} owner={} lootObj={} coins={} items={} ae={}",
+                    bot->GetName(),
+                    parsed.Owner.ToString(),
+                    parsed.LootObj.ToString(),
+                    parsed.Coins,
+                    parsed.Items.size(),
+                    parsed.AELooting ? "yes" : "no");
             break;
         }
         default:

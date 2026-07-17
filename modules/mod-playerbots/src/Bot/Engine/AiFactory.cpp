@@ -141,7 +141,14 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterTrigger("trade status extended",
         std::make_unique<SignalTrigger>(botAI, "trade status extended"));
 
-    // Quest loot + object interaction (AC: OpenLootAction/StoreLootAction, InteractWithGameObject).
+    // Loot window store (AC: "loot response" → "store loot"). Midnight SMSG_LOOT_RESPONSE;
+    // HandleLootMoney / HandleAutostoreLootItem / HandleLootRelease. Wired follow + newrpg.
+    // "loot" is find/approach/SendLoot open only — no packetless StoreLootItem drain.
+    context->RegisterAction("store loot", std::make_unique<StoreLootAction>(botAI));
+    context->RegisterTrigger("loot response",
+        std::make_unique<SignalTrigger>(botAI, "loot response"));
+
+    // Quest loot open + object interaction (AC: OpenLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));
     context->RegisterAction("use quest object", std::make_unique<UseQuestObjectAction>(botAI));
     context->RegisterAction("talk to quest npc", std::make_unique<TalkToQuestNpcAction>(botAI));
