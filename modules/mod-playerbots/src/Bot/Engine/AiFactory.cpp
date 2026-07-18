@@ -31,6 +31,7 @@
 #include "Bot/Action/LootRollWonAction.h"
 #include "Bot/Action/MasterLootRollAction.h"
 #include "Bot/Action/PartyCommandAction.h"
+#include "Bot/Action/LevelUpAction.h"
 #include "Bot/Action/TellMasterActions.h"
 #include "Bot/Action/TradeActions.h"
 #include "Bot/Action/NewRpgActions.h"
@@ -175,6 +176,12 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterAction("party command", std::make_unique<PartyCommandAction>(botAI));
     context->RegisterTrigger("party command",
         std::make_unique<SignalTrigger>(botAI, "party command"));
+
+    // Level-up wake-up (AC: "levelup" → auto maintenance). Midnight SMSG_LEVEL_UP_INFO;
+    // FollowMaster V1 signal + optional TellMaster only (no AutoMaintenanceOnLevelup paste).
+    context->RegisterAction("levelup", std::make_unique<LevelUpAction>(botAI));
+    context->RegisterTrigger("levelup",
+        std::make_unique<SignalTrigger>(botAI, "levelup"));
 
     // Quest loot open + object interaction (AC: OpenLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));

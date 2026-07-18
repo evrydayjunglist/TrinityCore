@@ -24,6 +24,7 @@
 #include "Bot/Packet/BotGuildInvitePacket.h"
 #include "Bot/Packet/BotPetitionShowSignaturesPacket.h"
 #include "Bot/Packet/BotPartyCommandResultPacket.h"
+#include "Bot/Packet/BotLevelUpInfoPacket.h"
 #include "Bot/Packet/BotPartyInvitePacket.h"
 #include "Bot/Packet/BotPacketParse.h"
 #include "Bot/Packet/BotResurrectRequestPacket.h"
@@ -37,6 +38,7 @@
 #include "TradeData.h"
 #include "Creature.h"
 #include "DB2Stores.h"
+#include "DBCEnums.h"
 #include "Engine.h"
 #include "Group.h"
 #include "Item.h"
@@ -103,6 +105,8 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         { SMSG_START_LOOT_ROLL, { "master loot roll", true } },
         // Cleared unless Layer 2 OK (known Command/Result). Enable=0: no poll dual.
         { SMSG_PARTY_COMMAND_RESULT, { "party command", true } },
+        // Cleared unless Layer 2 OK (Level bounds + GetLevel dual). Enable=0: no poll dual.
+        { SMSG_LEVEL_UP_INFO, { "levelup", true } },
     };
 
     auto itr = registry.find(opcode);
@@ -250,7 +254,8 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
             signal.Name == "cannot equip" || signal.Name == "trade status" ||
             signal.Name == "trade status extended" || signal.Name == "loot response" ||
             signal.Name == "item push result" || signal.Name == "loot roll won" ||
-            signal.Name == "master loot roll" || signal.Name == "party command")
+            signal.Name == "master loot roll" || signal.Name == "party command" ||
+            signal.Name == "levelup")
         {
             if (signal.Name == "cannot equip")
                 ClearPendingCannotEquipTell();
@@ -268,6 +273,8 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                 ClearPendingMasterLootRoll();
             if (signal.Name == "party command")
                 ClearPendingPartyCommand();
+            if (signal.Name == "levelup")
+                ClearPendingLevelUp();
             signal.Name.clear();
         }
         return;
@@ -1201,6 +1208,66 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                     parsed.Name,
                     parsed.ResultData,
                     parsed.ResultGUID.ToString());
+            break;
+        }
+        case SMSG_LEVEL_UP_INFO:
+        {
+            // Cleared unless Layer 2 OK. Enable=0 / mismatch: no poll dual.
+            signal.Name.clear();
+            ClearPendingLevelUp();
+
+            Playerbots::PacketParse::LevelUpInfoPayload parsed;
+            if (!Playerbots::PacketParse::TryReadLevelUpInfo(*signal.Packet, parsed))
+                return;
+
+            // Sane level bounds: reject 0 / negative / beyond server-side strong max.
+            if (parsed.Level < 1 || parsed.Level > int32(STRONG_MAX_LEVEL))
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_LEVEL_UP_INFO Layer-2 Level out of bounds bot={} level={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    parsed.Level,
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            Player* bot = GetBot();
+            if (!bot || parsed.Level != int32(bot->GetLevel()))
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_LEVEL_UP_INFO Layer-2 Level mismatch bot={} parsed={} live={} verifiedBuild={}",
+                    bot ? bot->GetName() : "?",
+                    parsed.Level,
+                    bot ? int32(bot->GetLevel()) : -1,
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            // Soft: negative talent slot deltas can occur on delevel; log only.
+            if ((parsed.NumNewTalents < 0 || parsed.NumNewPvpTalentSlots < 0) &&
+                Playerbots::GetLogLevel() >= 1)
+            {
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_LEVEL_UP_INFO soft negative talent deltas bot={} level={} talents={} pvpSlots={}",
+                    bot->GetName(),
+                    parsed.Level,
+                    parsed.NumNewTalents,
+                    parsed.NumNewPvpTalentSlots);
+            }
+
+            PendingLevelUp stash;
+            stash.Level = parsed.Level;
+            SetPendingLevelUp(std::move(stash));
+            signal.Name = "levelup";
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_LEVEL_UP_INFO ok bot={} level={} healthDelta={} talents={} pvpSlots={}",
+                    bot->GetName(),
+                    parsed.Level,
+                    parsed.HealthDelta,
+                    parsed.NumNewTalents,
+                    parsed.NumNewPvpTalentSlots);
             break;
         }
         default:

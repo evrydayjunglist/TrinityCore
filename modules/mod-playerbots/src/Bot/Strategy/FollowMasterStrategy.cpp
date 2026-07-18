@@ -107,4 +107,9 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // SMSG_PARTY_COMMAND_RESULT Layer-2 OK; optional leave via HandleLeaveGroupOpcode.
     triggers.push_back(new TriggerNode("party command",
         { NextAction("party command", 100.0f) }));
+
+    // Level-up (AC WorldPacketHandlerStrategy "levelup" → auto maintenance; maintenance out of
+    // scope). Signal-only after SMSG_LEVEL_UP_INFO Layer-2 OK; optional TellMaster.
+    triggers.push_back(new TriggerNode("levelup",
+        { NextAction("levelup", 100.0f) }));
 }

@@ -172,6 +172,16 @@ public:
     void SetPendingPartyCommand(PendingPartyCommand pending) { _pendingPartyCommand = std::move(pending); }
     void ClearPendingPartyCommand() { _pendingPartyCommand.reset(); }
 
+    // SMSG_LEVEL_UP_INFO stash for V1 "levelup" optional TellMaster.
+    // Cleared after LevelUpAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingLevelUp
+    {
+        int32 Level = 0;
+    };
+    std::optional<PendingLevelUp> const& GetPendingLevelUp() const { return _pendingLevelUp; }
+    void SetPendingLevelUp(PendingLevelUp pending) { _pendingLevelUp = std::move(pending); }
+    void ClearPendingLevelUp() { _pendingLevelUp.reset(); }
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -215,6 +225,7 @@ private:
     std::optional<PendingLootRollWon> _pendingLootRollWon;
     std::optional<PendingMasterLootRoll> _pendingMasterLootRoll;
     std::optional<PendingPartyCommand> _pendingPartyCommand;
+    std::optional<PendingLevelUp> _pendingLevelUp;
 };
 
 #endif
