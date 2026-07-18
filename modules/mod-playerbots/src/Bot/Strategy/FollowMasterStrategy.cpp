@@ -112,4 +112,10 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // scope). Signal-only after SMSG_LEVEL_UP_INFO Layer-2 OK; optional TellMaster.
     triggers.push_back(new TriggerNode("levelup",
         { NextAction("levelup", 100.0f) }));
+
+    // XP grant log (AC WorldPacketHandlerStrategy "xpgain" → "xp gain"; GiveXP re-apply /
+    // kill broadcast out of scope). Signal+action both "xpgain" after SMSG_LOG_XP_GAIN
+    // Layer-2 OK; optional TellMaster.
+    triggers.push_back(new TriggerNode("xpgain",
+        { NextAction("xpgain", 100.0f) }));
 }

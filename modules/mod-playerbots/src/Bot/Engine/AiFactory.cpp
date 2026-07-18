@@ -32,6 +32,7 @@
 #include "Bot/Action/MasterLootRollAction.h"
 #include "Bot/Action/PartyCommandAction.h"
 #include "Bot/Action/LevelUpAction.h"
+#include "Bot/Action/XpGainAction.h"
 #include "Bot/Action/TellMasterActions.h"
 #include "Bot/Action/TradeActions.h"
 #include "Bot/Action/NewRpgActions.h"
@@ -182,6 +183,12 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterAction("levelup", std::make_unique<LevelUpAction>(botAI));
     context->RegisterTrigger("levelup",
         std::make_unique<SignalTrigger>(botAI, "levelup"));
+
+    // XP grant log (AC: "xpgain" → "xp gain"). Midnight SMSG_LOG_XP_GAIN; FollowMaster V1
+    // signal+action both "xpgain" + optional TellMaster only (no GiveXP re-apply / kill broadcast).
+    context->RegisterAction("xpgain", std::make_unique<XpGainAction>(botAI));
+    context->RegisterTrigger("xpgain",
+        std::make_unique<SignalTrigger>(botAI, "xpgain"));
 
     // Quest loot open + object interaction (AC: OpenLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));

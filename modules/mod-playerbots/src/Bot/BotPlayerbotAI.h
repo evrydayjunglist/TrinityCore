@@ -182,6 +182,16 @@ public:
     void SetPendingLevelUp(PendingLevelUp pending) { _pendingLevelUp = std::move(pending); }
     void ClearPendingLevelUp() { _pendingLevelUp.reset(); }
 
+    // SMSG_LOG_XP_GAIN stash for V1 "xpgain" optional TellMaster.
+    // Cleared after XpGainAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingXpGain
+    {
+        int32 Amount = 0;
+    };
+    std::optional<PendingXpGain> const& GetPendingXpGain() const { return _pendingXpGain; }
+    void SetPendingXpGain(PendingXpGain pending) { _pendingXpGain = std::move(pending); }
+    void ClearPendingXpGain() { _pendingXpGain.reset(); }
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -226,6 +236,7 @@ private:
     std::optional<PendingMasterLootRoll> _pendingMasterLootRoll;
     std::optional<PendingPartyCommand> _pendingPartyCommand;
     std::optional<PendingLevelUp> _pendingLevelUp;
+    std::optional<PendingXpGain> _pendingXpGain;
 };
 
 #endif

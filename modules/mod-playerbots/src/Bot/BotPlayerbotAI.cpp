@@ -25,6 +25,7 @@
 #include "Bot/Packet/BotPetitionShowSignaturesPacket.h"
 #include "Bot/Packet/BotPartyCommandResultPacket.h"
 #include "Bot/Packet/BotLevelUpInfoPacket.h"
+#include "Bot/Packet/BotLogXPGainPacket.h"
 #include "Bot/Packet/BotPartyInvitePacket.h"
 #include "Bot/Packet/BotPacketParse.h"
 #include "Bot/Packet/BotResurrectRequestPacket.h"
@@ -107,6 +108,9 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         { SMSG_PARTY_COMMAND_RESULT, { "party command", true } },
         // Cleared unless Layer 2 OK (Level bounds + GetLevel dual). Enable=0: no poll dual.
         { SMSG_LEVEL_UP_INFO, { "levelup", true } },
+        // AC SMSG_LOG_XPGAIN → Midnight SMSG_LOG_XP_GAIN; Cleared unless Layer 2 OK
+        // (Reason + Amount/Original). Enable=0: no poll dual. Signal+action both "xpgain".
+        { SMSG_LOG_XP_GAIN, { "xpgain", true } },
     };
 
     auto itr = registry.find(opcode);
@@ -255,7 +259,7 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
             signal.Name == "trade status extended" || signal.Name == "loot response" ||
             signal.Name == "item push result" || signal.Name == "loot roll won" ||
             signal.Name == "master loot roll" || signal.Name == "party command" ||
-            signal.Name == "levelup")
+            signal.Name == "levelup" || signal.Name == "xpgain")
         {
             if (signal.Name == "cannot equip")
                 ClearPendingCannotEquipTell();
@@ -275,6 +279,8 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                 ClearPendingPartyCommand();
             if (signal.Name == "levelup")
                 ClearPendingLevelUp();
+            if (signal.Name == "xpgain")
+                ClearPendingXpGain();
             signal.Name.clear();
         }
         return;
@@ -1268,6 +1274,96 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                     parsed.HealthDelta,
                     parsed.NumNewTalents,
                     parsed.NumNewPvpTalentSlots);
+            break;
+        }
+        case SMSG_LOG_XP_GAIN:
+        {
+            // Cleared unless Layer 2 OK. Enable=0 / mismatch: no poll dual.
+            // Do not hard-dual Amount vs GetXP() after apply (packet sent before SetXP).
+            signal.Name.clear();
+            ClearPendingXpGain();
+
+            Playerbots::PacketParse::LogXPGainPayload parsed;
+            if (!Playerbots::PacketParse::TryReadLogXPGain(*signal.Packet, parsed))
+                return;
+
+            if (parsed.Reason != LOG_XP_REASON_KILL && parsed.Reason != LOG_XP_REASON_NO_KILL)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_LOG_XP_GAIN Layer-2 unknown Reason bot={} reason={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    uint32(parsed.Reason),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            if (parsed.Amount <= 0 || parsed.Original < 0 || parsed.Original < parsed.Amount)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_LOG_XP_GAIN Layer-2 Amount/Original invalid bot={} amount={} original={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    parsed.Amount,
+                    parsed.Original,
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            if (!std::isfinite(parsed.GroupBonus))
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_LOG_XP_GAIN Layer-2 GroupBonus not finite bot={} groupBonus={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    parsed.GroupBonus,
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            Player* bot = GetBot();
+            if (std::fabs(parsed.GroupBonus) > 100.0f && Playerbots::GetLogLevel() >= 1)
+            {
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_LOG_XP_GAIN soft absurd GroupBonus bot={} groupBonus={}",
+                    bot ? bot->GetName() : "?",
+                    parsed.GroupBonus);
+            }
+
+            // Soft Victim: KILL prefers non-empty map-local unit; NO_KILL empty is expected.
+            // Map-local only — do not cold-query remote maps.
+            if (parsed.Reason == LOG_XP_REASON_KILL)
+            {
+                if (parsed.Victim.IsEmpty())
+                {
+                    if (Playerbots::GetLogLevel() >= 1)
+                        TC_LOG_DEBUG("playerbots.packet",
+                            "BotPacketParse SMSG_LOG_XP_GAIN soft empty Victim on KILL bot={}",
+                            bot ? bot->GetName() : "?");
+                }
+                else
+                {
+                    Map* map = bot ? bot->GetMap() : nullptr;
+                    Creature* victim = map ? map->GetCreature(parsed.Victim) : nullptr;
+                    if (!victim && Playerbots::GetLogLevel() >= 1)
+                        TC_LOG_DEBUG("playerbots.packet",
+                            "BotPacketParse SMSG_LOG_XP_GAIN soft Victim not map-local bot={} victim={}",
+                            bot ? bot->GetName() : "?",
+                            parsed.Victim.ToString());
+                }
+            }
+
+            PendingXpGain stash;
+            stash.Amount = parsed.Amount;
+            SetPendingXpGain(std::move(stash));
+            signal.Name = "xpgain";
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_LOG_XP_GAIN ok bot={} amount={} original={} reason={} victim={} groupBonus={}",
+                    bot ? bot->GetName() : "?",
+                    parsed.Amount,
+                    parsed.Original,
+                    uint32(parsed.Reason),
+                    parsed.Victim.ToString(),
+                    parsed.GroupBonus);
             break;
         }
         default:
