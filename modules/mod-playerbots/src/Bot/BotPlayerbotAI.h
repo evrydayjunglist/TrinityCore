@@ -235,6 +235,52 @@ public:
     void SetPendingLfgProposal(PendingLfgProposal pending) { _pendingLfgProposal = std::move(pending); }
     void ClearPendingLfgProposal() { _pendingLfgProposal.reset(); }
 
+    // SMSG_QUEST_UPDATE_COMPLETE stash for V1 "quest update complete" optional TellMaster.
+    // Cleared after QuestUpdateCompleteAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingQuestUpdateComplete
+    {
+        int32 QuestID = 0;
+    };
+    std::optional<PendingQuestUpdateComplete> const& GetPendingQuestUpdateComplete() const
+    {
+        return _pendingQuestUpdateComplete;
+    }
+    void SetPendingQuestUpdateComplete(PendingQuestUpdateComplete pending)
+    {
+        _pendingQuestUpdateComplete = std::move(pending);
+    }
+    void ClearPendingQuestUpdateComplete() { _pendingQuestUpdateComplete.reset(); }
+
+    // SMSG_QUEST_UPDATE_ADD_CREDIT stash for V1 "quest update add kill" optional TellMaster.
+    // Cleared after QuestUpdateAddKillAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingQuestUpdateAddKill
+    {
+        int32 QuestID = 0;
+        int32 ObjectID = 0;
+        uint16 Count = 0;
+        uint16 Required = 0;
+    };
+    std::optional<PendingQuestUpdateAddKill> const& GetPendingQuestUpdateAddKill() const
+    {
+        return _pendingQuestUpdateAddKill;
+    }
+    void SetPendingQuestUpdateAddKill(PendingQuestUpdateAddKill pending)
+    {
+        _pendingQuestUpdateAddKill = std::move(pending);
+    }
+    void ClearPendingQuestUpdateAddKill() { _pendingQuestUpdateAddKill.reset(); }
+
+    // SMSG_QUEST_CONFIRM_ACCEPT stash for V1 "confirm quest" HandleQuestConfirmAccept.
+    // Cleared after ConfirmQuestAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingQuestConfirm
+    {
+        uint32 QuestID = 0;
+        ObjectGuid InitiatedBy;
+    };
+    std::optional<PendingQuestConfirm> const& GetPendingQuestConfirm() const { return _pendingQuestConfirm; }
+    void SetPendingQuestConfirm(PendingQuestConfirm pending) { _pendingQuestConfirm = std::move(pending); }
+    void ClearPendingQuestConfirm() { _pendingQuestConfirm.reset(); }
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -284,6 +330,9 @@ private:
     std::optional<PendingReceiveEmote> _pendingReceiveEmote;
     ObjectGuid _pendingDuelArbiter;
     std::optional<PendingLfgProposal> _pendingLfgProposal;
+    std::optional<PendingQuestUpdateComplete> _pendingQuestUpdateComplete;
+    std::optional<PendingQuestUpdateAddKill> _pendingQuestUpdateAddKill;
+    std::optional<PendingQuestConfirm> _pendingQuestConfirm;
 };
 
 #endif

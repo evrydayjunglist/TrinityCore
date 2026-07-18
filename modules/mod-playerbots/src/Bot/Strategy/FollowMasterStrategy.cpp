@@ -149,4 +149,17 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("lfg accept", 100.0f) }));
     triggers.push_back(new TriggerNode("lfg proposal active",
         { NextAction("lfg accept", 100.0f) }));
+
+    // Quest family (AC WorldPacketHandler "quest update complete" / "quest update add kill" /
+    // "confirm quest"). Signal after Layer-2 OK; plain QuestID TellMaster; confirm via
+    // HandleQuestConfirmAccept only (master sharer). Poll twin for Enable=0 / lost signal.
+    // No AddQuest bypass / QueuePacket / FormatQuest / BroadcastHelper.
+    triggers.push_back(new TriggerNode("quest update complete",
+        { NextAction("quest update complete", 100.0f) }));
+    triggers.push_back(new TriggerNode("quest update add kill",
+        { NextAction("quest update add kill", 100.0f) }));
+    triggers.push_back(new TriggerNode("confirm quest",
+        { NextAction("confirm quest", 100.0f) }));
+    triggers.push_back(new TriggerNode("confirm quest poll",
+        { NextAction("confirm quest", 100.0f) }));
 }

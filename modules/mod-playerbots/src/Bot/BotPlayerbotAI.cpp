@@ -32,6 +32,9 @@
 #include "Bot/Packet/BotDuelRequestedPacket.h"
 #include "Bot/Packet/BotLFGProposalUpdatePacket.h"
 #include "Bot/Packet/BotLFGRoleCheckUpdatePacket.h"
+#include "Bot/Packet/BotQuestConfirmAcceptPacket.h"
+#include "Bot/Packet/BotQuestUpdateAddCreditPacket.h"
+#include "Bot/Packet/BotQuestUpdateCompletePacket.h"
 #include "Bot/Packet/BotPartyInvitePacket.h"
 #include "Bot/Packet/BotPacketParse.h"
 #include "Bot/Packet/BotResurrectRequestPacket.h"
@@ -135,6 +138,13 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         // Cleared unless Layer 2 OK (sLFGMgr ROLECHECK / PROPOSAL). Enable=0: proposal poll twin may accept if stash present.
         { SMSG_LFG_ROLE_CHECK_UPDATE, { "lfg role check", true } },
         { SMSG_LFG_PROPOSAL_UPDATE, { "lfg proposal", true } },
+        // Cleared unless Layer 2 OK (active quest / COMPLETE). Enable=0: no poll dual.
+        { SMSG_QUEST_UPDATE_COMPLETE, { "quest update complete", true } },
+        // AC "quest update add kill" → Midnight SMSG_QUEST_UPDATE_ADD_CREDIT; keep AC signal name.
+        // Cleared unless Layer 2 OK (IsActiveQuest). Enable=0: no poll dual.
+        { SMSG_QUEST_UPDATE_ADD_CREDIT, { "quest update add kill", true } },
+        // Cleared unless Layer 2 OK (GetSharedQuestID + InitiatedBy). Enable=0: confirm poll twin may fire.
+        { SMSG_QUEST_CONFIRM_ACCEPT, { "confirm quest", true } },
     };
 
     auto itr = registry.find(opcode);
@@ -286,7 +296,9 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
             signal.Name == "levelup" || signal.Name == "xpgain" ||
             signal.Name == "cast failed" || signal.Name == "receive text emote" ||
             signal.Name == "receive emote" || signal.Name == "duel requested" ||
-            signal.Name == "lfg role check" || signal.Name == "lfg proposal")
+            signal.Name == "lfg role check" || signal.Name == "lfg proposal" ||
+            signal.Name == "quest update complete" || signal.Name == "quest update add kill" ||
+            signal.Name == "confirm quest")
         {
             if (signal.Name == "cannot equip")
                 ClearPendingCannotEquipTell();
@@ -316,6 +328,12 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                 ClearPendingDuelArbiter();
             if (signal.Name == "lfg proposal")
                 ClearPendingLfgProposal();
+            if (signal.Name == "quest update complete")
+                ClearPendingQuestUpdateComplete();
+            if (signal.Name == "quest update add kill")
+                ClearPendingQuestUpdateAddKill();
+            if (signal.Name == "confirm quest")
+                ClearPendingQuestConfirm();
             signal.Name.clear();
         }
         return;
@@ -1864,6 +1882,248 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
             pending.ProposalID = parsed.ProposalID;
             SetPendingLfgProposal(std::move(pending));
             signal.Name = "lfg proposal";
+            break;
+        }
+        case SMSG_QUEST_UPDATE_COMPLETE:
+        {
+            // Cleared unless Layer 2 OK (active / COMPLETE). Enable=0: no poll dual.
+            signal.Name.clear();
+            ClearPendingQuestUpdateComplete();
+
+            Playerbots::PacketParse::QuestUpdateCompletePayload parsed;
+            if (!Playerbots::PacketParse::TryReadQuestUpdateComplete(*signal.Packet, parsed))
+                return;
+
+            if (!parsed.QuestID)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_QUEST_UPDATE_COMPLETE Layer-2 QuestID=0 bot={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            Player* bot = GetBot();
+            if (!bot)
+                return;
+
+            Quest const* quest = sObjectMgr->GetQuestTemplate(uint32(parsed.QuestID));
+            if (!quest)
+            {
+                if (Playerbots::GetLogLevel() >= 1)
+                    TC_LOG_DEBUG("playerbots.packet",
+                        "BotPacketParse SMSG_QUEST_UPDATE_COMPLETE soft missing template bot={} questId={}",
+                        bot->GetName(),
+                        parsed.QuestID);
+                return;
+            }
+
+            bool const activeOrComplete = bot->IsActiveQuest(uint32(parsed.QuestID)) ||
+                bot->GetQuestStatus(uint32(parsed.QuestID)) == QUEST_STATUS_COMPLETE;
+            if (!activeOrComplete)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_QUEST_UPDATE_COMPLETE Layer-2 not active/complete bot={} questId={} status={} verifiedBuild={}",
+                    bot->GetName(),
+                    parsed.QuestID,
+                    uint32(bot->GetQuestStatus(uint32(parsed.QuestID))),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_QUEST_UPDATE_COMPLETE ok bot={} questId={} hideCredit={}",
+                    bot->GetName(),
+                    parsed.QuestID,
+                    parsed.HideCreditMessage ? "yes" : "no");
+
+            PendingQuestUpdateComplete stash;
+            stash.QuestID = parsed.QuestID;
+            SetPendingQuestUpdateComplete(std::move(stash));
+            signal.Name = "quest update complete";
+            break;
+        }
+        case SMSG_QUEST_UPDATE_ADD_CREDIT:
+        {
+            // Cleared unless Layer 2 OK (IsActiveQuest). Keep AC signal "quest update add kill".
+            signal.Name.clear();
+            ClearPendingQuestUpdateAddKill();
+
+            Playerbots::PacketParse::QuestUpdateAddCreditPayload parsed;
+            if (!Playerbots::PacketParse::TryReadQuestUpdateAddCredit(*signal.Packet, parsed))
+                return;
+
+            if (!parsed.QuestID)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_QUEST_UPDATE_ADD_CREDIT Layer-2 QuestID=0 bot={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            Player* bot = GetBot();
+            if (!bot)
+                return;
+
+            Quest const* quest = sObjectMgr->GetQuestTemplate(uint32(parsed.QuestID));
+            if (!quest)
+            {
+                if (Playerbots::GetLogLevel() >= 1)
+                    TC_LOG_DEBUG("playerbots.packet",
+                        "BotPacketParse SMSG_QUEST_UPDATE_ADD_CREDIT soft missing template bot={} questId={}",
+                        bot->GetName(),
+                        parsed.QuestID);
+                return;
+            }
+
+            if (!bot->IsActiveQuest(uint32(parsed.QuestID)))
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_QUEST_UPDATE_ADD_CREDIT Layer-2 not active bot={} questId={} verifiedBuild={}",
+                    bot->GetName(),
+                    parsed.QuestID,
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            if (parsed.Required > 0 && parsed.Count > parsed.Required && Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_QUEST_UPDATE_ADD_CREDIT soft Count>Required bot={} questId={} count={} required={}",
+                    bot->GetName(),
+                    parsed.QuestID,
+                    parsed.Count,
+                    parsed.Required);
+
+            if (!parsed.ObjectID && Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_QUEST_UPDATE_ADD_CREDIT soft ObjectID=0 bot={} questId={}",
+                    bot->GetName(),
+                    parsed.QuestID);
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_QUEST_UPDATE_ADD_CREDIT ok bot={} questId={} objectId={} count={}/{} type={} victim={}",
+                    bot->GetName(),
+                    parsed.QuestID,
+                    parsed.ObjectID,
+                    parsed.Count,
+                    parsed.Required,
+                    parsed.ObjectiveType,
+                    parsed.VictimGUID.ToString());
+
+            PendingQuestUpdateAddKill stash;
+            stash.QuestID = parsed.QuestID;
+            stash.ObjectID = parsed.ObjectID;
+            stash.Count = parsed.Count;
+            stash.Required = parsed.Required;
+            SetPendingQuestUpdateAddKill(std::move(stash));
+            signal.Name = "quest update add kill";
+            break;
+        }
+        case SMSG_QUEST_CONFIRM_ACCEPT:
+        {
+            // Cleared unless Layer 2 OK (shared quest + InitiatedBy). Enable=0: poll twin may fire.
+            signal.Name.clear();
+            ClearPendingQuestConfirm();
+
+            Playerbots::PacketParse::QuestConfirmAcceptPayload parsed;
+            if (!Playerbots::PacketParse::TryReadQuestConfirmAccept(*signal.Packet, parsed))
+                return;
+
+            if (!parsed.QuestID)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_QUEST_CONFIRM_ACCEPT Layer-2 QuestID=0 bot={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            Player* bot = GetBot();
+            if (!bot)
+                return;
+
+            Quest const* quest = sObjectMgr->GetQuestTemplate(parsed.QuestID);
+            if (!quest)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_QUEST_CONFIRM_ACCEPT Layer-2 missing template bot={} questId={} verifiedBuild={}",
+                    bot->GetName(),
+                    parsed.QuestID,
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            if (bot->GetSharedQuestID() != parsed.QuestID)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_QUEST_CONFIRM_ACCEPT Layer-2 SharedQuestID mismatch bot={} parsed={} live={} verifiedBuild={}",
+                    bot->GetName(),
+                    parsed.QuestID,
+                    bot->GetSharedQuestID(),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            if (parsed.InitiatedBy != bot->GetPlayerSharingQuest())
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_QUEST_CONFIRM_ACCEPT Layer-2 InitiatedBy mismatch bot={} parsed={} live={} verifiedBuild={}",
+                    bot->GetName(),
+                    parsed.InitiatedBy.ToString(),
+                    bot->GetPlayerSharingQuest().ToString(),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            // Soft: InitiatedBy player + map-local when practical — no cold remote query.
+            if (!parsed.InitiatedBy.IsPlayer())
+            {
+                if (Playerbots::GetLogLevel() >= 1)
+                    TC_LOG_DEBUG("playerbots.packet",
+                        "BotPacketParse SMSG_QUEST_CONFIRM_ACCEPT soft non-player InitiatedBy bot={} initiatedBy={}",
+                        bot->GetName(),
+                        parsed.InitiatedBy.ToString());
+            }
+            else if (Player* sharer = ObjectAccessor::GetPlayer(*bot, parsed.InitiatedBy); !sharer)
+            {
+                if (Playerbots::GetLogLevel() >= 1)
+                    TC_LOG_DEBUG("playerbots.packet",
+                        "BotPacketParse SMSG_QUEST_CONFIRM_ACCEPT soft InitiatedBy not map-local bot={} initiatedBy={}",
+                        bot->GetName(),
+                        parsed.InitiatedBy.ToString());
+            }
+            else if (!bot->IsInSameRaidWith(sharer) && Playerbots::GetLogLevel() >= 1)
+            {
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_QUEST_CONFIRM_ACCEPT soft not same group/raid bot={} sharer={}",
+                    bot->GetName(),
+                    sharer->GetName());
+            }
+
+            Player* master = GetMaster();
+            bool const masterSharer = master && parsed.InitiatedBy == master->GetGUID();
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_QUEST_CONFIRM_ACCEPT ok bot={} questId={} initiatedBy={} title='{}' masterSharer={}",
+                    bot->GetName(),
+                    parsed.QuestID,
+                    parsed.InitiatedBy.ToString(),
+                    parsed.QuestTitle,
+                    masterSharer ? "yes" : "no");
+
+            // V1 FollowMaster: only enqueue confirm signal for master sharer.
+            if (!masterSharer)
+                return;
+
+            PendingQuestConfirm stash;
+            stash.QuestID = parsed.QuestID;
+            stash.InitiatedBy = parsed.InitiatedBy;
+            SetPendingQuestConfirm(std::move(stash));
+            signal.Name = "confirm quest";
             break;
         }
         default:

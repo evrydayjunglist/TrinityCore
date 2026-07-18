@@ -37,6 +37,7 @@
 #include "Bot/Action/ReceiveEmoteAction.h"
 #include "Bot/Action/DuelActions.h"
 #include "Bot/Action/LfgActions.h"
+#include "Bot/Action/QuestUpdateActions.h"
 #include "Bot/Action/TellMasterActions.h"
 #include "Bot/Action/TradeActions.h"
 #include "Bot/Action/NewRpgActions.h"
@@ -52,6 +53,7 @@
 #include "Bot/Trigger/GuildTriggers.h"
 #include "Bot/Trigger/DuelTriggers.h"
 #include "Bot/Trigger/LfgTriggers.h"
+#include "Bot/Trigger/QuestTriggers.h"
 #include "Bot/Trigger/NewRpgTriggers.h"
 #include "Bot/Trigger/PetitionTriggers.h"
 #include "Bot/Trigger/ResurrectTriggers.h"
@@ -234,6 +236,23 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
         std::make_unique<SignalTrigger>(botAI, "lfg proposal"));
     context->RegisterTrigger("lfg proposal active",
         std::make_unique<LfgProposalActiveTrigger>(botAI));
+
+    // Quest family (AC: "quest update complete" / "quest update add kill" / "confirm quest").
+    // Midnight SMSG_QUEST_UPDATE_COMPLETE / ADD_CREDIT / CONFIRM_ACCEPT; FollowMaster V1
+    // plain QuestID tells + master-only HandleQuestConfirmAccept. Confirm poll twin for Enable=0.
+    context->RegisterAction("quest update complete",
+        std::make_unique<QuestUpdateCompleteAction>(botAI));
+    context->RegisterAction("quest update add kill",
+        std::make_unique<QuestUpdateAddKillAction>(botAI));
+    context->RegisterAction("confirm quest", std::make_unique<ConfirmQuestAction>(botAI));
+    context->RegisterTrigger("quest update complete",
+        std::make_unique<SignalTrigger>(botAI, "quest update complete"));
+    context->RegisterTrigger("quest update add kill",
+        std::make_unique<SignalTrigger>(botAI, "quest update add kill"));
+    context->RegisterTrigger("confirm quest",
+        std::make_unique<SignalTrigger>(botAI, "confirm quest"));
+    context->RegisterTrigger("confirm quest poll",
+        std::make_unique<QuestConfirmAcceptTrigger>(botAI));
 
     // Quest loot open + object interaction (AC: OpenLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));
