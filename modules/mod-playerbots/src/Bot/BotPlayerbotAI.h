@@ -160,6 +160,18 @@ public:
     void SetPendingMasterLootRoll(PendingMasterLootRoll pending) { _pendingMasterLootRoll = std::move(pending); }
     void ClearPendingMasterLootRoll() { _pendingMasterLootRoll.reset(); }
 
+    // SMSG_PARTY_COMMAND_RESULT stash for V1 "party command" optional leave-follow.
+    // Cleared after PartyCommandAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingPartyCommand
+    {
+        uint8 Command = 0;
+        uint8 Result = 0;
+        std::string Name;
+    };
+    std::optional<PendingPartyCommand> const& GetPendingPartyCommand() const { return _pendingPartyCommand; }
+    void SetPendingPartyCommand(PendingPartyCommand pending) { _pendingPartyCommand = std::move(pending); }
+    void ClearPendingPartyCommand() { _pendingPartyCommand.reset(); }
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -202,6 +214,7 @@ private:
     std::optional<PendingItemPush> _pendingItemPush;
     std::optional<PendingLootRollWon> _pendingLootRollWon;
     std::optional<PendingMasterLootRoll> _pendingMasterLootRoll;
+    std::optional<PendingPartyCommand> _pendingPartyCommand;
 };
 
 #endif

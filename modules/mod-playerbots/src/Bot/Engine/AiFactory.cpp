@@ -30,6 +30,7 @@
 #include "Bot/Action/ItemPushResultAction.h"
 #include "Bot/Action/LootRollWonAction.h"
 #include "Bot/Action/MasterLootRollAction.h"
+#include "Bot/Action/PartyCommandAction.h"
 #include "Bot/Action/TellMasterActions.h"
 #include "Bot/Action/TradeActions.h"
 #include "Bot/Action/NewRpgActions.h"
@@ -168,6 +169,12 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterAction("master loot roll", std::make_unique<MasterLootRollAction>(botAI));
     context->RegisterTrigger("master loot roll",
         std::make_unique<SignalTrigger>(botAI, "master loot roll"));
+
+    // Party op result (AC: "party command" → leave-follow). Midnight SMSG_PARTY_COMMAND_RESULT;
+    // FollowMaster V1 signal + optional HandleLeaveGroup when LEAVE OK names master.
+    context->RegisterAction("party command", std::make_unique<PartyCommandAction>(botAI));
+    context->RegisterTrigger("party command",
+        std::make_unique<SignalTrigger>(botAI, "party command"));
 
     // Quest loot open + object interaction (AC: OpenLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));

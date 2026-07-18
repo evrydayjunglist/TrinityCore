@@ -23,6 +23,7 @@
 #include "Bot/Packet/BotGroupNewLeaderPacket.h"
 #include "Bot/Packet/BotGuildInvitePacket.h"
 #include "Bot/Packet/BotPetitionShowSignaturesPacket.h"
+#include "Bot/Packet/BotPartyCommandResultPacket.h"
 #include "Bot/Packet/BotPartyInvitePacket.h"
 #include "Bot/Packet/BotPacketParse.h"
 #include "Bot/Packet/BotResurrectRequestPacket.h"
@@ -51,6 +52,7 @@
 #include "RandomPlayerbotMgr.h"
 #include "SharedDefines.h"
 #include "WorldPacket.h"
+#include "WorldSession.h"
 #include <algorithm>
 #include <cmath>
 #include <unordered_map>
@@ -99,6 +101,8 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         { SMSG_LOOT_ROLL_WON, { "loot roll won", true } },
         // Cleared unless Layer 2 OK (GROUP/NBG Method + live GetLootRoll). Enable=0: no poll dual.
         { SMSG_START_LOOT_ROLL, { "master loot roll", true } },
+        // Cleared unless Layer 2 OK (known Command/Result). Enable=0: no poll dual.
+        { SMSG_PARTY_COMMAND_RESULT, { "party command", true } },
     };
 
     auto itr = registry.find(opcode);
@@ -246,7 +250,7 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
             signal.Name == "cannot equip" || signal.Name == "trade status" ||
             signal.Name == "trade status extended" || signal.Name == "loot response" ||
             signal.Name == "item push result" || signal.Name == "loot roll won" ||
-            signal.Name == "master loot roll")
+            signal.Name == "master loot roll" || signal.Name == "party command")
         {
             if (signal.Name == "cannot equip")
                 ClearPendingCannotEquipTell();
@@ -262,6 +266,8 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                 ClearPendingLootRollWon();
             if (signal.Name == "master loot roll")
                 ClearPendingMasterLootRoll();
+            if (signal.Name == "party command")
+                ClearPendingPartyCommand();
             signal.Name.clear();
         }
         return;
@@ -1114,6 +1120,87 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                     uint32(parsed.ValidRolls),
                     parsed.MapID,
                     uint32(parsed.Item.UIType));
+            break;
+        }
+        case SMSG_PARTY_COMMAND_RESULT:
+        {
+            // Cleared unless Layer 2 OK. Enable=0 / mismatch: no poll dual.
+            signal.Name.clear();
+            ClearPendingPartyCommand();
+
+            Playerbots::PacketParse::PartyCommandResultPayload parsed;
+            if (!Playerbots::PacketParse::TryReadPartyCommandResult(*signal.Packet, parsed))
+                return;
+
+            if (!Playerbots::PacketParse::IsKnownPartyOperation(parsed.Command))
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_PARTY_COMMAND_RESULT Layer-2 unknown Command bot={} command={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    uint32(parsed.Command),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            // Documented PartyResult max is ERR_PARTY_LFG_TELEPORT_IN_COMBAT (30).
+            // Outside that → ERROR. Gaps inside the range (10/11) → soft parse-ok, no reaction.
+            if (parsed.Result > uint8(ERR_PARTY_LFG_TELEPORT_IN_COMBAT))
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_PARTY_COMMAND_RESULT Layer-2 Result out of documented range bot={} result={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    uint32(parsed.Result),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            if (!Playerbots::PacketParse::IsKnownPartyResult(parsed.Result))
+            {
+                if (Playerbots::GetLogLevel() >= 1)
+                    TC_LOG_DEBUG("playerbots.packet",
+                        "BotPacketParse SMSG_PARTY_COMMAND_RESULT ok (unknown-but-plausible Result, no reaction) bot={} command={} result={} name='{}'",
+                        GetBot() ? GetBot()->GetName() : "?",
+                        uint32(parsed.Command),
+                        uint32(parsed.Result),
+                        parsed.Name);
+                return;
+            }
+
+            Player* bot = GetBot();
+            Player* master = GetMaster();
+            // Soft leave dual: do not hard-require GetGroup() after LEAVE OK (group may be gone).
+            // Prefer Name matches bot or master when present; mismatch is not a Layer-2 ERROR.
+            if (parsed.Command == uint8(PARTY_OP_LEAVE) &&
+                parsed.Result == uint8(ERR_PARTY_RESULT_OK) &&
+                !parsed.Name.empty() &&
+                bot &&
+                parsed.Name != bot->GetName() &&
+                (!master || parsed.Name != master->GetName()) &&
+                Playerbots::GetLogLevel() >= 1)
+            {
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_PARTY_COMMAND_RESULT LEAVE OK soft Name dual bot={} name='{}' master='{}'",
+                    bot->GetName(),
+                    parsed.Name,
+                    master ? master->GetName() : "none");
+            }
+
+            PendingPartyCommand stash;
+            stash.Command = parsed.Command;
+            stash.Result = parsed.Result;
+            stash.Name = parsed.Name;
+            SetPendingPartyCommand(std::move(stash));
+            signal.Name = "party command";
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_PARTY_COMMAND_RESULT ok bot={} command={} result={} name='{}' resultData={} resultGuid={}",
+                    bot ? bot->GetName() : "?",
+                    uint32(parsed.Command),
+                    uint32(parsed.Result),
+                    parsed.Name,
+                    parsed.ResultData,
+                    parsed.ResultGUID.ToString());
             break;
         }
         default:
