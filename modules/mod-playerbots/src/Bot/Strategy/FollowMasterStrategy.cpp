@@ -118,4 +118,10 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // Layer-2 OK; optional TellMaster.
     triggers.push_back(new TriggerNode("xpgain",
         { NextAction("xpgain", 100.0f) }));
+
+    // Cast fail (AC creators "cast failed" → "tell cast failed"; AC strategy omits
+    // TriggerNode — wire FollowMaster anyway). Signal after SMSG_CAST_FAILED Layer-2 OK;
+    // TellMaster Reason subset only when CalcCastTime >= 2000.
+    triggers.push_back(new TriggerNode("cast failed",
+        { NextAction("tell cast failed", 100.0f) }));
 }

@@ -33,6 +33,7 @@
 #include "Bot/Action/PartyCommandAction.h"
 #include "Bot/Action/LevelUpAction.h"
 #include "Bot/Action/XpGainAction.h"
+#include "Bot/Action/TellCastFailedAction.h"
 #include "Bot/Action/TellMasterActions.h"
 #include "Bot/Action/TradeActions.h"
 #include "Bot/Action/NewRpgActions.h"
@@ -189,6 +190,13 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterAction("xpgain", std::make_unique<XpGainAction>(botAI));
     context->RegisterTrigger("xpgain",
         std::make_unique<SignalTrigger>(botAI, "xpgain"));
+
+    // Cast fail (AC: "cast failed" → "tell cast failed"). Midnight SMSG_CAST_FAILED;
+    // FollowMaster V1 (AC WorldPacketHandlerStrategy omits TriggerNode — wire anyway).
+    // TellMaster Reason subset + CalcCastTime >= 2000 only; no SpellInterrupted.
+    context->RegisterAction("tell cast failed", std::make_unique<TellCastFailedAction>(botAI));
+    context->RegisterTrigger("cast failed",
+        std::make_unique<SignalTrigger>(botAI, "cast failed"));
 
     // Quest loot open + object interaction (AC: OpenLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));

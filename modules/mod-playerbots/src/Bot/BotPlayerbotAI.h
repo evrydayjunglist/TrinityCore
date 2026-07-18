@@ -192,6 +192,17 @@ public:
     void SetPendingXpGain(PendingXpGain pending) { _pendingXpGain = std::move(pending); }
     void ClearPendingXpGain() { _pendingXpGain.reset(); }
 
+    // SMSG_CAST_FAILED stash for V1 "tell cast failed" optional TellMaster (≥2s gate).
+    // Cleared after TellCastFailedAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingCastFailed
+    {
+        int32 SpellID = 0;
+        int32 Reason = 0;
+    };
+    std::optional<PendingCastFailed> const& GetPendingCastFailed() const { return _pendingCastFailed; }
+    void SetPendingCastFailed(PendingCastFailed pending) { _pendingCastFailed = std::move(pending); }
+    void ClearPendingCastFailed() { _pendingCastFailed.reset(); }
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -237,6 +248,7 @@ private:
     std::optional<PendingPartyCommand> _pendingPartyCommand;
     std::optional<PendingLevelUp> _pendingLevelUp;
     std::optional<PendingXpGain> _pendingXpGain;
+    std::optional<PendingCastFailed> _pendingCastFailed;
 };
 
 #endif

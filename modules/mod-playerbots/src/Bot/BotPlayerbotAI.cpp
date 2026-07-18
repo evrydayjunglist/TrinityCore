@@ -26,6 +26,7 @@
 #include "Bot/Packet/BotPartyCommandResultPacket.h"
 #include "Bot/Packet/BotLevelUpInfoPacket.h"
 #include "Bot/Packet/BotLogXPGainPacket.h"
+#include "Bot/Packet/BotCastFailedPacket.h"
 #include "Bot/Packet/BotPartyInvitePacket.h"
 #include "Bot/Packet/BotPacketParse.h"
 #include "Bot/Packet/BotResurrectRequestPacket.h"
@@ -46,14 +47,17 @@
 #include "ItemDefines.h"
 #include "Log.h"
 #include "Map.h"
+#include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Opcodes.h"
+#include "Unit.h"
 #include "PetitionMgr.h"
 #include "Player.h"
 #include "PlayerbotsConfig.h"
 #include "Random.h"
 #include "RandomPlayerbotMgr.h"
 #include "SharedDefines.h"
+#include "SpellMgr.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
 #include <algorithm>
@@ -111,6 +115,9 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         // AC SMSG_LOG_XPGAIN → Midnight SMSG_LOG_XP_GAIN; Cleared unless Layer 2 OK
         // (Reason + Amount/Original). Enable=0: no poll dual. Signal+action both "xpgain".
         { SMSG_LOG_XP_GAIN, { "xpgain", true } },
+        // Cleared unless Layer 2 OK (Reason range + known SpellID). Enable=0: no poll dual.
+        // Signal "cast failed" → action "tell cast failed" (AC names; AC strategy TriggerNode gap).
+        { SMSG_CAST_FAILED, { "cast failed", true } },
     };
 
     auto itr = registry.find(opcode);
@@ -259,7 +266,8 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
             signal.Name == "trade status extended" || signal.Name == "loot response" ||
             signal.Name == "item push result" || signal.Name == "loot roll won" ||
             signal.Name == "master loot roll" || signal.Name == "party command" ||
-            signal.Name == "levelup" || signal.Name == "xpgain")
+            signal.Name == "levelup" || signal.Name == "xpgain" ||
+            signal.Name == "cast failed")
         {
             if (signal.Name == "cannot equip")
                 ClearPendingCannotEquipTell();
@@ -281,6 +289,8 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                 ClearPendingLevelUp();
             if (signal.Name == "xpgain")
                 ClearPendingXpGain();
+            if (signal.Name == "cast failed")
+                ClearPendingCastFailed();
             signal.Name.clear();
         }
         return;
@@ -1364,6 +1374,77 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                     uint32(parsed.Reason),
                     parsed.Victim.ToString(),
                     parsed.GroupBonus);
+            break;
+        }
+        case SMSG_CAST_FAILED:
+        {
+            // Cleared unless Layer 2 OK. Enable=0: no poll dual.
+            // Payload-only — do not invent GetCurrentSpell / pending-cast hard dual.
+            signal.Name.clear();
+            ClearPendingCastFailed();
+
+            Playerbots::PacketParse::CastFailedPayload parsed;
+            if (!Playerbots::PacketParse::TryReadCastFailed(*signal.Packet, parsed))
+                return;
+
+            if (parsed.Reason == SPELL_CAST_OK || parsed.Reason == SPELL_FAILED_SUCCESS)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_CAST_FAILED Layer-2 success Reason on fail SMSG bot={} reason={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    parsed.Reason,
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            if (parsed.Reason < 0 || parsed.Reason > SPELL_FAILED_UNKNOWN)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_CAST_FAILED Layer-2 Reason out of range bot={} reason={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    parsed.Reason,
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            if (parsed.SpellID <= 0 || !sSpellMgr->GetSpellInfo(uint32(parsed.SpellID), DIFFICULTY_NONE))
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_CAST_FAILED Layer-2 unknown SpellID bot={} spellId={} verifiedBuild={}",
+                    GetBot() ? GetBot()->GetName() : "?",
+                    parsed.SpellID,
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            Player* bot = GetBot();
+            // Soft FailedBy: empty expected for most Reasons; non-empty prefers map-local unit.
+            if (!parsed.FailedBy.IsEmpty() && bot)
+            {
+                Unit* failedBy = ObjectAccessor::GetUnit(*bot, parsed.FailedBy);
+                if (!failedBy && Playerbots::GetLogLevel() >= 1)
+                    TC_LOG_DEBUG("playerbots.packet",
+                        "BotPacketParse SMSG_CAST_FAILED soft FailedBy not map-local bot={} failedBy={}",
+                        bot->GetName(),
+                        parsed.FailedBy.ToString());
+            }
+
+            PendingCastFailed stash;
+            stash.SpellID = parsed.SpellID;
+            stash.Reason = parsed.Reason;
+            SetPendingCastFailed(std::move(stash));
+            signal.Name = "cast failed";
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_CAST_FAILED ok bot={} spellId={} reason={} castId={} failedArg1={} failedArg2={} failedBy={}",
+                    bot ? bot->GetName() : "?",
+                    parsed.SpellID,
+                    parsed.Reason,
+                    parsed.CastID.ToString(),
+                    parsed.FailedArg1,
+                    parsed.FailedArg2,
+                    parsed.FailedBy.ToString());
             break;
         }
         default:
