@@ -70,6 +70,11 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // SMSG_GROUP_DESTROYED Layer-2 OK (GetGroup()==nullptr). No Enable=0 !GetGroup() poll.
     triggers.push_back(new TriggerNode("group destroyed", { NextAction("reset botAI", 100.0f) }));
 
+    // Party roster / empty destroy update (AC WorldPacketHandlerStrategy "group list" →
+    // "reset botAI"). Midnight SMSG_PARTY_UPDATE; enqueue only when PlayerList.empty()
+    // (AC membersCount==0 gate). Reuse thin ResetAiAction. No Enable=0 poll.
+    triggers.push_back(new TriggerNode("group list", { NextAction("reset botAI", 100.0f) }));
+
     // Master mount sync wake-up (AC WorldPacketHandlerStrategy "check mount state").
     // Signal-only after SMSG_MOVE_SET_RUN_SPEED Layer-2 OK; no NonCombat timer poll in V1.
     triggers.push_back(new TriggerNode("check mount state", { NextAction("check mount state", 100.0f) }));

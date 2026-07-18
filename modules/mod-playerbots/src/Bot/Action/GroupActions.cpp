@@ -89,8 +89,9 @@ bool ResetAiAction::Execute(Event /*event*/)
     if (!_botAI)
         return false;
 
-    // V1: AC "group set leader" / intentional fork "group destroyed" → "reset botAI" intent only.
-    // Full AC ResetAiAction (FindNewMaster / repository wipe / TellMaster) stays out of scope.
+    // V1: AC "group set leader" / intentional fork "group destroyed" / empty "group list" →
+    // "reset botAI" intent only. Full AC ResetAiAction (FindNewMaster / repository wipe /
+    // TellMaster) stays out of scope. Empty-PlayerList gate lives in HandlePartyUpdate.
     _botAI->ResetStrategies();
 
     if (Playerbots::GetLogLevel() >= 1)

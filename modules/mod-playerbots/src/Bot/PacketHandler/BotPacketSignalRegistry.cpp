@@ -40,6 +40,9 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         // AC SMSG_GROUP_DESTROYED → "group destroyed"; empty GroupDestroyed::Write(). Cleared
         // unless Layer 2 OK (GetGroup()==nullptr). Enable=0: no !GetGroup() poll (too noisy).
         { SMSG_GROUP_DESTROYED, { "group destroyed", true, &HandleGroupDestroyed, true, nullptr } },
+        // AC SMSG_GROUP_LIST → Midnight SMSG_PARTY_UPDATE only (not PARTY_MEMBER_*). Cleared
+        // unless Layer 2 OK; V1 enqueues "group list" only when PlayerList.empty(). Enable=0: no poll.
+        { SMSG_PARTY_UPDATE, { "group list", true, &HandlePartyUpdate, true, nullptr } },
         // AC SMSG_FORCE_RUN_SPEED_CHANGE → Midnight SMSG_MOVE_SET_RUN_SPEED; Cleared unless
         // Layer 2 OK (and when PayloadParse is off — no poll dual for "speed just changed").
         { SMSG_MOVE_SET_RUN_SPEED, { "check mount state", true, &HandleMoveSetRunSpeed, true, nullptr } },

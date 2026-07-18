@@ -24,11 +24,13 @@
 #include "Bot/Packet/BotGroupNewLeaderPacket.h"
 #include "Bot/Packet/BotMoveSetRunSpeedPacket.h"
 #include "Bot/Packet/BotPartyCommandResultPacket.h"
+#include "Bot/Packet/BotPartyUpdatePacket.h"
 #include "Group.h"
 #include "Player.h"
 #include "SharedDefines.h"
 #include "Unit.h"
 #include "WorldSession.h"
+#include <algorithm>
 #include <cmath>
 
 namespace Playerbots::PacketHandler
@@ -113,6 +115,97 @@ void HandleGroupDestroyed(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& sign
             TC_LOG_DEBUG("playerbots.packet",
                 "BotPacketParse SMSG_GROUP_DESTROYED ok bot={}",
                 bot->GetName());
+}
+
+void HandlePartyUpdate(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal)
+{
+        // Cleared unless Layer 2 OK. V1 enqueues "group list" only on empty PlayerList
+        // (AC membersCount==0 gate). Non-empty roster = parse-ok without reset thrash.
+        signal.Name.clear();
+
+        Playerbots::PacketParse::PartyUpdatePayload parsed;
+        if (!Playerbots::PacketParse::TryReadPartyUpdate(*signal.Packet, parsed))
+            return;
+
+        Player* bot = ai.GetBot();
+        if (!bot)
+            return;
+
+        if (parsed.PlayerList.empty())
+        {
+            // Soft: destroy update usually carries GROUP_FLAG_DESTROYED; GetGroup() often
+            // already null after leave/disband — do not hard-require either.
+            if (!(parsed.PartyFlags & GROUP_FLAG_DESTROYED) && Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_PARTY_UPDATE soft empty list without DESTROYED bot={} flags={:#x}",
+                    bot->GetName(),
+                    uint32(parsed.PartyFlags));
+
+            if (bot->GetGroup() && Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_PARTY_UPDATE soft empty list while still grouped bot={}",
+                    bot->GetName());
+
+            signal.Name = "group list";
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_PARTY_UPDATE ok (empty → group list) bot={} party={} flags={:#x} seq={}",
+                    bot->GetName(),
+                    parsed.PartyGUID.ToString(),
+                    uint32(parsed.PartyFlags),
+                    parsed.SequenceNum);
+            return;
+        }
+
+        Group* group = bot->GetGroup();
+        if (!group)
+        {
+            TC_LOG_ERROR("playerbots.packet",
+                "BotPacketParse SMSG_PARTY_UPDATE Layer-2 non-empty without group bot={} members={} verifiedBuild={}",
+                bot->GetName(),
+                uint32(parsed.PlayerList.size()),
+                Playerbots::PacketParse::VERIFIED_BUILD);
+            return;
+        }
+
+        if (parsed.PartyGUID != group->GetGUID() && Playerbots::GetLogLevel() >= 1)
+            TC_LOG_DEBUG("playerbots.packet",
+                "BotPacketParse SMSG_PARTY_UPDATE soft PartyGUID dual bot={} parsed={} live={}",
+                bot->GetName(),
+                parsed.PartyGUID.ToString(),
+                group->GetGUID().ToString());
+
+        if (parsed.LeaderGUID != group->GetLeaderGUID() && Playerbots::GetLogLevel() >= 1)
+            TC_LOG_DEBUG("playerbots.packet",
+                "BotPacketParse SMSG_PARTY_UPDATE soft LeaderGUID dual bot={} parsed={} live={}",
+                bot->GetName(),
+                parsed.LeaderGUID.ToString(),
+                group->GetLeaderGUID().ToString());
+
+        bool const myIndexInRange = parsed.MyIndex >= 0 &&
+            size_t(parsed.MyIndex) < parsed.PlayerList.size();
+        bool const listHasBot = std::any_of(parsed.PlayerList.begin(), parsed.PlayerList.end(),
+            [bot](WorldPackets::Party::PartyPlayerInfo const& info)
+            {
+                return info.GUID == bot->GetGUID();
+            });
+        if ((!myIndexInRange || !listHasBot) && Playerbots::GetLogLevel() >= 1)
+            TC_LOG_DEBUG("playerbots.packet",
+                "BotPacketParse SMSG_PARTY_UPDATE soft roster self dual bot={} myIndex={} hasBot={}",
+                bot->GetName(),
+                parsed.MyIndex,
+                listHasBot);
+
+        // Non-empty: parse-ok only — do not enqueue "group list" / reset.
+        if (Playerbots::GetLogLevel() >= 1)
+            TC_LOG_DEBUG("playerbots.packet",
+                "BotPacketParse SMSG_PARTY_UPDATE ok (roster, no reset) bot={} members={} myIndex={} party={} seq={}",
+                bot->GetName(),
+                uint32(parsed.PlayerList.size()),
+                parsed.MyIndex,
+                parsed.PartyGUID.ToString(),
+                parsed.SequenceNum);
 }
 
 void HandleMoveSetRunSpeed(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal)
