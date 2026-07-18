@@ -160,6 +160,12 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("lfg proposal active",
         { NextAction("lfg accept", 100.0f) }));
 
+    // BG status family (AC WorldPacketHandler "bg status"). Signal after Layer-2 OK; one
+    // action branches on stashed Kind — NeedConfirmation → HandleBattleFieldPortOpcode;
+    // Queued/Active signal-only. No LeaveBG / leave-queue / era QueuePacket / ResetStrategies.
+    triggers.push_back(new TriggerNode("bg status",
+        { NextAction("bg status", 100.0f) }));
+
     // Quest family (AC WorldPacketHandler "quest update complete" / "quest update add kill" /
     // "confirm quest"). Signal after Layer-2 OK; plain QuestID TellMaster; confirm via
     // HandleQuestConfirmAccept only (master sharer). Poll twin for Enable=0 / lost signal.

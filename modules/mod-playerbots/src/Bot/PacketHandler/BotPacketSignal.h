@@ -72,6 +72,10 @@ void HandleEmote(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal);
 void HandleLfgRoleCheckUpdate(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal);
 void HandleLfgProposalUpdate(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal);
 
+void HandleBattlefieldStatusNeedConfirmation(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal);
+void HandleBattlefieldStatusQueued(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal);
+void HandleBattlefieldStatusActive(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal);
+
 void HandleQuestUpdateComplete(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal);
 void HandleQuestUpdateAddCredit(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal);
 void HandleQuestConfirmAccept(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal);

@@ -37,6 +37,7 @@
 #include "Bot/Action/ReceiveEmoteAction.h"
 #include "Bot/Action/DuelActions.h"
 #include "Bot/Action/LfgActions.h"
+#include "Bot/Action/BgStatusActions.h"
 #include "Bot/Action/QuestUpdateActions.h"
 #include "Bot/Action/TellMasterActions.h"
 #include "Bot/Action/TradeActions.h"
@@ -244,6 +245,12 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
         std::make_unique<SignalTrigger>(botAI, "lfg proposal"));
     context->RegisterTrigger("lfg proposal active",
         std::make_unique<LfgProposalActiveTrigger>(botAI));
+
+    // BG status family (AC: "bg status"). Midnight NeedConfirmation / Queued / Active;
+    // V1 invite accept via HandleBattleFieldPortOpcode; Queued/Active signal-only.
+    context->RegisterAction("bg status", std::make_unique<BgStatusAction>(botAI));
+    context->RegisterTrigger("bg status",
+        std::make_unique<SignalTrigger>(botAI, "bg status"));
 
     // Quest family (AC: "quest update complete" / "quest update add kill" / "confirm quest").
     // Midnight SMSG_QUEST_UPDATE_COMPLETE / ADD_CREDIT / CONFIRM_ACCEPT; FollowMaster V1

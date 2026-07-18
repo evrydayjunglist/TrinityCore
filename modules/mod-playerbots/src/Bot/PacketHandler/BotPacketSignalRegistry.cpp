@@ -83,6 +83,12 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         // Cleared unless Layer 2 OK (sLFGMgr ROLECHECK / PROPOSAL). Enable=0: proposal poll twin may accept if stash present.
         { SMSG_LFG_ROLE_CHECK_UPDATE, { "lfg role check", true, &HandleLfgRoleCheckUpdate, true, nullptr } },
         { SMSG_LFG_PROPOSAL_UPDATE, { "lfg proposal", true, &HandleLfgProposalUpdate, true, &BotPlayerbotAI::ClearPendingLfgProposal } },
+        // AC singular SMSG_BATTLEFIELD_STATUS → Midnight NeedConfirmation + Queued + Active only
+        // (NONE/FAILED/UNHANDLED out). All three keep AC signal "bg status"; stash Kind for action.
+        // Cleared unless Layer 2 OK. Enable=0: no invited-queue poll (signal-only V1).
+        { SMSG_BATTLEFIELD_STATUS_NEED_CONFIRMATION, { "bg status", true, &HandleBattlefieldStatusNeedConfirmation, true, &BotPlayerbotAI::ClearPendingBgStatus } },
+        { SMSG_BATTLEFIELD_STATUS_QUEUED, { "bg status", true, &HandleBattlefieldStatusQueued, true, &BotPlayerbotAI::ClearPendingBgStatus } },
+        { SMSG_BATTLEFIELD_STATUS_ACTIVE, { "bg status", true, &HandleBattlefieldStatusActive, true, &BotPlayerbotAI::ClearPendingBgStatus } },
         // Cleared unless Layer 2 OK (active quest / COMPLETE). Enable=0: no poll dual.
         { SMSG_QUEST_UPDATE_COMPLETE, { "quest update complete", true, &HandleQuestUpdateComplete, true, &BotPlayerbotAI::ClearPendingQuestUpdateComplete } },
         // AC "quest update add kill" → Midnight SMSG_QUEST_UPDATE_ADD_CREDIT; keep AC signal name.

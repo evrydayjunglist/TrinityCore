@@ -235,6 +235,25 @@ public:
     void SetPendingLfgProposal(PendingLfgProposal pending) { _pendingLfgProposal = std::move(pending); }
     void ClearPendingLfgProposal() { _pendingLfgProposal.reset(); }
 
+    // AC "bg status" family (NeedConfirmation / Queued / Active) stash for V1 port accept.
+    // Cleared after BgStatusAction or on Layer fail / Enable=0. Tick-thread only.
+    enum class BgStatusKind : uint8
+    {
+        NeedConfirmation,
+        Queued,
+        Active
+    };
+    struct PendingBgStatus
+    {
+        BgStatusKind Kind = BgStatusKind::Queued;
+        WorldPackets::LFG::RideTicket Ticket;
+        uint32 Mapid = 0;
+        uint32 Timeout = 0;
+    };
+    std::optional<PendingBgStatus> const& GetPendingBgStatus() const { return _pendingBgStatus; }
+    void SetPendingBgStatus(PendingBgStatus pending) { _pendingBgStatus = std::move(pending); }
+    void ClearPendingBgStatus() { _pendingBgStatus.reset(); }
+
     // SMSG_QUEST_UPDATE_COMPLETE stash for V1 "quest update complete" optional TellMaster.
     // Cleared after QuestUpdateCompleteAction or on Layer fail / Enable=0. Tick-thread only.
     struct PendingQuestUpdateComplete
@@ -332,6 +351,7 @@ private:
     std::optional<PendingReceiveEmote> _pendingReceiveEmote;
     ObjectGuid _pendingDuelArbiter;
     std::optional<PendingLfgProposal> _pendingLfgProposal;
+    std::optional<PendingBgStatus> _pendingBgStatus;
     std::optional<PendingQuestUpdateComplete> _pendingQuestUpdateComplete;
     std::optional<PendingQuestUpdateAddKill> _pendingQuestUpdateAddKill;
     std::optional<PendingQuestConfirm> _pendingQuestConfirm;
