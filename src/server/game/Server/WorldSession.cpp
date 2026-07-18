@@ -863,6 +863,17 @@ void WorldSession::LogoutPlayer(bool save)
             CharacterDatabase.Execute(stmt);
         }
     }
+    else if (PlayerLoading())
+    {
+        // Socketless bot login queues HandlePlayerLogin via DelayQueryHolder after setting
+        // m_playerLoading. BanAccount / KickAll call RemoveBotSession → LogoutPlayer while the
+        // async load is still outstanding; without canceling that holder (and clearing the
+        // loading GUID), Update() keeps the session alive and the callback finishes login for a
+        // banned/kicked account.
+        _queryProcessor.CancelAll();
+        _queryHolderProcessor.CancelAll();
+        m_playerLoading.Clear();
+    }
 
     if (m_Socket[CONNECTION_TYPE_INSTANCE])
     {

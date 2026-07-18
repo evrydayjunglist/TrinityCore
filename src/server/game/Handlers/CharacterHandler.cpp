@@ -1235,6 +1235,9 @@ void WorldSession::AbortLogin(WorldPackets::Character::LoginFailureReason reason
         return;
     }
 
+    // Drop in-flight LoginQueryHolder completions so AbortLogin cannot race with HandlePlayerLogin.
+    _queryProcessor.CancelAll();
+    _queryHolderProcessor.CancelAll();
     m_playerLoading.Clear();
     SendPacket(WorldPackets::Character::CharacterLoginFailed(reason).Write());
 }
@@ -1247,6 +1250,16 @@ void WorldSession::HandleLoadScreenOpcode(WorldPackets::Character::LoadingScreen
 void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
 {
     ObjectGuid playerGuid = holder.GetGuid();
+
+    // LogoutPlayer / AbortLogin cancel outstanding holders and clear m_playerLoading. Refuse any
+    // stale completion that still arrives so BanAccount / KickAll eviction during async bot login
+    // cannot finish bringing the character online.
+    if (m_playerLoading != playerGuid)
+    {
+        TC_LOG_ERROR("network", "WorldSession::HandlePlayerLogin: refusing stale login for {} on account {} (pending load {})",
+            playerGuid.ToString(), GetAccountId(), m_playerLoading.ToString());
+        return;
+    }
 
     Player* pCurrChar = new Player(this);
      // for send server info and strings (config)
