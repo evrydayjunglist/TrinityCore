@@ -496,12 +496,14 @@ void WorldSession::HandleQuestConfirmAccept(WorldPackets::Quest::QuestConfirmAcc
     if (_player->GetSharedQuestID() != uint32(packet.QuestID))
         return;
 
+    // Capture sharer before ClearQuestSharingInfo — FindPlayer after clear always misses.
+    ObjectGuid const sharerGuid = _player->GetPlayerSharingQuest();
     _player->ClearQuestSharingInfo();
     Quest const* quest = sObjectMgr->GetQuestTemplate(packet.QuestID);
     if (!quest)
         return;
 
-    Player* originalPlayer = ObjectAccessor::FindPlayer(_player->GetPlayerSharingQuest());
+    Player* originalPlayer = ObjectAccessor::FindPlayer(sharerGuid);
     if (!originalPlayer)
         return;
 
