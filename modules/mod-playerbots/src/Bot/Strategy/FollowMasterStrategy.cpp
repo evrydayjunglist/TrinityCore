@@ -124,4 +124,11 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // TellMaster Reason subset only when CalcCastTime >= 2000.
     triggers.push_back(new TriggerNode("cast failed",
         { NextAction("tell cast failed", 100.0f) }));
+
+    // Inbound text + oneshot emotes (AC EmoteStrategy both → "emote"; ReceiveEmote matrix
+    // out of scope). Signal+action both names after Layer-2 OK; TellMaster when source == master.
+    triggers.push_back(new TriggerNode("receive text emote",
+        { NextAction("receive text emote", 100.0f) }));
+    triggers.push_back(new TriggerNode("receive emote",
+        { NextAction("receive emote", 100.0f) }));
 }

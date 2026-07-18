@@ -34,6 +34,7 @@
 #include "Bot/Action/LevelUpAction.h"
 #include "Bot/Action/XpGainAction.h"
 #include "Bot/Action/TellCastFailedAction.h"
+#include "Bot/Action/ReceiveEmoteAction.h"
 #include "Bot/Action/TellMasterActions.h"
 #include "Bot/Action/TradeActions.h"
 #include "Bot/Action/NewRpgActions.h"
@@ -197,6 +198,18 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterAction("tell cast failed", std::make_unique<TellCastFailedAction>(botAI));
     context->RegisterTrigger("cast failed",
         std::make_unique<SignalTrigger>(botAI, "cast failed"));
+
+    // Inbound emotes (AC: both → "emote" / EmoteAction ReceiveEmote matrix — out of scope).
+    // Midnight SMSG_TEXT_EMOTE + SMSG_EMOTE; FollowMaster V1 signal+action same names +
+    // optional TellMaster when source == master only.
+    context->RegisterAction("receive text emote",
+        std::make_unique<ReceiveEmoteAction>(botAI, "receive text emote"));
+    context->RegisterTrigger("receive text emote",
+        std::make_unique<SignalTrigger>(botAI, "receive text emote"));
+    context->RegisterAction("receive emote",
+        std::make_unique<ReceiveEmoteAction>(botAI, "receive emote"));
+    context->RegisterTrigger("receive emote",
+        std::make_unique<SignalTrigger>(botAI, "receive emote"));
 
     // Quest loot open + object interaction (AC: OpenLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));

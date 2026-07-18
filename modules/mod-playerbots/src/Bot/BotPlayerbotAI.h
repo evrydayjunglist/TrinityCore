@@ -203,6 +203,19 @@ public:
     void SetPendingCastFailed(PendingCastFailed pending) { _pendingCastFailed = std::move(pending); }
     void ClearPendingCastFailed() { _pendingCastFailed.reset(); }
 
+    // SMSG_TEXT_EMOTE / SMSG_EMOTE stash for V1 "receive text emote" / "receive emote"
+    // optional TellMaster when source == master. Cleared after ReceiveEmoteAction or on
+    // Layer fail / Enable=0 / soft NPC-self skip. Tick-thread only.
+    struct PendingReceiveEmote
+    {
+        ObjectGuid SourceGUID;
+        uint32 EmoteID = 0;
+        bool IsTextEmote = false;
+    };
+    std::optional<PendingReceiveEmote> const& GetPendingReceiveEmote() const { return _pendingReceiveEmote; }
+    void SetPendingReceiveEmote(PendingReceiveEmote pending) { _pendingReceiveEmote = std::move(pending); }
+    void ClearPendingReceiveEmote() { _pendingReceiveEmote.reset(); }
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -249,6 +262,7 @@ private:
     std::optional<PendingLevelUp> _pendingLevelUp;
     std::optional<PendingXpGain> _pendingXpGain;
     std::optional<PendingCastFailed> _pendingCastFailed;
+    std::optional<PendingReceiveEmote> _pendingReceiveEmote;
 };
 
 #endif
