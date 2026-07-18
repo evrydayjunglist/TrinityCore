@@ -35,6 +35,7 @@
 #include "Bot/Action/XpGainAction.h"
 #include "Bot/Action/TellCastFailedAction.h"
 #include "Bot/Action/ReceiveEmoteAction.h"
+#include "Bot/Action/DuelActions.h"
 #include "Bot/Action/TellMasterActions.h"
 #include "Bot/Action/TradeActions.h"
 #include "Bot/Action/NewRpgActions.h"
@@ -48,6 +49,7 @@
 #include "Bot/Strategy/PassiveStrategy.h"
 #include "Bot/Trigger/GroupTriggers.h"
 #include "Bot/Trigger/GuildTriggers.h"
+#include "Bot/Trigger/DuelTriggers.h"
 #include "Bot/Trigger/NewRpgTriggers.h"
 #include "Bot/Trigger/PetitionTriggers.h"
 #include "Bot/Trigger/ResurrectTriggers.h"
@@ -210,6 +212,14 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
         std::make_unique<ReceiveEmoteAction>(botAI, "receive emote"));
     context->RegisterTrigger("receive emote",
         std::make_unique<SignalTrigger>(botAI, "receive emote"));
+
+    // Duel challenge (AC: "duel requested" → "accept duel"). Midnight SMSG_DUEL_REQUESTED;
+    // V1 master-only via HandleDuelResponseOpcode. Signal + Enable=0 poll twin (live duel).
+    context->RegisterAction("accept duel", std::make_unique<AcceptDuelAction>(botAI));
+    context->RegisterTrigger("duel requested",
+        std::make_unique<SignalTrigger>(botAI, "duel requested"));
+    context->RegisterTrigger("duel requested poll",
+        std::make_unique<DuelRequestedTrigger>(botAI));
 
     // Quest loot open + object interaction (AC: OpenLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));

@@ -216,6 +216,12 @@ public:
     void SetPendingReceiveEmote(PendingReceiveEmote pending) { _pendingReceiveEmote = std::move(pending); }
     void ClearPendingReceiveEmote() { _pendingReceiveEmote.reset(); }
 
+    // Last Layer-2-OK SMSG_DUEL_REQUESTED ArbiterGUID for V1 "accept duel". Cleared after
+    // AcceptDuelAction or on Layer fail / Enable=0 / soft initiator skip. Tick-thread only.
+    ObjectGuid GetPendingDuelArbiter() const { return _pendingDuelArbiter; }
+    void SetPendingDuelArbiter(ObjectGuid guid) { _pendingDuelArbiter = guid; }
+    void ClearPendingDuelArbiter() { _pendingDuelArbiter = ObjectGuid::Empty; }
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -263,6 +269,7 @@ private:
     std::optional<PendingXpGain> _pendingXpGain;
     std::optional<PendingCastFailed> _pendingCastFailed;
     std::optional<PendingReceiveEmote> _pendingReceiveEmote;
+    ObjectGuid _pendingDuelArbiter;
 };
 
 #endif

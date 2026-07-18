@@ -131,4 +131,12 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("receive text emote", 100.0f) }));
     triggers.push_back(new TriggerNode("receive emote",
         { NextAction("receive emote", 100.0f) }));
+
+    // Master duel challenge (AC DuelStrategy "duel requested" → "accept duel"). Signal after
+    // SMSG_DUEL_REQUESTED Layer-2 OK + master challenger; poll twin for Enable=0 / lost signal.
+    // HandleDuelResponseOpcode only — no ResetStrategies / HP-cancel / era CMSG_DUEL_ACCEPTED.
+    triggers.push_back(new TriggerNode("duel requested",
+        { NextAction("accept duel", 100.0f) }));
+    triggers.push_back(new TriggerNode("duel requested poll",
+        { NextAction("accept duel", 100.0f) }));
 }

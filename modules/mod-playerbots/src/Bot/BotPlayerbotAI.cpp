@@ -29,6 +29,7 @@
 #include "Bot/Packet/BotCastFailedPacket.h"
 #include "Bot/Packet/BotEmotePacket.h"
 #include "Bot/Packet/BotSTextEmotePacket.h"
+#include "Bot/Packet/BotDuelRequestedPacket.h"
 #include "Bot/Packet/BotPartyInvitePacket.h"
 #include "Bot/Packet/BotPacketParse.h"
 #include "Bot/Packet/BotResurrectRequestPacket.h"
@@ -124,6 +125,9 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         // Signal+action both "receive text emote" / "receive emote" (no EmoteStrategy / ReceiveEmote matrix).
         { SMSG_TEXT_EMOTE, { "receive text emote", true } },
         { SMSG_EMOTE, { "receive emote", true } },
+        // Cleared unless Layer 2 OK + master challenger (V1 accept). Enable=0: poll twin may still accept.
+        // Soft-skip when bot is Initiator (self-observation). Signal "duel requested" → "accept duel".
+        { SMSG_DUEL_REQUESTED, { "duel requested", true } },
     };
 
     auto itr = registry.find(opcode);
@@ -274,7 +278,7 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
             signal.Name == "master loot roll" || signal.Name == "party command" ||
             signal.Name == "levelup" || signal.Name == "xpgain" ||
             signal.Name == "cast failed" || signal.Name == "receive text emote" ||
-            signal.Name == "receive emote")
+            signal.Name == "receive emote" || signal.Name == "duel requested")
         {
             if (signal.Name == "cannot equip")
                 ClearPendingCannotEquipTell();
@@ -300,6 +304,8 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                 ClearPendingCastFailed();
             if (signal.Name == "receive text emote" || signal.Name == "receive emote")
                 ClearPendingReceiveEmote();
+            if (signal.Name == "duel requested")
+                ClearPendingDuelArbiter();
             signal.Name.clear();
         }
         return;
@@ -1598,6 +1604,114 @@ void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
                     parsed.EmoteID,
                     parsed.SpellVisualKitIDs.size(),
                     parsed.SequenceVariation);
+            break;
+        }
+        case SMSG_DUEL_REQUESTED:
+        {
+            // Cleared unless Layer 2 OK + master challenger (V1). Enable=0: poll twin may still accept.
+            signal.Name.clear();
+            ClearPendingDuelArbiter();
+
+            Playerbots::PacketParse::DuelRequestedPayload parsed;
+            if (!Playerbots::PacketParse::TryReadDuelRequested(*signal.Packet, parsed))
+                return;
+
+            Player* bot = GetBot();
+            if (!bot || !bot->duel || bot->duel->State != DUEL_STATE_CHALLENGED)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_DUEL_REQUESTED Layer-2 mismatch bot={} duelState={} verifiedBuild={}",
+                    bot ? bot->GetName() : "?",
+                    bot && bot->duel ? uint32(bot->duel->State) : 0u,
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            ObjectGuid const liveArbiter = *bot->m_playerData->DuelArbiter;
+            if (liveArbiter.IsEmpty() || liveArbiter != parsed.ArbiterGUID)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_DUEL_REQUESTED Layer-2 Arbiter mismatch bot={} parsed={} live={} verifiedBuild={}",
+                    bot->GetName(),
+                    parsed.ArbiterGUID.ToString(),
+                    liveArbiter.ToString(),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            if (!bot->duel->Initiator)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_DUEL_REQUESTED Layer-2 null Initiator bot={} verifiedBuild={}",
+                    bot->GetName(),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            ObjectGuid const liveInitiator = bot->duel->Initiator->GetGUID();
+            if (liveInitiator != parsed.RequestedByGUID)
+            {
+                TC_LOG_ERROR("playerbots.packet",
+                    "BotPacketParse SMSG_DUEL_REQUESTED Layer-2 Initiator mismatch bot={} parsed={} live={} verifiedBuild={}",
+                    bot->GetName(),
+                    parsed.RequestedByGUID.ToString(),
+                    liveInitiator.ToString(),
+                    Playerbots::PacketParse::VERIFIED_BUILD);
+                return;
+            }
+
+            // Soft: bot is the challenger observing its own SMSG — clear without Layer-2 ERROR.
+            if (bot->duel->Initiator == bot)
+            {
+                if (Playerbots::GetLogLevel() >= 1)
+                    TC_LOG_DEBUG("playerbots.packet",
+                        "BotPacketParse SMSG_DUEL_REQUESTED soft initiator self-skip bot={}",
+                        bot->GetName());
+                return;
+            }
+
+            // Soft: RequestedBy should be a player; map-local when practical (no cold remote query).
+            if (!parsed.RequestedByGUID.IsPlayer())
+            {
+                if (Playerbots::GetLogLevel() >= 1)
+                    TC_LOG_DEBUG("playerbots.packet",
+                        "BotPacketParse SMSG_DUEL_REQUESTED soft non-player RequestedBy bot={} requestedBy={}",
+                        bot->GetName(),
+                        parsed.RequestedByGUID.ToString());
+            }
+            else if (Player* challenger = ObjectAccessor::GetPlayer(*bot, parsed.RequestedByGUID); !challenger)
+            {
+                if (Playerbots::GetLogLevel() >= 1)
+                    TC_LOG_DEBUG("playerbots.packet",
+                        "BotPacketParse SMSG_DUEL_REQUESTED soft RequestedBy not map-local bot={} requestedBy={}",
+                        bot->GetName(),
+                        parsed.RequestedByGUID.ToString());
+            }
+
+            // Soft: ToTheDeath unconstrained (false expected from current SpellEffects sender).
+            if (parsed.ToTheDeath && Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_DUEL_REQUESTED soft ToTheDeath=true bot={}",
+                    bot->GetName());
+
+            Player* master = GetMaster();
+            bool const masterChallenger = master && parsed.RequestedByGUID == master->GetGUID();
+
+            if (Playerbots::GetLogLevel() >= 1)
+                TC_LOG_DEBUG("playerbots.packet",
+                    "BotPacketParse SMSG_DUEL_REQUESTED ok bot={} arbiter={} requestedBy={} toTheDeath={} masterChallenger={}",
+                    bot->GetName(),
+                    parsed.ArbiterGUID.ToString(),
+                    parsed.RequestedByGUID.ToString(),
+                    parsed.ToTheDeath ? "yes" : "no",
+                    masterChallenger ? "yes" : "no");
+
+            // V1 FollowMaster: only enqueue accept signal for master challenger.
+            if (!masterChallenger)
+                return;
+
+            SetPendingDuelArbiter(parsed.ArbiterGUID);
+            signal.Name = "duel requested";
             break;
         }
         default:
