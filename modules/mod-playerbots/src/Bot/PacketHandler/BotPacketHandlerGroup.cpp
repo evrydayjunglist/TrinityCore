@@ -20,6 +20,7 @@
 #include "Log.h"
 #include "Opcodes.h"
 #include "PlayerbotsConfig.h"
+#include "Bot/Packet/BotGroupDestroyedPacket.h"
 #include "Bot/Packet/BotGroupNewLeaderPacket.h"
 #include "Bot/Packet/BotMoveSetRunSpeedPacket.h"
 #include "Bot/Packet/BotPartyCommandResultPacket.h"
@@ -70,6 +71,48 @@ void HandleGroupNewLeader(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& sign
                 bot->GetName(),
                 parsed.Name,
                 int32(parsed.PartyIndex));
+}
+
+void HandleGroupDestroyed(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal)
+{
+        // Cleared unless Layer 2 OK — do not fire "reset botAI" on mis-parse / stale group.
+        signal.Name.clear();
+
+        if (!Playerbots::PacketParse::TryReadGroupDestroyed(*signal.Packet))
+            return;
+
+        Player* bot = ai.GetBot();
+        if (!bot)
+            return;
+
+        // Group::Disband clears SetGroup(nullptr) before SendDirectMessage(GroupDestroyed)
+        // (unless hideDestroy). Prefer dual = no current group.
+        if (bot->GetGroup())
+        {
+            TC_LOG_ERROR("playerbots.packet",
+                "BotPacketParse SMSG_GROUP_DESTROYED Layer-2 still grouped bot={} verifiedBuild={}",
+                bot->GetName(),
+                Playerbots::PacketParse::VERIFIED_BUILD);
+            return;
+        }
+
+        // Soft: original-group / loading oddities (e.g. BG/BF raid path) — DEBUG only.
+        if (bot->GetOriginalGroup() && Playerbots::GetLogLevel() >= 1)
+            TC_LOG_DEBUG("playerbots.packet",
+                "BotPacketParse SMSG_GROUP_DESTROYED soft original-group still set bot={}",
+                bot->GetName());
+
+        if (bot->IsLoading() && Playerbots::GetLogLevel() >= 1)
+            TC_LOG_DEBUG("playerbots.packet",
+                "BotPacketParse SMSG_GROUP_DESTROYED soft bot loading bot={}",
+                bot->GetName());
+
+        signal.Name = "group destroyed";
+
+        if (Playerbots::GetLogLevel() >= 1)
+            TC_LOG_DEBUG("playerbots.packet",
+                "BotPacketParse SMSG_GROUP_DESTROYED ok bot={}",
+                bot->GetName());
 }
 
 void HandleMoveSetRunSpeed(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal)

@@ -89,7 +89,7 @@ bool ResetAiAction::Execute(Event /*event*/)
     if (!_botAI)
         return false;
 
-    // V1: AC WorldPacketHandlerStrategy "group set leader" → "reset botAI" intent only.
+    // V1: AC "group set leader" / intentional fork "group destroyed" → "reset botAI" intent only.
     // Full AC ResetAiAction (FindNewMaster / repository wipe / TellMaster) stays out of scope.
     _botAI->ResetStrategies();
 

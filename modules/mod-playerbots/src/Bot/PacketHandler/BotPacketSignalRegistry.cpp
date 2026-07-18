@@ -37,6 +37,9 @@ PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
         // AC SMSG_GROUP_SET_LEADER → Midnight SMSG_GROUP_NEW_LEADER; Cleared unless Layer 2 OK
         // (and when PayloadParse is off — no poll dual for leader name alone).
         { SMSG_GROUP_NEW_LEADER, { "group set leader", true, &HandleGroupNewLeader, true, nullptr } },
+        // AC SMSG_GROUP_DESTROYED → "group destroyed"; empty GroupDestroyed::Write(). Cleared
+        // unless Layer 2 OK (GetGroup()==nullptr). Enable=0: no !GetGroup() poll (too noisy).
+        { SMSG_GROUP_DESTROYED, { "group destroyed", true, &HandleGroupDestroyed, true, nullptr } },
         // AC SMSG_FORCE_RUN_SPEED_CHANGE → Midnight SMSG_MOVE_SET_RUN_SPEED; Cleared unless
         // Layer 2 OK (and when PayloadParse is off — no poll dual for "speed just changed").
         { SMSG_MOVE_SET_RUN_SPEED, { "check mount state", true, &HandleMoveSetRunSpeed, true, nullptr } },

@@ -123,11 +123,15 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterTrigger("not enough reputation",
         std::make_unique<SignalTrigger>(botAI, "not enough reputation"));
 
-    // Party leader change (AC: "group set leader" → "reset botAI"). Midnight opcode is
-    // SMSG_GROUP_NEW_LEADER; minimal ResetAiAction = ResetStrategies() only. FollowMaster V1.
+    // Party leader change / group destroyed (AC: "group set leader" / "group destroyed" →
+    // "reset botAI"). Midnight: SMSG_GROUP_NEW_LEADER + empty SMSG_GROUP_DESTROYED.
+    // Minimal ResetAiAction = ResetStrategies() only. FollowMaster V1 wires both TriggerNodes
+    // (AC comments out "group destroyed" — this fork intentionally keeps the thin reset).
     context->RegisterAction("reset botAI", std::make_unique<ResetAiAction>(botAI));
     context->RegisterTrigger("group set leader",
         std::make_unique<SignalTrigger>(botAI, "group set leader"));
+    context->RegisterTrigger("group destroyed",
+        std::make_unique<SignalTrigger>(botAI, "group destroyed"));
 
     // Master-alt mount sync (AC: "check mount state"). Midnight wake-up is
     // SMSG_MOVE_SET_RUN_SPEED; minimal CheckMountStateAction. FollowMaster V1.

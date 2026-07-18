@@ -57,6 +57,7 @@ void HandleLootRollWon(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal)
 void HandleStartLootRoll(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal);
 
 void HandleGroupNewLeader(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal);
+void HandleGroupDestroyed(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal);
 void HandleMoveSetRunSpeed(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal);
 void HandlePartyCommandResult(BotPlayerbotAI& ai, BotPlayerbotAI::QueuedSignal& signal);
 
