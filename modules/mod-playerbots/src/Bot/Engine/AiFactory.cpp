@@ -36,6 +36,7 @@
 #include "Bot/Action/TellCastFailedAction.h"
 #include "Bot/Action/ReceiveEmoteAction.h"
 #include "Bot/Action/DuelActions.h"
+#include "Bot/Action/LfgActions.h"
 #include "Bot/Action/TellMasterActions.h"
 #include "Bot/Action/TradeActions.h"
 #include "Bot/Action/NewRpgActions.h"
@@ -50,6 +51,7 @@
 #include "Bot/Trigger/GroupTriggers.h"
 #include "Bot/Trigger/GuildTriggers.h"
 #include "Bot/Trigger/DuelTriggers.h"
+#include "Bot/Trigger/LfgTriggers.h"
 #include "Bot/Trigger/NewRpgTriggers.h"
 #include "Bot/Trigger/PetitionTriggers.h"
 #include "Bot/Trigger/ResurrectTriggers.h"
@@ -220,6 +222,18 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
         std::make_unique<SignalTrigger>(botAI, "duel requested"));
     context->RegisterTrigger("duel requested poll",
         std::make_unique<DuelRequestedTrigger>(botAI));
+
+    // LFG role check + proposal (AC: "lfg role check" / "lfg proposal" → "lfg accept").
+    // Midnight DFSetRoles / DFProposalResponse Handle*; thin class→role; combat/dead decline.
+    // Proposal poll twin for lost signal while stash + LFG_STATE_PROPOSAL remain.
+    context->RegisterAction("lfg role check", std::make_unique<LfgRoleCheckAction>(botAI));
+    context->RegisterAction("lfg accept", std::make_unique<LfgAcceptAction>(botAI));
+    context->RegisterTrigger("lfg role check",
+        std::make_unique<SignalTrigger>(botAI, "lfg role check"));
+    context->RegisterTrigger("lfg proposal",
+        std::make_unique<SignalTrigger>(botAI, "lfg proposal"));
+    context->RegisterTrigger("lfg proposal active",
+        std::make_unique<LfgProposalActiveTrigger>(botAI));
 
     // Quest loot open + object interaction (AC: OpenLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));

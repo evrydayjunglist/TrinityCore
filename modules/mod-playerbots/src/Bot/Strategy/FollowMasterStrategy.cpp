@@ -139,4 +139,14 @@ void FollowMasterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("accept duel", 100.0f) }));
     triggers.push_back(new TriggerNode("duel requested poll",
         { NextAction("accept duel", 100.0f) }));
+
+    // LFG role check + proposal (AC WorldPacketHandler "lfg role check" / "lfg proposal" →
+    // "lfg accept"). Signal after Layer-2 OK; DF_* Handle* only — no QueuePacket / era
+    // CMSG_LFG_* / ResetStrategies / RandomBot Refresh. Poll twin needs stashed ProposalID.
+    triggers.push_back(new TriggerNode("lfg role check",
+        { NextAction("lfg role check", 100.0f) }));
+    triggers.push_back(new TriggerNode("lfg proposal",
+        { NextAction("lfg accept", 100.0f) }));
+    triggers.push_back(new TriggerNode("lfg proposal active",
+        { NextAction("lfg accept", 100.0f) }));
 }

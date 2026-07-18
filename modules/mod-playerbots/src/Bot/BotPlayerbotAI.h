@@ -21,6 +21,7 @@
 #include "AiObjectContext.h"
 #include "Bot/Rpg/NewRpgInfo.h"
 #include "Engine.h"
+#include "LFGPacketsCommon.h"
 #include "ObjectGuid.h"
 #include "PlayerbotAIBase.h"
 #include "SharedDefines.h"
@@ -222,6 +223,18 @@ public:
     void SetPendingDuelArbiter(ObjectGuid guid) { _pendingDuelArbiter = guid; }
     void ClearPendingDuelArbiter() { _pendingDuelArbiter = ObjectGuid::Empty; }
 
+    // SMSG_LFG_PROPOSAL_UPDATE stash for V1 "lfg accept" (Ticket + InstanceID + ProposalID).
+    // Cleared after LfgAcceptAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingLfgProposal
+    {
+        WorldPackets::LFG::RideTicket Ticket;
+        uint64 InstanceID = 0;
+        uint32 ProposalID = 0;
+    };
+    std::optional<PendingLfgProposal> const& GetPendingLfgProposal() const { return _pendingLfgProposal; }
+    void SetPendingLfgProposal(PendingLfgProposal pending) { _pendingLfgProposal = std::move(pending); }
+    void ClearPendingLfgProposal() { _pendingLfgProposal.reset(); }
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -270,6 +283,7 @@ private:
     std::optional<PendingCastFailed> _pendingCastFailed;
     std::optional<PendingReceiveEmote> _pendingReceiveEmote;
     ObjectGuid _pendingDuelArbiter;
+    std::optional<PendingLfgProposal> _pendingLfgProposal;
 };
 
 #endif
