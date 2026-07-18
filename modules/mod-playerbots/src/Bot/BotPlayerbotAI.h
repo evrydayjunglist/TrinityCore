@@ -281,6 +281,14 @@ public:
     void SetPendingQuestConfirm(PendingQuestConfirm pending) { _pendingQuestConfirm = std::move(pending); }
     void ClearPendingQuestConfirm() { _pendingQuestConfirm.reset(); }
 
+    // Cross-thread queue entry; Opcode enables registry Lookup when Packet is absent.
+    struct QueuedSignal
+    {
+        uint32 Opcode = 0;
+        std::string Name;
+        std::optional<WorldPacket> Packet; // present when payload parse is enabled for this opcode
+    };
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -292,12 +300,6 @@ private:
     NewRpgStatistic _rpgStatistic;
     std::unordered_set<uint32> _lowPriorityQuest;
     std::unordered_set<uint32> _unactionableQuest;
-
-    struct QueuedSignal
-    {
-        std::string Name;
-        std::optional<WorldPacket> Packet; // present when payload parse is enabled for this opcode
-    };
 
     struct PendingSignal
     {
