@@ -73,8 +73,9 @@ bool IsUsableCombatSpecialization(ChrSpecializationEntry const* spec, uint8 botC
 ChrSpecializationEntry const* ResolvePreferredSpecialization(Player* bot)
 {
     uint8 const botClass = bot->GetClass();
+    // Optional override — quiet=true so unset keys do not spam "Missing name" every bot login.
     std::string const key = "Playerbots.Talent.PreferSpec." + std::to_string(botClass);
-    int32 const preferId = sConfigMgr->GetIntDefault(key, 0);
+    int32 const preferId = sConfigMgr->GetIntDefault(key, 0, true);
     if (preferId <= 0)
         return nullptr;
 

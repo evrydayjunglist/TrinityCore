@@ -93,6 +93,8 @@ Playerbots.Talent.ApplyOnLogin = 1
 Playerbots.Talent.ApplyOnLevelUp = 0
 # Optional per-class ChrSpecialization ID override (must exist in ChrSpecialization.db2 for
 # that class). Key = Playerbots.Talent.PreferSpec.<ClassId> (CLASS_* enum value as integer).
+# Leave unset for DB2 Recommended/first combat spec — do NOT add PreferSpec.N = 0 placeholders
+# (optional keys are read quietly; unset means "no override").
 # Example: Playerbots.Talent.PreferSpec.8 = <MageSpecIdFromDB2>
 
 
