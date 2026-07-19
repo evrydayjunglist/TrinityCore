@@ -367,6 +367,42 @@ bool World::HasOtherOnlineSessionOnAccount(uint32 accountId, WorldSession const*
     return false;
 }
 
+void World::InvalidateSiblingAccountAchievementManagers(ObjectGuid battlenetAccountGuid, uint32 battlenetAccountId, WorldSession* except)
+{
+    if (!battlenetAccountId || battlenetAccountGuid.IsEmpty())
+        return;
+
+    auto invalidate = [](WorldSession* session)
+    {
+        if (!session)
+            return;
+
+        AccountAchievementMgr* mgr = session->GetAccountAchievementMgr();
+        if (!mgr)
+            return;
+
+        mgr->ClearLocalState();
+        if (Player* player = session->GetPlayer())
+            mgr->CheckAllAchievementCriteria(player);
+    };
+
+    // Human (and any other) sessions indexed by Battle.net account.
+    for (auto&& sessionForBnet : Trinity::Containers::MapEqualRange(m_sessionsByBnetGuid, battlenetAccountGuid))
+        if (sessionForBnet.second && sessionForBnet.second != except)
+            invalidate(sessionForBnet.second);
+
+    // Bot sessions live only in m_botSessionsByGuid and are never added to m_sessionsByBnetGuid.
+    for (auto const& [guid, session] : m_botSessionsByGuid)
+    {
+        (void)guid;
+        if (!session || session == except)
+            continue;
+        if (session->GetBattlenetAccountId() != battlenetAccountId)
+            continue;
+        invalidate(session);
+    }
+}
+
 bool World::AddBotSession(WorldSession* s, ObjectGuid characterGuid)
 {
     ASSERT(s && s->IsBotSession());

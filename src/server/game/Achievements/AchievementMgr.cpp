@@ -377,7 +377,7 @@ AccountAchievementMgr::AccountAchievementMgr(WorldSession* owner) : _owner(owner
 {
 }
 
-void AccountAchievementMgr::Reset()
+void AccountAchievementMgr::ClearLocalState()
 {
     AchievementMgr::Reset();
 
@@ -390,16 +390,30 @@ void AccountAchievementMgr::Reset()
 
     _completedAchievements.clear();
     _achievementPoints = 0;
+}
+
+void AccountAchievementMgr::Reset()
+{
+    ClearLocalState();
+
+    uint32 const battlenetAccountId = _owner->GetBattlenetAccountId();
 
     LoginDatabaseTransaction trans = LoginDatabase.BeginTransaction();
     LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_BNET_ACCOUNT_ACHIEVEMENT);
-    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+    stmt->setUInt32(0, battlenetAccountId);
     trans->Append(stmt);
 
     stmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_BNET_ACCOUNT_ACHIEVEMENT_PROGRESS);
-    stmt->setUInt32(0, _owner->GetBattlenetAccountId());
+    stmt->setUInt32(0, battlenetAccountId);
     trans->Append(stmt);
     LoginDatabase.CommitTransaction(trans);
+
+    // Per-row SaveToDB (7fdad869d0) never rewrites Changed=false rows. Sibling WorldSessions
+    // (master-alt bots, other game accounts on the same Battle.net account) still hold the pre-reset
+    // snapshot as clean memory after the account-wide DELETE above — clear them so that state cannot
+    // silently survive or later overwrite post-reset progress.
+    if (battlenetAccountId)
+        sWorld->InvalidateSiblingAccountAchievementManagers(_owner->GetBattlenetAccountGUID(), battlenetAccountId, _owner);
 
     if (Player* player = _owner->GetPlayer())
         CheckAllAchievementCriteria(player);

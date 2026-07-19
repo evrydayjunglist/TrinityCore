@@ -183,3 +183,34 @@ TEST_CASE("Account achievement saves target only dirty rows", "[Achievement]")
     CHECK(std::find(dirtyCriteria.begin(), dirtyCriteria.end(), 33) != dirtyCriteria.end());
     CHECK(std::find(dirtyCriteria.begin(), dirtyCriteria.end(), 11) == dirtyCriteria.end());
 }
+
+TEST_CASE("Account achievement reset must clear sibling clean rows for SaveToDB contract", "[Achievement]")
+{
+    // AccountAchievementMgr::Reset deletes the whole battlenet account's durable rows, then
+    // SaveToDB only rewrites Changed=true rows. A sibling session that still holds the pre-reset
+    // snapshot as Changed=false therefore never restores (or deletes) those rows — permanent loss
+    // unless Reset also clears sibling in-memory state (ClearLocalState / World invalidate).
+    std::unordered_map<uint32, CompletedAchievementData> siblingCompleted;
+    siblingCompleted[100].Changed = false;
+    siblingCompleted[100].Date = 1;
+
+    CriteriaProgressMap siblingProgress;
+    siblingProgress[11].Changed = false;
+    siblingProgress[11].Counter = 9;
+
+    std::vector<uint32> dirtyAchievements;
+    std::vector<uint32> dirtyCriteria;
+    CollectChangedAccountAchievementSaveTargets(siblingCompleted, siblingProgress, dirtyAchievements, dirtyCriteria);
+
+    CHECK(dirtyAchievements.empty());
+    CHECK(dirtyCriteria.empty());
+
+    // After ClearLocalState-equivalent wipe, there is nothing left to accidentally resurrect.
+    siblingCompleted.clear();
+    siblingProgress.clear();
+    dirtyAchievements.clear();
+    dirtyCriteria.clear();
+    CollectChangedAccountAchievementSaveTargets(siblingCompleted, siblingProgress, dirtyAchievements, dirtyCriteria);
+    CHECK(dirtyAchievements.empty());
+    CHECK(dirtyCriteria.empty());
+}

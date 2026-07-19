@@ -581,6 +581,10 @@ class TC_GAME_API World
         // True when another human or in-world/loading bot session still owns this account.
         // Used so logout must not wipe siblings' characters.online / account.online flags.
         bool HasOtherOnlineSessionOnAccount(uint32 accountId, WorldSession const* except) const;
+        // Clears AccountAchievementMgr memory on every live human/bot session for this Battle.net
+        // account except `except`. Required after AccountAchievementMgr::Reset's account-wide DELETE
+        // because per-row SaveToDB skips Changed=false rows (sibling stale state would never rewrite).
+        void InvalidateSiblingAccountAchievementManagers(ObjectGuid battlenetAccountGuid, uint32 battlenetAccountId, WorldSession* except);
         void AddSession(WorldSession* s);
         bool AddBotSession(WorldSession* s, ObjectGuid characterGuid);
         void RemoveBotSession(ObjectGuid characterGuid);

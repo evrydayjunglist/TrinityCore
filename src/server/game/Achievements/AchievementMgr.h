@@ -100,6 +100,12 @@ public:
 
     void Reset() override;
 
+    // Clears only this session's in-memory account achievement/criteria state (and notifies the
+    // client). Used by Reset() for the owning session and for live sibling sessions that share the
+    // same Battle.net account — after an account-wide DB delete, SaveToDB will not rewrite clean
+    // (Changed=false) sibling rows, so stale memory must be invalidated explicitly.
+    void ClearLocalState();
+
     void LoadFromDB(PreparedQueryResult achievementResult, PreparedQueryResult criteriaResult);
     void SaveToDB(LoginDatabaseTransaction trans);
     void MigrateLegacyCharacterData(uint32 gameAccountId);
