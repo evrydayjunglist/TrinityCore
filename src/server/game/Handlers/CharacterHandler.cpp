@@ -44,6 +44,7 @@
 #include "Language.h"
 #include "Log.h"
 #include "Map.h"
+#include "MapManager.h"
 #include "MapUtils.h"
 #include "Metric.h"
 #include "MiscPackets.h"
@@ -1302,15 +1303,27 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
     }
 
     // Catch Up Experience (Arathi RPE): honor CMSG_PLAYER_LOGIN.RPE (retail sniff B, map 2927).
+    // LoadFromDB already CreateMap+SetMap(saved); WorldRelocate alone updates WorldLocation only.
+    // Rebind like MovementHandler::HandleMoveWorldportAck so GetMap()->GetId() == 2927 for spawns/AI.
     bool const enterArathiRpe = m_playerLoginRPE;
     m_playerLoginRPE = false;
     if (enterArathiRpe)
     {
         if (sMapStore.LookupEntry(ARATHI_RPE_MAP_ID))
         {
-            pCurrChar->WorldRelocate(ARATHI_RPE_MAP_ID, ARATHI_RPE_POSITION_X, ARATHI_RPE_POSITION_Y,
-                ARATHI_RPE_POSITION_Z, ARATHI_RPE_ORIENTATION);
-            TC_LOG_DEBUG("network", "Player {} entering Arathi RPE map {}", pCurrChar->GetGUID().ToString(), ARATHI_RPE_MAP_ID);
+            if (Map* rpeMap = sMapMgr->CreateMap(ARATHI_RPE_MAP_ID, pCurrChar))
+            {
+                pCurrChar->ResetMap();
+                pCurrChar->SetMap(rpeMap);
+                pCurrChar->WorldRelocate(ARATHI_RPE_MAP_ID, ARATHI_RPE_POSITION_X, ARATHI_RPE_POSITION_Y,
+                    ARATHI_RPE_POSITION_Z, ARATHI_RPE_ORIENTATION);
+                pCurrChar->UpdatePositionData();
+                TC_LOG_DEBUG("network", "Player {} entering Arathi RPE map {} (GetMap={})",
+                    pCurrChar->GetGUID().ToString(), ARATHI_RPE_MAP_ID, pCurrChar->GetMap()->GetId());
+            }
+            else
+                TC_LOG_ERROR("network", "Player {} requested Arathi RPE login but CreateMap({}) failed",
+                    pCurrChar->GetGUID().ToString(), ARATHI_RPE_MAP_ID);
         }
         else
             TC_LOG_ERROR("network", "Player {} requested Arathi RPE login but map {} is missing from Map.db2",
