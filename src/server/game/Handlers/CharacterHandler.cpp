@@ -389,6 +389,11 @@ constexpr float ARATHI_RPE_POSITION_Y = -3554.37f;
 constexpr float ARATHI_RPE_POSITION_Z = 48.9203f;
 constexpr float ARATHI_RPE_ORIENTATION = 6.2583666f;
 
+// Pad PLAY_SCENE auras (sniff J `12-11-14` + login `23-32-20`; SpellEffect MiscValue = SceneId).
+// scene_template + SceneScriptPackage.db2 required (SQL 2026_13_32_06).
+constexpr uint32 ARATHI_RPE_SCENE_SPELL_AMBIENT = 1237116; // SceneId 3692 / package 4617
+constexpr uint32 ARATHI_RPE_SCENE_SPELL_STASIS  = 1248494; // SceneId 3749 / package 4681
+
 // Provisional until sniff A locks the retail inactivity window (owner-approved stub).
 constexpr time_t ARATHI_RPE_INACTIVE_SECONDS = time_t(60) * DAY;
 
@@ -1460,6 +1465,14 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
     pCurrChar->RemoveAurasWithInterruptFlags(SpellAuraInterruptFlags::Login);
 
     pCurrChar->SendInitialPacketsAfterAddToMap();
+
+    // Arathi RPE pad scenes (retail PLAY_SCENE via SPELL_AURA_PLAY_SCENE). After AddToMap so
+    // SceneMgr sends immediately; requires scene_template 3692/3749 (2026_13_32_06).
+    if (enterArathiRpe)
+    {
+        pCurrChar->CastSpell(pCurrChar, ARATHI_RPE_SCENE_SPELL_AMBIENT, true);
+        pCurrChar->CastSpell(pCurrChar, ARATHI_RPE_SCENE_SPELL_STASIS, true);
+    }
 
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHAR_ONLINE);
     stmt->setUInt64(0, pCurrChar->GetGUID().GetCounter());
