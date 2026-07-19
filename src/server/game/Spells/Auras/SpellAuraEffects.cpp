@@ -2822,6 +2822,14 @@ void AuraEffect::HandleAuraMounted(AuraApplication const* aurApp, uint8 mode, bo
             }
 
             target->Mount(displayId, vehicleId, creatureEntry);
+
+            // Quest objective ObjectID 239009 = creature "[DNT] Mount Credit" (90883, 87555, 90842, …).
+            // Retail (12.0.7.68453 sniff H): SMSG_QUEST_UPDATE_ADD_CREDIT QuestID 90883 ObjectID 239009
+            // VictimGUID empty immediately after mount SPELL_GO (e.g. 406095) + MountDisplayID set.
+            // Local TC sniff confirmed mount succeeds without credit — grant on real mount apply.
+            if (mode & AURA_EFFECT_HANDLE_REAL)
+                if (Player* player = target->ToPlayer())
+                    player->KilledMonsterCredit(239009);
         }
 
         // cast speed aura
