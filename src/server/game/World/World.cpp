@@ -377,13 +377,11 @@ void World::InvalidateSiblingAccountAchievementManagers(ObjectGuid battlenetAcco
         if (!session)
             return;
 
-        AccountAchievementMgr* mgr = session->GetAccountAchievementMgr();
-        if (!mgr)
-            return;
-
-        mgr->ClearLocalState();
-        if (Player* player = session->GetPlayer())
-            mgr->CheckAllAchievementCriteria(player);
+        // Clear memory only — do not CheckAllAchievementCriteria here. Re-evaluating on a sibling
+        // character could immediately re-complete account achievements and SaveToDB them back after
+        // the account-wide wipe. The resetting session still re-checks its own player in Reset().
+        if (AccountAchievementMgr* mgr = session->GetAccountAchievementMgr())
+            mgr->ClearLocalState();
     };
 
     // Human (and any other) sessions indexed by Battle.net account.
