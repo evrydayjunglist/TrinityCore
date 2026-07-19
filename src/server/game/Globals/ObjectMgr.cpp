@@ -5419,22 +5419,53 @@ TreasurePickerTemplate const* ObjectMgr::GetTreasurePicker(uint32 treasurePicker
     return Trinity::Containers::MapGetValuePtr(_treasurePickerStore, treasurePickerId);
 }
 
-TreasurePickerItem const* ObjectMgr::SelectTreasurePickerItem(TreasurePickerTemplate const* treasurePicker, uint32 choiceItemId /*= 0*/) const
+bool ObjectMgr::IsTreasurePickerItemEligibleForPlayer(Player const* player, uint32 itemId) const
 {
-    if (!treasurePicker || treasurePicker->Items.empty())
+    if (!player)
+        return false;
+
+    ItemTemplate const* proto = GetItemTemplate(itemId);
+    if (!proto)
+        return false;
+
+    // ItemSparse.AllowableClass: -1 means all class bits set (any class)
+    if ((proto->GetAllowableClass() & player->GetClassMask()) == 0)
+        return false;
+
+    // AllowableClass=-1 weapons still require class weapon proficiency.
+    // Evidence: Illidari Warglaive 160513 has AllowableClass=-1 (ItemSparse 12.0.7.67808)
+    // but sniff I Priest/Hunter/Warrior SMSG_TREASURE_PICKER_RESPONSE omit it; only DH has SKILL_WARGLAIVES.
+    // Bags/containers with AllowableClass=-1 are not weapons and stay class-any.
+    if (proto->GetAllowableClass() == -1 && proto->GetClass() == ITEM_CLASS_WEAPON)
+    {
+        if (uint32 skill = proto->GetSkill())
+            if (player->GetSkillValue(skill) == 0)
+                return false;
+    }
+
+    return true;
+}
+
+TreasurePickerItem const* ObjectMgr::SelectTreasurePickerItem(TreasurePickerTemplate const* treasurePicker, Player const* player, uint32 choiceItemId /*= 0*/) const
+{
+    if (!treasurePicker || !player || treasurePicker->Items.empty())
         return nullptr;
 
     if (treasurePicker->IsChoice)
     {
         for (TreasurePickerItem const& item : treasurePicker->Items)
-            if (item.ItemID == choiceItemId)
+            if (item.ItemID == choiceItemId && IsTreasurePickerItemEligibleForPlayer(player, item.ItemID))
                 return &item;
 
         return nullptr;
     }
 
-    // sniff H: SMSG_QUEST_GIVER_QUEST_COMPLETE ItemReward matches offer row [0]
-    return &treasurePicker->Items.front();
+    // sniff H: complete ItemReward matches offer row [0] of the class-filtered list
+    for (TreasurePickerItem const& item : treasurePicker->Items)
+        if (IsTreasurePickerItemEligibleForPlayer(player, item.ItemID))
+            return &item;
+
+    return nullptr;
 }
 
 void ObjectMgr::LoadQuestStartersAndEnders()

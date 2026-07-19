@@ -45,6 +45,7 @@
 #include <unordered_map>
 
 class Item;
+class Player;
 class Unit;
 class Vehicle;
 class Map;
@@ -1210,8 +1211,10 @@ class TC_GAME_API ObjectMgr
         void LoadCreatureQuestEnders();
 
         TreasurePickerTemplate const* GetTreasurePicker(uint32 treasurePickerId) const;
-        /// Non-choice: first offer row (sniff H complete ItemReward). Choice: matching ItemID.
-        TreasurePickerItem const* SelectTreasurePickerItem(TreasurePickerTemplate const* treasurePicker, uint32 choiceItemId = 0) const;
+        /// ItemSparse.AllowableClass (+ weapon skill when AllowableClass == -1).
+        bool IsTreasurePickerItemEligibleForPlayer(Player const* player, uint32 itemId) const;
+        /// Non-choice: first eligible offer row (sniff H complete ItemReward among filtered list). Choice: matching ItemID if eligible.
+        TreasurePickerItem const* SelectTreasurePickerItem(TreasurePickerTemplate const* treasurePicker, Player const* player, uint32 choiceItemId = 0) const;
 
         QuestRelations* GetGOQuestRelationMapHACK() { return &_goQuestRelations; }
         QuestRelationResult GetGOQuestRelations(uint32 entry) const { return GetQuestRelationsFrom(_goQuestRelations, entry, true); }
