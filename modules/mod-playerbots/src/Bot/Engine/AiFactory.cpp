@@ -18,6 +18,9 @@
 #include "AiFactory.h"
 #include "AiObjectContext.h"
 #include "Bot/Engine/Value/StarterValues.h"
+#include "Ai/Class/Rogue/Action/RogueAssassinationActions.h"
+#include "Ai/Class/Rogue/Strategy/AssassinationRogueStrategy.h"
+#include "Ai/Class/Rogue/Strategy/RogueBuffStrategy.h"
 #include "Bot/Action/AttackAction.h"
 #include "Bot/Action/AttackAnythingAction.h"
 #include "Bot/Action/FleeAction.h"
@@ -105,9 +108,16 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterStrategy("attack", std::make_unique<CombatStrategy>(botAI));
     context->RegisterStrategy("flee", std::make_unique<FleeStrategy>(botAI));
     context->RegisterStrategy("newrpg", std::make_unique<NewRpgStrategy>(botAI));
+    // Gate 14 — Rogue Assassination pilot (Ai/Class scaffold). Other classes keep Gate 8/12 only.
+    context->RegisterStrategy("assassination", std::make_unique<AssassinationRogueStrategy>(botAI));
+    context->RegisterStrategy("rogue buff", std::make_unique<RogueBuffStrategy>(botAI));
     context->RegisterAction("follow", std::make_unique<FollowAction>(botAI));
     context->RegisterAction("attack my target", std::make_unique<AttackMyTargetAction>(botAI));
     context->RegisterAction("flee", std::make_unique<FleeAction>(botAI));
+    context->RegisterAction("garrote", std::make_unique<CastGarroteAction>(botAI));
+    context->RegisterAction("mutilate", std::make_unique<CastMutilateAction>(botAI));
+    context->RegisterAction("envenom", std::make_unique<CastEnvenomAction>(botAI));
+    context->RegisterAction("crimson vial", std::make_unique<CastCrimsonVialAction>(botAI));
     context->RegisterTrigger("has combat target", std::make_unique<HasCombatTargetTrigger>(botAI));
     context->RegisterTrigger("has attackers", std::make_unique<HasAttackersTrigger>(botAI));
     context->RegisterTrigger("flee health", std::make_unique<FleeHealthTrigger>(botAI));

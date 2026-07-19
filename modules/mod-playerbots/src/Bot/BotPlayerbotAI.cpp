@@ -16,6 +16,7 @@
  */
 
 #include "BotPlayerbotAI.h"
+#include "Ai/Class/Rogue/RogueSpellIds.h"
 #include "AiFactory.h"
 #include "Bot/PacketHandler/BotPacketSignal.h"
 #include "Engine.h"
@@ -48,6 +49,9 @@ void BotPlayerbotAI::ResetStrategies()
 
     _engine->RemoveAllStrategies();
 
+    Player* bot = GetBot();
+    bool const assassinationPilot = Playerbots::Rogue::Assassination::IsAssassinationRogue(bot);
+
     std::string appliedStrategies;
     if (HasMaster())
     {
@@ -55,13 +59,26 @@ void BotPlayerbotAI::ResetStrategies()
         _engine->AddStrategy("attack");
         _engine->AddStrategy("flee");
         appliedStrategies = "follow,attack,flee";
+        // Gate 14 — attach pilot class strategies from class + GetPrimarySpecialization.
+        if (assassinationPilot)
+        {
+            _engine->AddStrategy("assassination");
+            _engine->AddStrategy("rogue buff");
+            appliedStrategies += ",assassination,rogue buff";
+        }
     }
-    else if (Player* bot = GetBot(); bot && sRandomPlayerbotMgr->IsRandomBot(bot->GetGUID()) &&
+    else if (bot && sRandomPlayerbotMgr->IsRandomBot(bot->GetGUID()) &&
         roll_chance(Playerbots::GetRandomBotRpgChance()))
     {
         _engine->AddStrategy("newrpg");
         _engine->AddStrategy("flee");
         appliedStrategies = "newrpg,flee";
+        if (assassinationPilot)
+        {
+            _engine->AddStrategy("assassination");
+            _engine->AddStrategy("rogue buff");
+            appliedStrategies += ",assassination,rogue buff";
+        }
         _rpgInfo.Reset();
     }
     else
