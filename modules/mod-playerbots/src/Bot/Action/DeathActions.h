@@ -34,7 +34,7 @@ class BotPlayerbotAI;
 // CMSG_RECLAIM_CORPSE packets the way AC does, each action replicates the guard set of the modern
 // core handler (WorldSession::HandleRepopRequest / HandleReclaimCorpse in MiscHandler.cpp) and
 // calls the exact public Player methods those thin handlers wrap — the same precedent as
-// TalkToQuestNpcAction (Player::TalkedToCreature) and LootAction (Player::SendLoot/StoreLootItem).
+// TalkToQuestNpcAction (Player::TalkedToCreature) and LootAction open (Player::SendLoot).
 //
 // Scope: V1 handles SOLO random/newrpg bots only. Spirit-healer res, other-bot/player res,
 // self-res (soulstone/reincarnation), death-count teleport, and master-alt/group death are all

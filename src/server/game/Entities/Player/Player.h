@@ -2119,6 +2119,12 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         }
 
         bool IsResurrectRequested() const { return _resurrectionData.get() != nullptr; }
+
+        // Offerer GUID from the active SetResurrectRequestData pending accept (empty if none).
+        ObjectGuid GetResurrectRequesterGUID() const
+        {
+            return _resurrectionData ? _resurrectionData->GUID : ObjectGuid::Empty;
+        }
         void ResurrectUsingRequestData();
         void ResurrectUsingRequestDataImpl();
 

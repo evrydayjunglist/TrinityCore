@@ -23,12 +23,15 @@
 class BotPlayerbotAI;
 
 // AC reference: mod-playerbots-master/src/Ai/Base/Strategy/PassiveStrategy.h
+// Gate 6 baseline: no movement/combat defaults. May hold always-on lifecycle accepts
+// (resurrect request, petition sign) for bots that keep +passive without NewRpg/Follow.
 class PassiveStrategy : public Strategy
 {
 public:
     explicit PassiveStrategy(BotPlayerbotAI* botAI) : Strategy(botAI) { }
 
     std::string GetName() override { return "passive"; }
+    void InitTriggers(std::vector<TriggerNode*>& triggers) override;
 };
 
 #endif

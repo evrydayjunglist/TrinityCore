@@ -30,7 +30,36 @@ target_include_directories(tests
 
 target_sources(tests
   PRIVATE
-    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotPartyInvitePacket.cpp)
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotPartyInvitePacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotGuildInvitePacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotResurrectRequestPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotPetitionShowSignaturesPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotBuyFailedPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotGroupNewLeaderPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotGroupDestroyedPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotPartyUpdatePacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotMoveSetRunSpeedPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotInventoryChangeFailurePacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotTradeStatusPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotTradeUpdatedPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotLootResponsePacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotLootItemData.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotItemPushResultPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotLootRollWonPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotStartLootRollPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotPartyCommandResultPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotLevelUpInfoPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotLogXPGainPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotCastFailedPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotSTextEmotePacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotEmotePacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotDuelRequestedPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotLFGRoleCheckUpdatePacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotLFGProposalUpdatePacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotBattlefieldStatusPackets.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotQuestUpdateCompletePacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotQuestUpdateAddCreditPacket.cpp
+    ${CMAKE_SOURCE_DIR}/modules/mod-playerbots/src/Bot/Packet/BotQuestConfirmAcceptPacket.cpp)
 
 catch_discover_tests(tests)
 

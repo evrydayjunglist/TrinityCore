@@ -21,12 +21,16 @@
 #include "AiObjectContext.h"
 #include "Bot/Rpg/NewRpgInfo.h"
 #include "Engine.h"
+#include "LFGPacketsCommon.h"
+#include "ObjectGuid.h"
 #include "PlayerbotAIBase.h"
+#include "SharedDefines.h"
 #include "WorldPacket.h"
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
 
@@ -74,6 +78,236 @@ public:
     // first trigger to test its signal name this tick claims it; returns false once consumed.
     bool ConsumeSignal(std::string const& name);
 
+    // Minimal AC TellMaster shape: whisper to master. No-master → DEBUG only (no say spam).
+    // Tick-thread only.
+    bool TellMaster(std::string_view text);
+
+    // Last Layer-2-OK SMSG_PETITION_SHOW_SIGNATURES item GUID (master-offered charter). Cleared
+    // after PetitionSignAction runs. Tick-thread only.
+    ObjectGuid GetPendingPetitionOffer() const { return _pendingPetitionOffer; }
+    void SetPendingPetitionOffer(ObjectGuid guid) { _pendingPetitionOffer = guid; }
+    void ClearPendingPetitionOffer() { _pendingPetitionOffer = ObjectGuid::Empty; }
+
+    // Last V1 tell text from SMSG_INVENTORY_CHANGE_FAILURE Layer-2 OK. Cleared after
+    // TellCannotEquipAction runs (or on Layer fail / Enable=0). Tick-thread only.
+    std::string const& GetPendingCannotEquipTell() const { return _pendingCannotEquipTell; }
+    void SetPendingCannotEquipTell(std::string text) { _pendingCannotEquipTell = std::move(text); }
+    void ClearPendingCannotEquipTell() { _pendingCannotEquipTell.clear(); }
+
+    // Last Layer-2-OK SMSG_TRADE_STATUS for V1 accept-trade (PROPOSED / ACCEPTED). Cleared
+    // after AcceptTradeAction runs (or on Layer fail / Enable=0). Tick-thread only.
+    std::optional<::TradeStatus> GetPendingTradeStatus() const { return _pendingTradeStatus; }
+    void SetPendingTradeStatus(::TradeStatus status) { _pendingTradeStatus = status; }
+    void ClearPendingTradeStatus() { _pendingTradeStatus.reset(); }
+
+    // Locked TRADE_SLOT_NONTRADED tell from SMSG_TRADE_UPDATED Layer-2 OK (master trader).
+    // Cleared after TradeStatusExtendedAction or on Layer fail / Enable=0. Tick-thread only.
+    bool GetPendingTradeUpdatedLockedTell() const { return _pendingTradeUpdatedLockedTell; }
+    void SetPendingTradeUpdatedLockedTell(bool pending) { _pendingTradeUpdatedLockedTell = pending; }
+    void ClearPendingTradeUpdatedLockedTell() { _pendingTradeUpdatedLockedTell = false; }
+
+    // Acquired SMSG_LOOT_RESPONSE stash for V1 "store loot" (Handle* path). Cleared after
+    // StoreLootAction or on Layer fail / Enable=0 / !Acquired. Tick-thread only.
+    struct PendingLootStore
+    {
+        ObjectGuid Owner;
+        ObjectGuid LootObj;
+        uint32 Coins = 0;
+        struct ItemSlot
+        {
+            uint8 LootListID = 0;
+            uint32 ItemID = 0;
+            uint8 UIType = 0;
+        };
+        std::vector<ItemSlot> Items;
+    };
+    std::optional<PendingLootStore> const& GetPendingLootStore() const { return _pendingLootStore; }
+    void SetPendingLootStore(PendingLootStore store) { _pendingLootStore = std::move(store); }
+    void ClearPendingLootStore() { _pendingLootStore.reset(); }
+
+    // Self SMSG_ITEM_PUSH_RESULT stash for V1 "item push result" quest TellMaster.
+    // Cleared after ItemPushResultAction or on Layer fail / Enable=0 / non-self. Tick-thread only.
+    struct PendingItemPush
+    {
+        uint32 ItemID = 0;
+        int32 ProxyItemID = 0;
+        int32 Quantity = 0;
+        int32 QuantityInInventory = 0;
+    };
+    std::optional<PendingItemPush> const& GetPendingItemPush() const { return _pendingItemPush; }
+    void SetPendingItemPush(PendingItemPush push) { _pendingItemPush = std::move(push); }
+    void ClearPendingItemPush() { _pendingItemPush.reset(); }
+
+    // SMSG_LOOT_ROLL_WON stash for V1 "loot roll won" optional self-winner TellMaster.
+    // Cleared after LootRollWonAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingLootRollWon
+    {
+        ObjectGuid Winner;
+        uint32 ItemID = 0;
+    };
+    std::optional<PendingLootRollWon> const& GetPendingLootRollWon() const { return _pendingLootRollWon; }
+    void SetPendingLootRollWon(PendingLootRollWon pending) { _pendingLootRollWon = std::move(pending); }
+    void ClearPendingLootRollWon() { _pendingLootRollWon.reset(); }
+
+    // SMSG_START_LOOT_ROLL stash for V1 "master loot roll" Pass via HandleLootRoll.
+    // Cleared after MasterLootRollAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingMasterLootRoll
+    {
+        ObjectGuid LootObj;
+        uint8 LootListID = 0;
+        uint32 ItemID = 0;
+    };
+    std::optional<PendingMasterLootRoll> const& GetPendingMasterLootRoll() const { return _pendingMasterLootRoll; }
+    void SetPendingMasterLootRoll(PendingMasterLootRoll pending) { _pendingMasterLootRoll = std::move(pending); }
+    void ClearPendingMasterLootRoll() { _pendingMasterLootRoll.reset(); }
+
+    // SMSG_PARTY_COMMAND_RESULT stash for V1 "party command" optional leave-follow.
+    // Cleared after PartyCommandAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingPartyCommand
+    {
+        uint8 Command = 0;
+        uint8 Result = 0;
+        std::string Name;
+    };
+    std::optional<PendingPartyCommand> const& GetPendingPartyCommand() const { return _pendingPartyCommand; }
+    void SetPendingPartyCommand(PendingPartyCommand pending) { _pendingPartyCommand = std::move(pending); }
+    void ClearPendingPartyCommand() { _pendingPartyCommand.reset(); }
+
+    // SMSG_LEVEL_UP_INFO stash for V1 "levelup" optional TellMaster.
+    // Cleared after LevelUpAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingLevelUp
+    {
+        int32 Level = 0;
+    };
+    std::optional<PendingLevelUp> const& GetPendingLevelUp() const { return _pendingLevelUp; }
+    void SetPendingLevelUp(PendingLevelUp pending) { _pendingLevelUp = std::move(pending); }
+    void ClearPendingLevelUp() { _pendingLevelUp.reset(); }
+
+    // SMSG_LOG_XP_GAIN stash for V1 "xpgain" optional TellMaster.
+    // Cleared after XpGainAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingXpGain
+    {
+        int32 Amount = 0;
+    };
+    std::optional<PendingXpGain> const& GetPendingXpGain() const { return _pendingXpGain; }
+    void SetPendingXpGain(PendingXpGain pending) { _pendingXpGain = std::move(pending); }
+    void ClearPendingXpGain() { _pendingXpGain.reset(); }
+
+    // SMSG_CAST_FAILED stash for V1 "tell cast failed" optional TellMaster (≥2s gate).
+    // Cleared after TellCastFailedAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingCastFailed
+    {
+        int32 SpellID = 0;
+        int32 Reason = 0;
+    };
+    std::optional<PendingCastFailed> const& GetPendingCastFailed() const { return _pendingCastFailed; }
+    void SetPendingCastFailed(PendingCastFailed pending) { _pendingCastFailed = std::move(pending); }
+    void ClearPendingCastFailed() { _pendingCastFailed.reset(); }
+
+    // SMSG_TEXT_EMOTE / SMSG_EMOTE stash for V1 "receive text emote" / "receive emote"
+    // optional TellMaster when source == master. Cleared after ReceiveEmoteAction or on
+    // Layer fail / Enable=0 / soft NPC-self skip. Tick-thread only.
+    struct PendingReceiveEmote
+    {
+        ObjectGuid SourceGUID;
+        uint32 EmoteID = 0;
+        bool IsTextEmote = false;
+    };
+    std::optional<PendingReceiveEmote> const& GetPendingReceiveEmote() const { return _pendingReceiveEmote; }
+    void SetPendingReceiveEmote(PendingReceiveEmote pending) { _pendingReceiveEmote = std::move(pending); }
+    void ClearPendingReceiveEmote() { _pendingReceiveEmote.reset(); }
+
+    // Last Layer-2-OK SMSG_DUEL_REQUESTED ArbiterGUID for V1 "accept duel". Cleared after
+    // AcceptDuelAction or on Layer fail / Enable=0 / soft initiator skip. Tick-thread only.
+    ObjectGuid GetPendingDuelArbiter() const { return _pendingDuelArbiter; }
+    void SetPendingDuelArbiter(ObjectGuid guid) { _pendingDuelArbiter = guid; }
+    void ClearPendingDuelArbiter() { _pendingDuelArbiter = ObjectGuid::Empty; }
+
+    // SMSG_LFG_PROPOSAL_UPDATE stash for V1 "lfg accept" (Ticket + InstanceID + ProposalID).
+    // Cleared after LfgAcceptAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingLfgProposal
+    {
+        WorldPackets::LFG::RideTicket Ticket;
+        uint64 InstanceID = 0;
+        uint32 ProposalID = 0;
+    };
+    std::optional<PendingLfgProposal> const& GetPendingLfgProposal() const { return _pendingLfgProposal; }
+    void SetPendingLfgProposal(PendingLfgProposal pending) { _pendingLfgProposal = std::move(pending); }
+    void ClearPendingLfgProposal() { _pendingLfgProposal.reset(); }
+
+    // AC "bg status" family (NeedConfirmation / Queued / Active) stash for V1 port accept.
+    // Cleared after BgStatusAction or on Layer fail / Enable=0. Tick-thread only.
+    enum class BgStatusKind : uint8
+    {
+        NeedConfirmation,
+        Queued,
+        Active
+    };
+    struct PendingBgStatus
+    {
+        BgStatusKind Kind = BgStatusKind::Queued;
+        WorldPackets::LFG::RideTicket Ticket;
+        uint32 Mapid = 0;
+        uint32 Timeout = 0;
+    };
+    std::optional<PendingBgStatus> const& GetPendingBgStatus() const { return _pendingBgStatus; }
+    void SetPendingBgStatus(PendingBgStatus pending) { _pendingBgStatus = std::move(pending); }
+    void ClearPendingBgStatus() { _pendingBgStatus.reset(); }
+
+    // SMSG_QUEST_UPDATE_COMPLETE stash for V1 "quest update complete" optional TellMaster.
+    // Cleared after QuestUpdateCompleteAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingQuestUpdateComplete
+    {
+        int32 QuestID = 0;
+    };
+    std::optional<PendingQuestUpdateComplete> const& GetPendingQuestUpdateComplete() const
+    {
+        return _pendingQuestUpdateComplete;
+    }
+    void SetPendingQuestUpdateComplete(PendingQuestUpdateComplete pending)
+    {
+        _pendingQuestUpdateComplete = std::move(pending);
+    }
+    void ClearPendingQuestUpdateComplete() { _pendingQuestUpdateComplete.reset(); }
+
+    // SMSG_QUEST_UPDATE_ADD_CREDIT stash for V1 "quest update add kill" optional TellMaster.
+    // Cleared after QuestUpdateAddKillAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingQuestUpdateAddKill
+    {
+        int32 QuestID = 0;
+        int32 ObjectID = 0;
+        uint16 Count = 0;
+        uint16 Required = 0;
+    };
+    std::optional<PendingQuestUpdateAddKill> const& GetPendingQuestUpdateAddKill() const
+    {
+        return _pendingQuestUpdateAddKill;
+    }
+    void SetPendingQuestUpdateAddKill(PendingQuestUpdateAddKill pending)
+    {
+        _pendingQuestUpdateAddKill = std::move(pending);
+    }
+    void ClearPendingQuestUpdateAddKill() { _pendingQuestUpdateAddKill.reset(); }
+
+    // SMSG_QUEST_CONFIRM_ACCEPT stash for V1 "confirm quest" HandleQuestConfirmAccept.
+    // Cleared after ConfirmQuestAction or on Layer fail / Enable=0. Tick-thread only.
+    struct PendingQuestConfirm
+    {
+        uint32 QuestID = 0;
+        ObjectGuid InitiatedBy;
+    };
+    std::optional<PendingQuestConfirm> const& GetPendingQuestConfirm() const { return _pendingQuestConfirm; }
+    void SetPendingQuestConfirm(PendingQuestConfirm pending) { _pendingQuestConfirm = std::move(pending); }
+    void ClearPendingQuestConfirm() { _pendingQuestConfirm.reset(); }
+
+    // Cross-thread queue entry; Opcode enables registry Lookup when Packet is absent.
+    struct QueuedSignal
+    {
+        uint32 Opcode = 0;
+        std::string Name;
+        std::optional<WorldPacket> Packet; // present when payload parse is enabled for this opcode
+    };
+
 protected:
     void UpdateAIInternal(uint32 diff) override;
 
@@ -86,12 +320,6 @@ private:
     std::unordered_set<uint32> _lowPriorityQuest;
     std::unordered_set<uint32> _unactionableQuest;
 
-    struct QueuedSignal
-    {
-        std::string Name;
-        std::optional<WorldPacket> Packet; // present when payload parse is enabled for this opcode
-    };
-
     struct PendingSignal
     {
         std::string Name;
@@ -103,11 +331,30 @@ private:
     // Cross-thread signal handoff. _signalQueue is written by HandleBotOutgoingPacket on sender
     // threads and drained (swapped out) at the top of each tick under _signalMutex. _pendingSignals
     // is only ever touched on the bot's own tick thread (drain + consume + expire), so it needs no
-    // lock of its own. Signals persist briefly so an engine GCD early-return cannot erase them
-    // before SignalTrigger gets a chance to consume them.
+    // lock of its own. TTL burns only on ticks where Engine::ProcessTriggers ran (not while GCD
+    // blocks DoNextAction), so a follow/GCD window cannot expire signal-only reactions.
     std::mutex _signalMutex;
     std::vector<QueuedSignal> _signalQueue;
     std::vector<PendingSignal> _pendingSignals;
+    ObjectGuid _pendingPetitionOffer;
+    std::string _pendingCannotEquipTell;
+    std::optional<::TradeStatus> _pendingTradeStatus;
+    bool _pendingTradeUpdatedLockedTell = false;
+    std::optional<PendingLootStore> _pendingLootStore;
+    std::optional<PendingItemPush> _pendingItemPush;
+    std::optional<PendingLootRollWon> _pendingLootRollWon;
+    std::optional<PendingMasterLootRoll> _pendingMasterLootRoll;
+    std::optional<PendingPartyCommand> _pendingPartyCommand;
+    std::optional<PendingLevelUp> _pendingLevelUp;
+    std::optional<PendingXpGain> _pendingXpGain;
+    std::optional<PendingCastFailed> _pendingCastFailed;
+    std::optional<PendingReceiveEmote> _pendingReceiveEmote;
+    ObjectGuid _pendingDuelArbiter;
+    std::optional<PendingLfgProposal> _pendingLfgProposal;
+    std::optional<PendingBgStatus> _pendingBgStatus;
+    std::optional<PendingQuestUpdateComplete> _pendingQuestUpdateComplete;
+    std::optional<PendingQuestUpdateAddKill> _pendingQuestUpdateAddKill;
+    std::optional<PendingQuestConfirm> _pendingQuestConfirm;
 };
 
 #endif

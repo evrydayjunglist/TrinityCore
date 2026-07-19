@@ -32,8 +32,8 @@ class Player;
 // Interaction goes straight through the core: it calls Player::GetGameObjectIfCanInteractWith
 // (the exact gate WorldSession::HandleGameObjectUseOpcode uses) and then GameObject::Use(bot) — no
 // synthetic CMSG_GAMEOBJ_USE. GameObject::Use fires the real quest credit, and for chest/gathering
-// objectives it also opens the loot window via Player::SendLoot, which the LootAction then drains
-// next tick — so no separate GO-loot code path is needed here.
+// objectives it also opens the loot window via Player::SendLoot; SMSG_LOOT_RESPONSE then wakes
+// StoreLootAction (Handle*) — so no separate GO-loot code path is needed here.
 class UseQuestObjectAction : public Action
 {
 public:

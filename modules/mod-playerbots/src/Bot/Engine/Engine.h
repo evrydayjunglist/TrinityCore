@@ -42,7 +42,9 @@ public:
     Strategy* GetStrategy(std::string const& name) const;
     std::vector<std::string> GetStrategyNames() const;
 
-    bool DoNextAction(uint32 diff);
+    // Returns true if an action executed. triggersProcessed is true when ProcessTriggers ran
+    // this call (false while on global cooldown — caller must not burn pending-signal TTL then).
+    bool DoNextAction(uint32 diff, bool& triggersProcessed);
 
 private:
     void ProcessTriggers(std::vector<NextAction>& actions);

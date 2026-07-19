@@ -22,7 +22,25 @@
 #include "Bot/Action/DeathActions.h"
 #include "Bot/Action/FollowAction.h"
 #include "Bot/Action/GroupActions.h"
+#include "Bot/Action/GuildActions.h"
 #include "Bot/Action/LootAction.h"
+#include "Bot/Action/MountActions.h"
+#include "Bot/Action/PetitionActions.h"
+#include "Bot/Action/ResurrectActions.h"
+#include "Bot/Action/ItemPushResultAction.h"
+#include "Bot/Action/LootRollWonAction.h"
+#include "Bot/Action/MasterLootRollAction.h"
+#include "Bot/Action/PartyCommandAction.h"
+#include "Bot/Action/LevelUpAction.h"
+#include "Bot/Action/XpGainAction.h"
+#include "Bot/Action/TellCastFailedAction.h"
+#include "Bot/Action/ReceiveEmoteAction.h"
+#include "Bot/Action/DuelActions.h"
+#include "Bot/Action/LfgActions.h"
+#include "Bot/Action/BgStatusActions.h"
+#include "Bot/Action/QuestUpdateActions.h"
+#include "Bot/Action/TellMasterActions.h"
+#include "Bot/Action/TradeActions.h"
 #include "Bot/Action/NewRpgActions.h"
 #include "Bot/Action/QuestGiverAction.h"
 #include "Bot/Action/TalkToQuestNpcAction.h"
@@ -33,7 +51,13 @@
 #include "Bot/Strategy/NewRpgStrategy.h"
 #include "Bot/Strategy/PassiveStrategy.h"
 #include "Bot/Trigger/GroupTriggers.h"
+#include "Bot/Trigger/GuildTriggers.h"
+#include "Bot/Trigger/DuelTriggers.h"
+#include "Bot/Trigger/LfgTriggers.h"
+#include "Bot/Trigger/QuestTriggers.h"
 #include "Bot/Trigger/NewRpgTriggers.h"
+#include "Bot/Trigger/PetitionTriggers.h"
+#include "Bot/Trigger/ResurrectTriggers.h"
 #include "Bot/Trigger/SignalTrigger.h"
 #include "BotPlayerbotAI.h"
 #include "DB2Stores.h"
@@ -65,7 +89,187 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterTrigger("group invite signal", std::make_unique<SignalTrigger>(botAI, "group invite signal"));
     context->RegisterTrigger("group invite", std::make_unique<GroupInviteTrigger>(botAI));
 
-    // Quest loot + object interaction (AC: OpenLootAction/StoreLootAction, InteractWithGameObject).
+    // Master-alt guild join — same dual signal/poll shape as party invite (AC: "guild invite"
+    // → "guild accept"). Layered payload parse for SMSG_GUILD_INVITE is in BotPlayerbotAI.
+    context->RegisterAction("guild accept", std::make_unique<GuildAcceptAction>(botAI));
+    context->RegisterTrigger("guild invite signal", std::make_unique<SignalTrigger>(botAI, "guild invite signal"));
+    context->RegisterTrigger("guild invite", std::make_unique<GuildInviteTrigger>(botAI));
+
+    // Accept pending resurrect while dead (AC: DeadStrategy "accept resurrect"). Signal +
+    // IsResurrectRequested() poll; HandleResurrectResponse Response = 0 (Midnight, not AC uint8(1)).
+    // Wired on follow / newrpg / passive — NewRpg death band skips HasMaster(), so master-alt
+    // needs FollowMasterStrategy; solo random needs newrpg/passive.
+    context->RegisterAction("accept resurrect", std::make_unique<AcceptResurrectAction>(botAI));
+    context->RegisterTrigger("resurrect request signal",
+        std::make_unique<SignalTrigger>(botAI, "resurrect request signal"));
+    context->RegisterTrigger("resurrect request", std::make_unique<ResurrectRequestTrigger>(botAI));
+
+    // Guild charter sign (AC: "petition offer" → "petition sign"). Layered parse stashes Item
+    // GUID; HandleSignPetition Choice = 0. Wired follow + newrpg + passive: same-account
+    // master-alts cannot use client Request Signature; GM `.playerbot login` uses +passive.
+    context->RegisterAction("petition sign", std::make_unique<PetitionSignAction>(botAI));
+    context->RegisterTrigger("petition offer signal",
+        std::make_unique<SignalTrigger>(botAI, "petition offer signal"));
+    context->RegisterTrigger("petition offer", std::make_unique<PetitionOfferTrigger>(botAI));
+
+    // Vendor buy-failed tell-master (AC: "not enough money" / "not enough reputation" →
+    // TellMasterAction fixed strings). One TC opcode SMSG_BUY_FAILED; Reason dispatch in
+    // ProcessPayloadOnTick. FollowMaster V1 only (master-alt vendor playtest).
+    context->RegisterAction("tell not enough money",
+        std::make_unique<TellMasterAction>(botAI, "tell not enough money", "Not enough money"));
+    context->RegisterAction("tell not enough reputation",
+        std::make_unique<TellMasterAction>(botAI, "tell not enough reputation", "Not enough reputation"));
+    context->RegisterTrigger("not enough money",
+        std::make_unique<SignalTrigger>(botAI, "not enough money"));
+    context->RegisterTrigger("not enough reputation",
+        std::make_unique<SignalTrigger>(botAI, "not enough reputation"));
+
+    // Party leader change / group destroyed / empty group list (AC: "group set leader" /
+    // "group destroyed" / "group list" → "reset botAI"). Midnight: SMSG_GROUP_NEW_LEADER +
+    // empty SMSG_GROUP_DESTROYED + empty SMSG_PARTY_UPDATE PlayerList. Minimal ResetAiAction =
+    // ResetStrategies() only. FollowMaster V1 wires all three TriggerNodes (AC comments out
+    // "group destroyed" — this fork intentionally keeps the thin reset; "group list" only fires
+    // when PlayerList.empty()).
+    context->RegisterAction("reset botAI", std::make_unique<ResetAiAction>(botAI));
+    context->RegisterTrigger("group set leader",
+        std::make_unique<SignalTrigger>(botAI, "group set leader"));
+    context->RegisterTrigger("group destroyed",
+        std::make_unique<SignalTrigger>(botAI, "group destroyed"));
+    context->RegisterTrigger("group list",
+        std::make_unique<SignalTrigger>(botAI, "group list"));
+
+    // Master-alt mount sync (AC: "check mount state"). Midnight wake-up is
+    // SMSG_MOVE_SET_RUN_SPEED; minimal CheckMountStateAction. FollowMaster V1.
+    context->RegisterAction("check mount state", std::make_unique<CheckMountStateAction>(botAI));
+    context->RegisterTrigger("check mount state",
+        std::make_unique<SignalTrigger>(botAI, "check mount state"));
+
+    // Inventory / equip failure tell (AC: "cannot equip" → "tell cannot equip";
+    // duplicate AC row "inventory change failure" = same reaction). One TC opcode
+    // SMSG_INVENTORY_CHANGE_FAILURE; V1 message subset + pending tell. FollowMaster V1.
+    context->RegisterAction("tell cannot equip", std::make_unique<TellCannotEquipAction>(botAI));
+    context->RegisterTrigger("cannot equip",
+        std::make_unique<SignalTrigger>(botAI, "cannot equip"));
+
+    // Trade window (AC: "trade status" → "accept trade"). Midnight SMSG_TRADE_STATUS;
+    // V1 master-alt begin (PROPOSED) + accept (ACCEPTED) only. FollowMaster V1.
+    context->RegisterAction("accept trade", std::make_unique<AcceptTradeAction>(botAI));
+    context->RegisterTrigger("trade status",
+        std::make_unique<SignalTrigger>(botAI, "trade status"));
+
+    // Trade item/gold update (AC: "trade status extended"). Midnight SMSG_TRADE_UPDATED;
+    // V1 locked NONTRADED TellMaster only (no pick-lock). FollowMaster V1.
+    context->RegisterAction("trade status extended",
+        std::make_unique<TradeStatusExtendedAction>(botAI));
+    context->RegisterTrigger("trade status extended",
+        std::make_unique<SignalTrigger>(botAI, "trade status extended"));
+
+    // Loot window store (AC: "loot response" → "store loot"). Midnight SMSG_LOOT_RESPONSE;
+    // HandleLootMoney / HandleAutostoreLootItem / HandleLootRelease. Wired follow + newrpg.
+    // "loot" is find/approach/SendLoot open only — no packetless StoreLootItem drain.
+    context->RegisterAction("store loot", std::make_unique<StoreLootAction>(botAI));
+    context->RegisterTrigger("loot response",
+        std::make_unique<SignalTrigger>(botAI, "loot response"));
+
+    // Inventory item-granted wake-up (AC: "item push result" → quest tell; unlock/open/equip
+    // out of scope). Midnight SMSG_ITEM_PUSH_RESULT; FollowMaster V1 signal + optional quest tell.
+    context->RegisterAction("item push result", std::make_unique<ItemPushResultAction>(botAI));
+    context->RegisterTrigger("item push result",
+        std::make_unique<SignalTrigger>(botAI, "item push result"));
+
+    // Group Need/Greed roll result (AC: "loot roll won" → equip upgrades; equip out of scope).
+    // Midnight SMSG_LOOT_ROLL_WON; FollowMaster V1 signal + optional self-winner TellMaster.
+    context->RegisterAction("loot roll won", std::make_unique<LootRollWonAction>(botAI));
+    context->RegisterTrigger("loot roll won",
+        std::make_unique<SignalTrigger>(botAI, "loot roll won"));
+
+    // Group Need/Greed roll start (AC: "master loot roll" → CountRollVote matrix).
+    // Midnight SMSG_START_LOOT_ROLL; FollowMaster V1 Pass via HandleLootRoll (master-safe).
+    context->RegisterAction("master loot roll", std::make_unique<MasterLootRollAction>(botAI));
+    context->RegisterTrigger("master loot roll",
+        std::make_unique<SignalTrigger>(botAI, "master loot roll"));
+
+    // Party op result (AC: "party command" → leave-follow). Midnight SMSG_PARTY_COMMAND_RESULT;
+    // FollowMaster V1 signal + optional HandleLeaveGroup when LEAVE OK names master.
+    context->RegisterAction("party command", std::make_unique<PartyCommandAction>(botAI));
+    context->RegisterTrigger("party command",
+        std::make_unique<SignalTrigger>(botAI, "party command"));
+
+    // Level-up wake-up (AC: "levelup" → auto maintenance). Midnight SMSG_LEVEL_UP_INFO;
+    // FollowMaster V1 signal + optional TellMaster only (no AutoMaintenanceOnLevelup paste).
+    context->RegisterAction("levelup", std::make_unique<LevelUpAction>(botAI));
+    context->RegisterTrigger("levelup",
+        std::make_unique<SignalTrigger>(botAI, "levelup"));
+
+    // XP grant log (AC: "xpgain" → "xp gain"). Midnight SMSG_LOG_XP_GAIN; FollowMaster V1
+    // signal+action both "xpgain" + optional TellMaster only (no GiveXP re-apply / kill broadcast).
+    context->RegisterAction("xpgain", std::make_unique<XpGainAction>(botAI));
+    context->RegisterTrigger("xpgain",
+        std::make_unique<SignalTrigger>(botAI, "xpgain"));
+
+    // Cast fail (AC: "cast failed" → "tell cast failed"). Midnight SMSG_CAST_FAILED;
+    // FollowMaster V1 (AC WorldPacketHandlerStrategy omits TriggerNode — wire anyway).
+    // TellMaster Reason subset + CalcCastTime >= 2000 only; no SpellInterrupted.
+    context->RegisterAction("tell cast failed", std::make_unique<TellCastFailedAction>(botAI));
+    context->RegisterTrigger("cast failed",
+        std::make_unique<SignalTrigger>(botAI, "cast failed"));
+
+    // Inbound emotes (AC: both → "emote" / EmoteAction ReceiveEmote matrix — out of scope).
+    // Midnight SMSG_TEXT_EMOTE + SMSG_EMOTE; FollowMaster V1 signal+action same names +
+    // optional TellMaster when source == master only.
+    context->RegisterAction("receive text emote",
+        std::make_unique<ReceiveEmoteAction>(botAI, "receive text emote"));
+    context->RegisterTrigger("receive text emote",
+        std::make_unique<SignalTrigger>(botAI, "receive text emote"));
+    context->RegisterAction("receive emote",
+        std::make_unique<ReceiveEmoteAction>(botAI, "receive emote"));
+    context->RegisterTrigger("receive emote",
+        std::make_unique<SignalTrigger>(botAI, "receive emote"));
+
+    // Duel challenge (AC: "duel requested" → "accept duel"). Midnight SMSG_DUEL_REQUESTED;
+    // V1 master-only via HandleDuelResponseOpcode. Signal + Enable=0 poll twin (live duel).
+    context->RegisterAction("accept duel", std::make_unique<AcceptDuelAction>(botAI));
+    context->RegisterTrigger("duel requested",
+        std::make_unique<SignalTrigger>(botAI, "duel requested"));
+    context->RegisterTrigger("duel requested poll",
+        std::make_unique<DuelRequestedTrigger>(botAI));
+
+    // LFG role check + proposal (AC: "lfg role check" / "lfg proposal" → "lfg accept").
+    // Midnight DFSetRoles / DFProposalResponse Handle*; thin class→role; combat/dead decline.
+    // Proposal poll twin for lost signal while stash + LFG_STATE_PROPOSAL remain.
+    context->RegisterAction("lfg role check", std::make_unique<LfgRoleCheckAction>(botAI));
+    context->RegisterAction("lfg accept", std::make_unique<LfgAcceptAction>(botAI));
+    context->RegisterTrigger("lfg role check",
+        std::make_unique<SignalTrigger>(botAI, "lfg role check"));
+    context->RegisterTrigger("lfg proposal",
+        std::make_unique<SignalTrigger>(botAI, "lfg proposal"));
+    context->RegisterTrigger("lfg proposal active",
+        std::make_unique<LfgProposalActiveTrigger>(botAI));
+
+    // BG status family (AC: "bg status"). Midnight NeedConfirmation / Queued / Active;
+    // V1 invite accept via HandleBattleFieldPortOpcode; Queued/Active signal-only.
+    context->RegisterAction("bg status", std::make_unique<BgStatusAction>(botAI));
+    context->RegisterTrigger("bg status",
+        std::make_unique<SignalTrigger>(botAI, "bg status"));
+
+    // Quest family (AC: "quest update complete" / "quest update add kill" / "confirm quest").
+    // Midnight SMSG_QUEST_UPDATE_COMPLETE / ADD_CREDIT / CONFIRM_ACCEPT; FollowMaster V1
+    // plain QuestID tells + master-only HandleQuestConfirmAccept. Confirm poll twin for Enable=0.
+    context->RegisterAction("quest update complete",
+        std::make_unique<QuestUpdateCompleteAction>(botAI));
+    context->RegisterAction("quest update add kill",
+        std::make_unique<QuestUpdateAddKillAction>(botAI));
+    context->RegisterAction("confirm quest", std::make_unique<ConfirmQuestAction>(botAI));
+    context->RegisterTrigger("quest update complete",
+        std::make_unique<SignalTrigger>(botAI, "quest update complete"));
+    context->RegisterTrigger("quest update add kill",
+        std::make_unique<SignalTrigger>(botAI, "quest update add kill"));
+    context->RegisterTrigger("confirm quest",
+        std::make_unique<SignalTrigger>(botAI, "confirm quest"));
+    context->RegisterTrigger("confirm quest poll",
+        std::make_unique<QuestConfirmAcceptTrigger>(botAI));
+
+    // Quest loot open + object interaction (AC: OpenLootAction, InteractWithGameObject).
     context->RegisterAction("loot", std::make_unique<LootAction>(botAI));
     context->RegisterAction("use quest object", std::make_unique<UseQuestObjectAction>(botAI));
     context->RegisterAction("talk to quest npc", std::make_unique<TalkToQuestNpcAction>(botAI));

@@ -538,9 +538,9 @@ inline float GetMaxWalkableSlopeDegrees()
 
 // Quest loot + object interaction (playerbots-quest-loot-and-object-interaction-handoff.md).
 // AC reference: mod-playerbots-master lootDistance / the OpenLootAction anti-ninja + IsLootAllowed
-// quest filter — reimplemented TC-native and packetless (Player::SendLoot/StoreLootItem,
-// GameObject::Use directly, no synthetic CMSG). All bounded so a bot never drifts into Gate 18
-// gear/vendor economy: V1 loots quest-relevant items only by default.
+// quest filter — open via Player::SendLoot / GameObject::Use; store via loot Handle*Opcodes
+// (StoreLootAction). All bounded so a bot never drifts into Gate 18 gear/vendor economy:
+// V1 loots quest-relevant items only by default.
 
 // How far a bot will look for a lootable corpse / usable quest object (yd). Matches the core's
 // own AELootCreatureCheck::LootDistance (30yd) so the bot's reach mirrors a real looting player.

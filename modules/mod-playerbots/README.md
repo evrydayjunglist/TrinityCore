@@ -450,20 +450,18 @@ RPG bots pick up quest drops and use quest-objective gameobjects while questing/
 straight through the core's own APIs — **packetless** (a socketless bot session has no inbound
 packet queue) — and lean on the core for every ownership/anti-ninja rule.
 
-- `Bot/Action/LootAction` (`"loot"`) — AC's `OpenLootAction`/`StoreLootAction` shape, TC-native:
-  live grid scan for the nearest dead creature the bot `Player::isAllowedToLoot`s that holds a
-  wanted item, `Player::SendLoot` to open it, then `Player::StoreLootItem` for each slot that
-  `LootItem::GetUiTypeForPlayer` says is takeable. It also drains any already-open loot window
-  (`Player::GetAELootView`), which is how loot from a gameobject the object-use action opened gets
-  stored. Default filter is quest-relevant items only (AC's `IsLootAllowed` quest core:
-  `ItemTemplate::GetStartQuest` + incomplete `QUEST_OBJECTIVE_ITEM` match) — `Playerbots.LootDistance`,
-  `Playerbots.LootQuestItemsOnly`, `Playerbots.LootMoney`.
+- `Bot/Action/LootAction` (`"loot"`) — find/approach/open only: live grid scan for the nearest
+  dead creature the bot `Player::isAllowedToLoot`s that holds a wanted item, then
+  `Player::SendLoot`. Store/money/release is `StoreLootAction` (`"store loot"`) after
+  `SMSG_LOOT_RESPONSE` via `HandleLootMoneyOpcode` / `HandleAutostoreLootItemOpcode` /
+  `HandleLootReleaseOpcode` (wired on follow + newrpg). Default filter is quest-relevant items
+  only — `Playerbots.LootDistance`, `Playerbots.LootQuestItemsOnly`, `Playerbots.LootMoney`.
 - `Bot/Action/UseQuestObjectAction` (`"use quest object"`) — finds a spawned GO matching an
   incomplete `QUEST_OBJECTIVE_GAMEOBJECT` in the bot's log (`GO_STATE_READY`, not
   `GO_FLAG_INTERACT_COND`/`GO_FLAG_NOT_SELECTABLE`), approaches via the `SafeMovement` contract, then
   replays the client's exact gate (`Player::GetGameObjectIfCanInteractWith` → `GameObject::Use`).
   `GameObject::Use` fires the real quest credit and, for chest/gathering objectives, opens the loot
-  window that `LootAction` then drains — `Playerbots.QuestObjectUseDistance`.
+  window that `StoreLootAction` drains from `SMSG_LOOT_RESPONSE` — `Playerbots.QuestObjectUseDistance`.
 - **GO turn-in** needs no new code: TC quest enders are always `GAMEOBJECT_TYPE_QUESTGIVER`, which
   the existing `QuestGiverAction` already handles (`CanInteractWithQuestGiver`/`PrepareQuestMenu`
   both accept gameobjects).

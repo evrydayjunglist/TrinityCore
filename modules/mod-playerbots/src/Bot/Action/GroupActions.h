@@ -36,4 +36,16 @@ public:
     bool IsUseful() override;
 };
 
+// Minimal AC "reset botAI" (ResetAiAction): re-apply strategies via ResetStrategies() only.
+// No AC master reassignment / TellMaster / SMSG_GROUP_LIST packet reading.
+class ResetAiAction : public Action
+{
+public:
+    explicit ResetAiAction(BotPlayerbotAI* botAI) : Action(botAI, "reset botAI") { }
+
+    bool Execute(Event event) override;
+    bool IsUseful() override;
+};
+
 #endif
+

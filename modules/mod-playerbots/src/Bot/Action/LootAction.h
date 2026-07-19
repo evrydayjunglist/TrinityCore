@@ -22,23 +22,26 @@
 
 class BotPlayerbotAI;
 
-// Quest looting for RPG bots. AC reference: mod-playerbots-master's OpenLootAction/StoreLootAction
-// (src/Ai/Base/Actions/LootAction.cpp) + LootObjectStack — same "find nearest lootable, open it,
-// store what's allowed" shape, but TC-native and packetless: it calls Player::SendLoot /
-// Player::StoreLootItem / WorldSession::DoLootRelease directly instead of queueing synthetic
-// CMSG_LOOT / CMSG_AUTOSTORE_LOOT_ITEM / CMSG_LOOT_RELEASE (a socketless bot never processes an
-// inbound packet queue). Ownership/anti-ninja is delegated entirely to the core — the finder gates
-// on Player::isAllowedToLoot and each slot on LootItem::GetUiTypeForPlayer, so a bot only ever takes
-// what a real looting player at that corpse could. V1 default is quest-relevant items only
-// (Playerbots.LootQuestItemsOnly) so looting never drifts into Gate 18 gear/vendor economy.
-//
-// It also drains any loot window already open on the bot (Player::GetAELootView): that's how loot
-// from a gameobject the UseQuestObjectAction opened via GameObject::Use (which itself calls
-// Player::SendLoot for chests/gathering nodes) gets stored — no separate GO-loot path needed.
+// Find / approach / open lootable corpses. AC OpenLootAction shape; open still uses
+// Player::SendLoot (HandleLootOpcode migration is a later retirement step). Store/money/release
+// are NOT done here — SMSG_LOOT_RESPONSE → StoreLootAction (Handle*Opcode).
+// Finder gates on Player::isAllowedToLoot + quest-relevant slots (LootQuestItemsOnly).
 class LootAction : public Action
 {
 public:
     explicit LootAction(BotPlayerbotAI* botAI) : Action(botAI, "loot") { }
+
+    bool Execute(Event event) override;
+    bool IsUseful() override;
+};
+
+// Minimal AC "store loot": drain an acquired SMSG_LOOT_RESPONSE window via
+// HandleLootMoneyOpcode / HandleAutostoreLootItemOpcode / HandleLootReleaseOpcode.
+// No QueuePacket, no Player::StoreLootItem / DoLootRelease.
+class StoreLootAction : public Action
+{
+public:
+    explicit StoreLootAction(BotPlayerbotAI* botAI) : Action(botAI, "store loot") { }
 
     bool Execute(Event event) override;
     bool IsUseful() override;

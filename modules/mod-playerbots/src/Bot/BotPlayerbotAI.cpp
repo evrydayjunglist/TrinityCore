@@ -17,41 +17,18 @@
 
 #include "BotPlayerbotAI.h"
 #include "AiFactory.h"
-#include "Bot/Packet/BotPartyInvitePacket.h"
-#include "Bot/Packet/BotPacketParse.h"
+#include "Bot/PacketHandler/BotPacketSignal.h"
 #include "Engine.h"
-#include "Group.h"
 #include "Log.h"
-#include "Opcodes.h"
 #include "Player.h"
 #include "PlayerbotsConfig.h"
 #include "Random.h"
 #include "RandomPlayerbotMgr.h"
 #include "WorldPacket.h"
 #include <algorithm>
-#include <unordered_map>
 
 namespace
 {
-// AC's botOutgoingPacketHandlers shape (mod-playerbots-master PlayerbotAI.cpp:178-223).
-// Signal name always; payload parse is opt-in per opcode behind the three-layer gate
-// (playerbots-bot-packet-payload-parse-handoff.md).
-struct PacketSignalEntry
-{
-    char const* SignalName;
-    bool CopiesPayload; // when PayloadParse.Enable, enqueue a WorldPacket copy for tick-time parse
-};
-
-PacketSignalEntry const* LookupPacketSignal(uint32 opcode)
-{
-    static std::unordered_map<uint32, PacketSignalEntry> const registry = {
-        { SMSG_PARTY_INVITE, { "group invite signal", true } },
-    };
-
-    auto itr = registry.find(opcode);
-    return itr != registry.end() ? &itr->second : nullptr;
-}
-
 constexpr size_t BOT_SIGNAL_QUEUE_MAX = 32;
 constexpr size_t BOT_SIGNAL_PENDING_MAX = 32;
 constexpr uint8 BOT_SIGNAL_TTL_TICKS = 3;
@@ -105,11 +82,13 @@ void BotPlayerbotAI::ResetStrategies()
 void BotPlayerbotAI::HandleBotOutgoingPacket(WorldPacket const& packet)
 {
     // Sender-thread cheap path: opcode registry + optional packet copy enqueue only.
-    PacketSignalEntry const* entry = LookupPacketSignal(packet.GetOpcode());
+    Playerbots::PacketHandler::PacketSignalEntry const* entry =
+        Playerbots::PacketHandler::LookupPacketSignal(packet.GetOpcode());
     if (!entry)
         return;
 
     QueuedSignal queued;
+    queued.Opcode = packet.GetOpcode();
     queued.Name = entry->SignalName;
     if (entry->CopiesPayload && Playerbots::GetPacketPayloadParseEnabled())
         queued.Packet = packet; // WorldPacket copy
@@ -142,49 +121,44 @@ bool BotPlayerbotAI::ConsumeSignal(std::string const& name)
     return true;
 }
 
+bool BotPlayerbotAI::TellMaster(std::string_view text)
+{
+    Player* bot = GetBot();
+    Player* master = GetMaster();
+    if (!bot || !master)
+    {
+        if (Playerbots::GetLogLevel() >= 1)
+            TC_LOG_DEBUG("playerbots", "TellMaster skipped (no master) bot={} text='{}'",
+                bot ? bot->GetName() : "?",
+                text);
+        return false;
+    }
+
+    bot->Whisper(text, LANG_UNIVERSAL, master);
+    return true;
+}
+
 void BotPlayerbotAI::ProcessPayloadOnTick(QueuedSignal& signal)
 {
-    if (!signal.Packet)
+    Playerbots::PacketHandler::PacketSignalEntry const* entry =
+        Playerbots::PacketHandler::LookupPacketSignal(signal.Opcode);
+    if (!entry)
         return;
 
-    switch (signal.Packet->GetOpcode())
+    if (!signal.Packet)
     {
-        case SMSG_PARTY_INVITE:
+        // Parse-gated reactions with no poll dual: do not fire when PayloadParse is off.
+        if (entry->ClearSignalOnNoPayload)
         {
-            Playerbots::PacketParse::PartyInvitePayload parsed;
-            if (!Playerbots::PacketParse::TryReadPartyInvite(*signal.Packet, parsed))
-            {
-                // Layer 1 failed — ERROR already logged; keep signal for poll/signal fallback.
-                return;
-            }
-
-            // Layer 2: cross-check InviterGUID vs live group invite leader.
-            Player* bot = GetBot();
-            Group* invite = bot ? bot->GetGroupInvite() : nullptr;
-            ObjectGuid const liveLeader = invite ? invite->GetLeaderGUID() : ObjectGuid::Empty;
-            if (liveLeader.IsEmpty() || liveLeader != parsed.InviterGUID)
-            {
-                TC_LOG_ERROR("playerbots.packet",
-                    "BotPacketParse SMSG_PARTY_INVITE Layer-2 mismatch bot={} parsedInviter={} liveLeader={} verifiedBuild={}",
-                    bot ? bot->GetName() : "?",
-                    parsed.InviterGUID.ToString(),
-                    liveLeader.ToString(),
-                    Playerbots::PacketParse::VERIFIED_BUILD);
-                // Prefer live state for the accept action; signal still fires.
-                return;
-            }
-
-            if (Playerbots::GetLogLevel() >= 1)
-                TC_LOG_DEBUG("playerbots.packet",
-                    "BotPacketParse SMSG_PARTY_INVITE ok bot={} inviter={} name={}",
-                    bot ? bot->GetName() : "?",
-                    parsed.InviterGUID.ToString(),
-                    parsed.InviterName);
-            break;
+            if (entry->ClearPending)
+                (this->*entry->ClearPending)();
+            signal.Name.clear();
         }
-        default:
-            break;
+        return;
     }
+
+    if (entry->Handler)
+        entry->Handler(*this, signal);
 }
 
 void BotPlayerbotAI::UpdateAIInternal(uint32 diff)
@@ -199,6 +173,11 @@ void BotPlayerbotAI::UpdateAIInternal(uint32 diff)
     {
         ProcessPayloadOnTick(queued);
 
+        // Buy-failed clears Name on non-V1 / Layer fail; placeholder "buy failed" must never
+        // reach pending (PayloadParse off, or rewrite skipped).
+        if (queued.Name.empty() || queued.Name == "buy failed")
+            continue;
+
         if (_pendingSignals.size() >= BOT_SIGNAL_PENDING_MAX)
         {
             if (Playerbots::GetLogLevel() >= 1)
@@ -211,8 +190,15 @@ void BotPlayerbotAI::UpdateAIInternal(uint32 diff)
         _pendingSignals.push_back({ std::move(queued.Name), BOT_SIGNAL_TTL_TICKS });
     }
 
+    // Pending-signal TTL must only burn on ticks where ProcessTriggers ran. Default GCD (500ms)
+    // is longer than TTL (3 × ReactDelay ~100ms): signal-only reactions (e.g. "group set leader")
+    // otherwise expire while follow keeps the engine on cooldown — poll duals masked that bug.
+    bool triggersProcessed = false;
     if (_engine)
-        _engine->DoNextAction(diff);
+        _engine->DoNextAction(diff, triggersProcessed);
+
+    if (!triggersProcessed)
+        return;
 
     for (auto itr = _pendingSignals.begin(); itr != _pendingSignals.end();)
     {

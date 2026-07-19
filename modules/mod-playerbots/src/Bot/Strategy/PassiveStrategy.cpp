@@ -17,4 +17,16 @@
 
 #include "PassiveStrategy.h"
 
-// Gate 6: passive strategy — no triggers, no movement/combat actions.
+// Gate 6 idle baseline (no movement/combat). Lifecycle accepts for AC botOutgoing parity
+// so GM `.playerbot login` / non-RPG random bots still react (signal + poll).
+
+void PassiveStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+{
+    triggers.push_back(new TriggerNode("resurrect request signal", { NextAction("accept resurrect", 100.0f) }));
+    triggers.push_back(new TriggerNode("resurrect request", { NextAction("accept resurrect", 100.0f) }));
+
+    // Guild charter offer — same-account master-alts cannot use client Request Signature;
+    // reserved-account login bots are the practical offer/sign playtest path.
+    triggers.push_back(new TriggerNode("petition offer signal", { NextAction("petition sign", 100.0f) }));
+    triggers.push_back(new TriggerNode("petition offer", { NextAction("petition sign", 100.0f) }));
+}
