@@ -65,7 +65,7 @@ Playerbots.FollowDistance = 3.0
 
 #
 # Gate 12 — class-agnostic combat brain (targeting / range hold / flee).
-# Still no spell rotations (Gate 14+) and no talent trees (Gate 13).
+# Still no spell rotations (Gate 14+).
 #
 # Enter flee at/below this self health % while in combat / has attackers.
 Playerbots.Combat.FleeHealthPct = 35
@@ -79,6 +79,22 @@ Playerbots.Combat.RangedDistance = 28.0
 Playerbots.Combat.PreferRanged = -1
 # Kill-switch for flee/kite (1 = on).
 Playerbots.Combat.FleeEnabled = 1
+
+#
+# Gate 13 — spec + Midnight starter trait auto-apply (TraitMgr / TraitTreeLoadout DB2).
+# AC Talentspec role; no WotLK talent tabs / node id spreadsheets. Socketless bots call
+# Player/TraitMgr APIs directly (no talent CMSG / QueuePacket).
+#
+# Master kill-switch for the Gate 13 path.
+Playerbots.Talent.AutoApply = 1
+# Run EnsureSpec + starter TraitConfig on bot login (after random-bot GiveLevel).
+Playerbots.Talent.ApplyOnLogin = 1
+# Re-run on level-up (usually unnecessary; starter loadout is level-aware via TraitMgr).
+Playerbots.Talent.ApplyOnLevelUp = 0
+# Optional per-class ChrSpecialization ID override (must exist in ChrSpecialization.db2 for
+# that class). Key = Playerbots.Talent.PreferSpec.<ClassId> (CLASS_* enum value as integer).
+# Example: Playerbots.Talent.PreferSpec.8 = <MageSpecIdFromDB2>
+
 
 #
 # Playerbots database (Gate 9) — AC-shaped dedicated DB (Option A core hook + module SQL).

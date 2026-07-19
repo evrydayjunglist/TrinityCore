@@ -102,6 +102,22 @@ inline int32 GetCombatPreferRanged()
     return sConfigMgr->GetIntDefault("Playerbots.Combat.PreferRanged", -1);
 }
 
+// Gate 13 — Midnight TraitMgr starter loadout auto-apply (AC Talentspec role).
+inline bool GetTalentAutoApply()
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.Talent.AutoApply", true);
+}
+
+inline bool GetTalentApplyOnLogin()
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.Talent.ApplyOnLogin", true);
+}
+
+inline bool GetTalentApplyOnLevelUp()
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.Talent.ApplyOnLevelUp", false);
+}
+
 inline uint32 GetMaxActiveBots()
 {
     return std::max<uint32>(sConfigMgr->GetIntDefault("Playerbots.MaxActiveBots", 1), 1u);

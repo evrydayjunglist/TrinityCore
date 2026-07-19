@@ -18,6 +18,7 @@
 #include "ScriptMgr.h"
 #include "BotPlayerbotAI.h"
 #include "BotSessionMgr.h"
+#include "Mgr/Talent/BotTalentMgr.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "PlayerbotMgr.h"
@@ -87,6 +88,11 @@ public:
             if (sRandomPlayerbotMgr->IsRandomBot(player->GetGUID()))
                 ApplyRandomBotStartingLevel(player);
 
+            // Gate 13 — after GiveLevel so TraitMgr currencies/ranks match bot level.
+            // Covers master-alt and random bots (PlayerbotMgr::OnBotLogin is master-alt only).
+            if (Playerbots::GetTalentApplyOnLogin())
+                BotTalentMgr::EnsureSpecAndStarterTraits(player);
+
             ObjectGuid const masterGuid = sBotSessionMgr->GetMasterGuidForBot(player->GetGUID());
             if (!masterGuid.IsEmpty())
                 if (Player* master = ObjectAccessor::FindConnectedPlayer(masterGuid))
@@ -96,6 +102,21 @@ public:
         }
 
         sPlayerbotsMgr->AddPlayerbotData(player, false);
+    }
+
+    void OnLevelChanged(Player* player, uint8 /*oldLevel*/) override
+    {
+        if (!Playerbots::IsEnabled() || !player)
+            return;
+
+        WorldSession* session = player->GetSession();
+        if (!session || !session->IsBotSession())
+            return;
+
+        if (!Playerbots::GetTalentApplyOnLevelUp())
+            return;
+
+        BotTalentMgr::EnsureSpecAndStarterTraits(player, true);
     }
 
     void OnGiveXP(Player* player, uint32& amount, Unit* /*victim*/) override
