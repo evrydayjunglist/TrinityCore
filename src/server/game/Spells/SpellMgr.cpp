@@ -553,13 +553,18 @@ bool SpellMgr::CanSpellTriggerProcOnEvent(SpellProcEntry const& procEntry, ProcE
         return false;
 
     // check spell family name/flags (if set) for spells
-    if (eventInfo.GetTypeMask() & SPELL_PROC_FLAG_MASK)
+    // PROC_FLAG_2_CAST_SUCCESSFUL lives in ProcFlags word1 (outside SPELL_PROC_FLAG_MASK)
+    // but still needs family filtering when the proc entry sets SpellFamilyName/Mask
+    if ((eventInfo.GetTypeMask() & SPELL_PROC_FLAG_MASK) || (eventInfo.GetTypeMask() & PROC_FLAG_2_CAST_SUCCESSFUL))
     {
         if (SpellInfo const* eventSpellInfo = eventInfo.GetSpellInfo())
             if (!eventSpellInfo->IsAffected(procEntry.SpellFamilyName, procEntry.SpellFamilyMask))
                 return false;
+    }
 
-        // check spell type mask (if set)
+    // check spell type mask (if set) - only meaningful for SPELL_PROC_FLAG_MASK (word0)
+    if (eventInfo.GetTypeMask() & SPELL_PROC_FLAG_MASK)
+    {
         if (procEntry.SpellTypeMask && !(eventInfo.GetSpellTypeMask() & procEntry.SpellTypeMask))
             return false;
     }
