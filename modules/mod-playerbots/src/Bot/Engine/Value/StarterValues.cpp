@@ -16,6 +16,7 @@
  */
 
 #include "StarterValues.h"
+#include "AttackValidity.h"
 #include "BotPlayerbotAI.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
@@ -31,7 +32,19 @@ Unit* CurrentTargetValue::Calculate()
         return nullptr;
 
     if (Unit* victim = bot->GetVictim())
-        return victim;
+    {
+        // Accepted caveat (handoff playerbots-duel-end-friendly-attack): CalculatedValue
+        // side effect — AttackStop when GetVictim fails Gate 12 IsValidAttackTarget so
+        // stale post-duel melee clears even when cast Execute never runs. Prefer a
+        // leave-combat action later only if PvE LOS chase flicker shows up in playtest.
+        if (!IsValidAttackTarget(bot, victim))
+        {
+            bot->AttackStop();
+            victim = nullptr;
+        }
+        else
+            return victim;
+    }
 
     ObjectGuid const targetGuid = bot->GetTarget();
     if (!targetGuid)

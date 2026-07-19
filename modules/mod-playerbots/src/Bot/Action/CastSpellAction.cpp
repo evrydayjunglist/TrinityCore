@@ -16,6 +16,7 @@
  */
 
 #include "CastSpellAction.h"
+#include "AttackValidity.h"
 #include "BotPlayerbotAI.h"
 #include "CombatPositioning.h"
 #include "Log.h"
@@ -75,7 +76,8 @@ bool CastSpellAction::CanCastOn(Player* bot, Unit* target, SpellInfo const* spel
 
     if (target != bot)
     {
-        if (!target->IsAlive() || !target->IsInWorld())
+        // Gate 12 hostility — blocks post-duel friendly swing re-arm (BAD_TARGETS casts).
+        if (!IsValidAttackTarget(bot, target))
             return false;
 
         if (target->GetMapId() != bot->GetMapId())
@@ -148,6 +150,15 @@ bool CastSpellAction::Execute(Event /*event*/)
 
     if (ShouldPrepareCombatSwing() && target != bot)
     {
+        // Never Attack() a now-friendly/invalid target (duel end) — CastSpell alone would
+        // fail BAD_TARGETS but melee would already be re-armed.
+        if (!IsValidAttackTarget(bot, target))
+        {
+            if (bot->GetVictim() == target)
+                bot->AttackStop();
+            return false;
+        }
+
         if (!bot->HasInArc(float(M_PI), target))
             bot->SetFacingToObject(target);
 
