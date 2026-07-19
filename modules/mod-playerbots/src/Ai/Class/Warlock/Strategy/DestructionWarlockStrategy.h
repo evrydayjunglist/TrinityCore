@@ -15,18 +15,23 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "CombatStrategy.h"
+#ifndef TRINITY_PLAYERBOT_DESTRUCTION_WARLOCK_STRATEGY_H
+#define TRINITY_PLAYERBOT_DESTRUCTION_WARLOCK_STRATEGY_H
 
-std::vector<NextAction> CombatStrategy::GetDefaultActions()
-{
-    // Keep a low default so trigger-boosted attack (12) and flee (40) outrank it when live;
-    // follow stays at 1.0 on FollowMasterStrategy.
-    return { NextAction("attack my target", 10.0f) };
-}
+#include "Strategy.h"
 
-void CombatStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+class BotPlayerbotAI;
+
+// Gate 15a Wave 1 — DoT maintain / filler / spender. Flee (40) stays above these.
+class DestructionWarlockStrategy : public Strategy
 {
-    // Prefer master's target or a live attacker — boost relevance while a fight target exists.
-    triggers.push_back(new TriggerNode("has combat target", { NextAction("attack my target", 12.0f) }));
-    triggers.push_back(new TriggerNode("has attackers", { NextAction("attack my target", 11.5f) }));
-}
+public:
+    explicit DestructionWarlockStrategy(BotPlayerbotAI* botAI) : Strategy(botAI) { }
+
+    std::string GetName() override { return "destruction"; }
+    uint32 GetType() const override { return STRATEGY_TYPE_COMBAT; }
+    std::vector<NextAction> GetDefaultActions() override;
+    void InitTriggers(std::vector<TriggerNode*>& triggers) override;
+};
+
+#endif

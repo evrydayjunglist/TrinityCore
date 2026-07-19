@@ -15,18 +15,18 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "CombatStrategy.h"
+#ifndef TRINITY_PLAYERBOT_BOT_TALENT_MGR_H
+#define TRINITY_PLAYERBOT_BOT_TALENT_MGR_H
 
-std::vector<NextAction> CombatStrategy::GetDefaultActions()
+class Player;
+
+// Gate 13 — AC-shaped Mgr/Talent (role of Talentspec), TC-native TraitMgr starter loadouts.
+// Detect/ensure ChrSpecialization, then apply retail starter combat TraitConfig from DB2.
+namespace BotTalentMgr
 {
-    // Keep a low default so trigger-boosted attack (12) and flee (40) outrank it when live;
-    // follow stays at 1.0 on FollowMasterStrategy.
-    return { NextAction("attack my target", 10.0f) };
+// Login (and optional level-up) entry: config-gated, idempotent, no QueuePacket.
+// forceRefresh=true re-runs starter fill even when StarterBuild is already set (level-up).
+void EnsureSpecAndStarterTraits(Player* bot, bool forceRefresh = false);
 }
 
-void CombatStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
-{
-    // Prefer master's target or a live attacker — boost relevance while a fight target exists.
-    triggers.push_back(new TriggerNode("has combat target", { NextAction("attack my target", 12.0f) }));
-    triggers.push_back(new TriggerNode("has attackers", { NextAction("attack my target", 11.5f) }));
-}
+#endif

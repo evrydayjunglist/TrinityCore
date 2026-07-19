@@ -22,7 +22,7 @@
 
 class BotPlayerbotAI;
 
-// AC reference: mod-playerbots-master/src/Ai/Base/Strategy/CombatStrategy.h (minimal Gate 8)
+// Gate 12 — matured Gate 8 CombatStrategy with real InitTriggers on AI_VALUE.
 class CombatStrategy : public Strategy
 {
 public:
@@ -31,6 +31,7 @@ public:
     std::string GetName() override { return "attack"; }
     uint32 GetType() const override { return STRATEGY_TYPE_COMBAT; }
     std::vector<NextAction> GetDefaultActions() override;
+    void InitTriggers(std::vector<TriggerNode*>& triggers) override;
 };
 
 #endif

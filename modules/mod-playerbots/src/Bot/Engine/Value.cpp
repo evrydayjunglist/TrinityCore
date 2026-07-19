@@ -15,18 +15,11 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "CombatStrategy.h"
+#include "Value.h"
+#include "BotPlayerbotAI.h"
+#include "PlayerbotAIBase.h"
 
-std::vector<NextAction> CombatStrategy::GetDefaultActions()
+Player* UntypedValue::GetBot() const
 {
-    // Keep a low default so trigger-boosted attack (12) and flee (40) outrank it when live;
-    // follow stays at 1.0 on FollowMasterStrategy.
-    return { NextAction("attack my target", 10.0f) };
-}
-
-void CombatStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
-{
-    // Prefer master's target or a live attacker — boost relevance while a fight target exists.
-    triggers.push_back(new TriggerNode("has combat target", { NextAction("attack my target", 12.0f) }));
-    triggers.push_back(new TriggerNode("has attackers", { NextAction("attack my target", 11.5f) }));
+    return _botAI ? _botAI->GetBot() : nullptr;
 }

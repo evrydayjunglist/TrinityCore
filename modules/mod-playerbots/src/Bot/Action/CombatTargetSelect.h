@@ -15,18 +15,19 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "CombatStrategy.h"
+#ifndef TRINITY_PLAYERBOT_COMBAT_TARGET_SELECT_H
+#define TRINITY_PLAYERBOT_COMBAT_TARGET_SELECT_H
 
-std::vector<NextAction> CombatStrategy::GetDefaultActions()
-{
-    // Keep a low default so trigger-boosted attack (12) and flee (40) outrank it when live;
-    // follow stays at 1.0 on FollowMasterStrategy.
-    return { NextAction("attack my target", 10.0f) };
-}
+class BotPlayerbotAI;
+class Player;
+class Unit;
 
-void CombatStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
-{
-    // Prefer master's target or a live attacker — boost relevance while a fight target exists.
-    triggers.push_back(new TriggerNode("has combat target", { NextAction("attack my target", 12.0f) }));
-    triggers.push_back(new TriggerNode("has attackers", { NextAction("attack my target", 11.5f) }));
-}
+// Gate 12 shared combat target priority (AI_VALUE-backed):
+//   1. valid "master target"
+//   2. nearest valid unit from "attackers"
+// AttackAnythingAction keeps its own RPG grind/quest search as priority 3 for masterless bots.
+Unit* SelectCombatTarget(BotPlayerbotAI* botAI, Player* bot);
+Unit* SelectNearestValidAttacker(BotPlayerbotAI* botAI, Player* bot);
+bool HasValidCombatTarget(BotPlayerbotAI* botAI, Player* bot);
+
+#endif

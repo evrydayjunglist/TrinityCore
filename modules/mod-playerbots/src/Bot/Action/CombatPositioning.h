@@ -15,18 +15,20 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "CombatStrategy.h"
+#ifndef TRINITY_PLAYERBOT_COMBAT_POSITIONING_H
+#define TRINITY_PLAYERBOT_COMBAT_POSITIONING_H
 
-std::vector<NextAction> CombatStrategy::GetDefaultActions()
-{
-    // Keep a low default so trigger-boosted attack (12) and flee (40) outrank it when live;
-    // follow stays at 1.0 on FollowMasterStrategy.
-    return { NextAction("attack my target", 10.0f) };
-}
+class Player;
+class Unit;
 
-void CombatStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
-{
-    // Prefer master's target or a live attacker — boost relevance while a fight target exists.
-    triggers.push_back(new TriggerNode("has combat target", { NextAction("attack my target", 12.0f) }));
-    triggers.push_back(new TriggerNode("has attackers", { NextAction("attack my target", 11.5f) }));
-}
+// Gate 12 coarse melee/ranged role (not Gate 13 talent trees).
+// PreferRanged config: -1 = ChrSpecialization Caster/Ranged heuristic, 0 = melee, 1 = ranged.
+bool BotPrefersRangedCombat(Player const* bot);
+
+// Apply class-agnostic combat movement for the current victim.
+// Melee: MoveChase when not in melee and approach is walkable.
+// Ranged: hold ~Playerbots.Combat.RangedDistance via SafeMovement; backpedal when too close.
+// Returns true when movement was issued or the bot is already in an acceptable band.
+bool ApplyCombatMovement(Player* bot, Unit* target);
+
+#endif

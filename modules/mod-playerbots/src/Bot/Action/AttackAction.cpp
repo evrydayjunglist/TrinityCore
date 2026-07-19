@@ -18,40 +18,31 @@
 #include "AttackAction.h"
 #include "AttackValidity.h"
 #include "BotPlayerbotAI.h"
-#include "MotionMaster.h"
-#include "ObjectAccessor.h"
+#include "CombatPositioning.h"
+#include "CombatTargetSelect.h"
 #include "Player.h"
-#include "SafeMovement.h"
+#include "Playerbots.h"
+#include "PlayerbotsConfig.h"
 #include "Unit.h"
-
-namespace
-{
-Unit* GetMasterAttackTarget(BotPlayerbotAI* botAI, Player* bot)
-{
-    if (!botAI || !bot)
-        return nullptr;
-
-    Player* master = botAI->GetMaster();
-    if (!master || !master->IsInWorld())
-        return nullptr;
-
-    ObjectGuid const targetGuid = master->GetTarget();
-    if (!targetGuid)
-        return nullptr;
-
-    return ObjectAccessor::GetUnit(*bot, targetGuid);
-}
-}
 
 bool HasAttackableMasterTarget(BotPlayerbotAI* botAI, Player* bot)
 {
-    Unit* target = GetMasterAttackTarget(botAI, bot);
-    return IsValidAttackTarget(bot, target);
+    // Gate 12: keep the helper name for callers, but accept master target OR attackers.
+    return HasValidCombatTarget(botAI, bot);
 }
 
 bool AttackMyTargetAction::IsUseful()
 {
-    return HasAttackableMasterTarget(_botAI, GetBot());
+    Player* bot = GetBot();
+    if (!bot || !bot->IsAlive() || !bot->IsInWorld())
+        return false;
+
+    // While actively fleeing, yield the tick to FleeAction (higher relevance) — don't re-chase.
+    if (_botAI && _botAI->GetAiObjectContext() && AI_VALUE(bool, "is fleeing") &&
+        AI_VALUE(uint8, "health") <= Playerbots::GetCombatFleeHealthExitPct())
+        return false;
+
+    return HasValidCombatTarget(_botAI, bot);
 }
 
 bool AttackMyTargetAction::Execute(Event /*event*/)
@@ -60,9 +51,14 @@ bool AttackMyTargetAction::Execute(Event /*event*/)
     if (!bot)
         return false;
 
-    Unit* target = GetMasterAttackTarget(_botAI, bot);
+    Unit* target = SelectCombatTarget(_botAI, bot);
     if (!IsValidAttackTarget(bot, target))
         return false;
+
+    // Leaving flee state once we re-engage a valid target above the exit band (or attackers gone
+    // already cleared it in FleeHealthTrigger).
+    if (_botAI && _botAI->GetAiObjectContext() && AI_VALUE(bool, "is fleeing"))
+        SET_AI_VALUE(bool, "is fleeing", false);
 
     bot->SetSelection(target->GetGUID());
 
@@ -72,16 +68,6 @@ bool AttackMyTargetAction::Execute(Event /*event*/)
     if (!bot->Attack(target, true))
         return false;
 
-    // Close to melee range and stay on the target (core ChaseMovementGenerator). MoveChase
-    // installs an active-slot generator that supersedes the +follow FollowMovementGenerator, so
-    // no explicit follow Clear() is needed. Mirrors AttackAnythingAction (random/newrpg bots) —
-    // without this a master-alt bot only lands hits when the mob walks into it. Same slope gate
-    // as AttackAnythingAction — this action's IsUseful() stays true every tick the master keeps
-    // its target, so an unwalkable approach gets re-checked (and can clear) as the fight moves,
-    // unlike the once-per-engagement AttackAnythingAction check.
-    if (bot->IsWithinMeleeRange(target) ||
-        IsApproachPathWalkable(bot, target->GetPositionX(), target->GetPositionY(), target->GetPositionZ()))
-        bot->GetMotionMaster()->MoveChase(target);
-
+    ApplyCombatMovement(bot, target);
     return true;
 }

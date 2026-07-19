@@ -18,11 +18,11 @@
 #include "AttackAnythingAction.h"
 #include "AttackValidity.h"
 #include "BotPlayerbotAI.h"
-#include "MotionMaster.h"
-#include "MovementDefines.h"
+#include "CombatPositioning.h"
+#include "CombatTargetSelect.h"
 #include "Player.h"
+#include "Playerbots.h"
 #include "PlayerbotsConfig.h"
-#include "SafeMovement.h"
 #include "Unit.h"
 
 namespace
@@ -35,6 +35,11 @@ bool AttackAnythingAction::IsUseful()
 {
     Player* bot = GetBot();
     if (!bot || !bot->IsInWorld() || !bot->IsAlive())
+        return false;
+
+    // Yield to Gate 12 flee while low-HP hysteresis is active.
+    if (_botAI && _botAI->GetAiObjectContext() && AI_VALUE(bool, "is fleeing") &&
+        AI_VALUE(uint8, "health") <= Playerbots::GetCombatFleeHealthExitPct())
         return false;
 
     // In combat: step in when the bot has no victim (it got aggroed, or its target died while other
@@ -65,44 +70,29 @@ bool AttackAnythingAction::Execute(Event /*event*/)
     if (!bot)
         return false;
 
-    // Already fighting a valid target: keep it (don't thrash to a different one) and make sure the
-    // combat chase — not a stray RPG-travel MovePoint — owns movement, so the bot actually closes to
-    // and holds melee. Re-assert MoveChase only when it isn't already the active generator, to avoid
-    // resetting the spline every tick (when already chasing we still consume the tick so RPG travel
-    // can't take movement back mid-fight). The walkability gate is unchanged — the SafeMovement slope
-    // contract stays exactly as-is (playerbots-bot-wander-ground-clip-handoff.md ⭐ standing watch).
-    // Returning here yields the fight to core auto-attack once in melee (MoveChase just holds range).
-    // When the victim dies or goes invalid, IsUseful releases and RPG travel resumes. See
+    // Already fighting a valid target: keep it (don't thrash) and re-assert Gate 12 positioning so
+    // RPG travel can't steal movement mid-fight. See
     // playerbots-rpg-combat-ranged-attacker-engagement-handoff.md.
     if (Unit* victim = bot->GetVictim())
     {
         if (bot->IsInCombat() && IsValidAttackTarget(bot, victim))
         {
+            if (_botAI && _botAI->GetAiObjectContext() && AI_VALUE(bool, "is fleeing"))
+                SET_AI_VALUE(bool, "is fleeing", false);
+
             if (!bot->HasInArc(float(M_PI), victim))
                 bot->SetFacingToObject(victim);
 
-            if (bot->GetMotionMaster()->GetCurrentMovementGeneratorType() != CHASE_MOTION_TYPE &&
-                IsApproachPathWalkable(bot, victim->GetPositionX(), victim->GetPositionY(), victim->GetPositionZ()))
-                bot->GetMotionMaster()->MoveChase(victim);
-
+            ApplyCombatMovement(bot, victim);
             return true;
         }
     }
 
     Unit* target = nullptr;
 
-    // Fight back first: prefer whoever is actually attacking the bot.
+    // Fight back first via Gate 12 AI_VALUE("attackers") helper (shared with master-alt path).
     if (bot->IsInCombat() && !bot->GetVictim())
-    {
-        for (Unit* attacker : bot->getAttackers())
-        {
-            if (IsValidAttackTarget(bot, attacker))
-            {
-                target = attacker;
-                break;
-            }
-        }
-    }
+        target = SelectNearestValidAttacker(_botAI, bot);
 
     // Prefer a nearby hostile; fall back to a neutral creature a quest kill objective wants dead.
     if (!target)
@@ -114,6 +104,9 @@ bool AttackAnythingAction::Execute(Event /*event*/)
     if (!IsValidAttackTarget(bot, target))
         return false;
 
+    if (_botAI && _botAI->GetAiObjectContext() && AI_VALUE(bool, "is fleeing"))
+        SET_AI_VALUE(bool, "is fleeing", false);
+
     bot->SetSelection(target->GetGUID());
     if (!bot->HasInArc(float(M_PI), target))
         bot->SetFacingToObject(target);
@@ -121,16 +114,6 @@ bool AttackAnythingAction::Execute(Event /*event*/)
     if (!bot->Attack(target, true))
         return false;
 
-    // Close to melee range and stay on the target (core ChaseMovementGenerator, same
-    // target-relative movement family FollowAction already uses via MoveFollow) — without this
-    // a bot only ever lands hits when the mob walks into it. ChaseMovementGenerator builds its
-    // own PathGenerator with only the engine's default (55-degree) slope filter, so gate it on
-    // SafeMovement's stricter check first — already in melee range needs no chase movement at
-    // all and is never blocked by terrain. See SafeMovement.h and
-    // playerbots-bot-wander-ground-clip-handoff.md §6.
-    if (bot->IsWithinMeleeRange(target) ||
-        IsApproachPathWalkable(bot, target->GetPositionX(), target->GetPositionY(), target->GetPositionZ()))
-        bot->GetMotionMaster()->MoveChase(target);
-
+    ApplyCombatMovement(bot, target);
     return true;
 }

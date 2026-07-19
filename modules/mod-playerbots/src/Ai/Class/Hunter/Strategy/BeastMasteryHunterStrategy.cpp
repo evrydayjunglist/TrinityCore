@@ -15,18 +15,19 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "CombatStrategy.h"
+#include "BeastMasteryHunterStrategy.h"
 
-std::vector<NextAction> CombatStrategy::GetDefaultActions()
+std::vector<NextAction> BeastMasteryHunterStrategy::GetDefaultActions()
 {
-    // Keep a low default so trigger-boosted attack (12) and flee (40) outrank it when live;
-    // follow stays at 1.0 on FollowMasterStrategy.
-    return { NextAction("attack my target", 10.0f) };
+    return { NextAction("cobra shot", 14.0f) };
 }
 
-void CombatStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+void BeastMasteryHunterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
-    // Prefer master's target or a live attacker — boost relevance while a fight target exists.
-    triggers.push_back(new TriggerNode("has combat target", { NextAction("attack my target", 12.0f) }));
-    triggers.push_back(new TriggerNode("has attackers", { NextAction("attack my target", 11.5f) }));
+    // Relevance band 18–24: above Gate 12 attack (10–12), below flee (40).
+    triggers.push_back(new TriggerNode("has combat target", {
+        NextAction("kill command", 24.0f),
+        NextAction("barbed shot", 22.0f),
+        NextAction("cobra shot", 18.0f)
+    }));
 }

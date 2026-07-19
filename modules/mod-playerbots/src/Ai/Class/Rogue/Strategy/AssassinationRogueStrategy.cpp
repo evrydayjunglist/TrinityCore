@@ -15,18 +15,21 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "CombatStrategy.h"
+#include "AssassinationRogueStrategy.h"
 
-std::vector<NextAction> CombatStrategy::GetDefaultActions()
+std::vector<NextAction> AssassinationRogueStrategy::GetDefaultActions()
 {
-    // Keep a low default so trigger-boosted attack (12) and flee (40) outrank it when live;
-    // follow stays at 1.0 on FollowMasterStrategy.
-    return { NextAction("attack my target", 10.0f) };
+    // Filler while a combat target exists but triggers have not boosted a higher cast.
+    // Below flee (40) and combat attack boost (12); above idle follow (1).
+    return { NextAction("mutilate", 14.0f) };
 }
 
-void CombatStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+void AssassinationRogueStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
-    // Prefer master's target or a live attacker — boost relevance while a fight target exists.
-    triggers.push_back(new TriggerNode("has combat target", { NextAction("attack my target", 12.0f) }));
-    triggers.push_back(new TriggerNode("has attackers", { NextAction("attack my target", 11.5f) }));
+    // Relevance band 18–24: above Gate 12 attack (10–12), below flee (40).
+    triggers.push_back(new TriggerNode("has combat target", {
+        NextAction("garrote", 24.0f),
+        NextAction("envenom", 22.0f),
+        NextAction("mutilate", 18.0f)
+    }));
 }

@@ -20,6 +20,7 @@
 #include "BotPlayerbotAI.h"
 #include "MotionMaster.h"
 #include "Player.h"
+#include "Playerbots.h"
 #include "PlayerbotsConfig.h"
 #include "SafeMovement.h"
 #include "Unit.h"
@@ -44,13 +45,13 @@ bool FollowAction::IsUseful()
         return false;
 
     // Don't yank the bot mid-cast/mid-channel/mid-autoshot — MoveFollow would interrupt it.
-    // No bot action casts anything yet (melee auto-attack only), so this is a no-op today; kept
-    // ahead of a future casting/rotation gate rather than added reactively once it lands.
-    if (bot->IsNonMeleeSpellCast(false))
+    // Gate 11: same IsNonMeleeSpellCast(false) check via "is casting" value.
+    if (AI_VALUE(bool, "is casting"))
         return false;
 
     float const followDistance = Playerbots::GetFollowDistance();
-    return bot->GetExactDist(master) > followDistance;
+    // Gate 11: distance::master uses GetExactDist — identical to pre-value FollowAction.
+    return AI_VALUE2(float, "distance", "master") > followDistance;
 }
 
 bool FollowAction::Execute(Event /*event*/)

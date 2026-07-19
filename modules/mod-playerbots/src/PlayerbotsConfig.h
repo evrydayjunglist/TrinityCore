@@ -65,6 +65,59 @@ inline float GetFollowDistance()
     return std::max<float>(sConfigMgr->GetFloatDefault("Playerbots.FollowDistance", 3.0f), 0.5f);
 }
 
+// Gate 12 — class-agnostic combat brain knobs (targeting / range / flee).
+inline bool GetCombatFleeEnabled()
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.Combat.FleeEnabled", true);
+}
+
+inline uint8 GetCombatFleeHealthPct()
+{
+    return static_cast<uint8>(std::clamp<uint32>(
+        sConfigMgr->GetIntDefault("Playerbots.Combat.FleeHealthPct", 35), 1u, 100u));
+}
+
+inline uint8 GetCombatFleeHealthExitPct()
+{
+    uint8 const enterPct = GetCombatFleeHealthPct();
+    uint8 const exitPct = static_cast<uint8>(std::clamp<uint32>(
+        sConfigMgr->GetIntDefault("Playerbots.Combat.FleeHealthExitPct", 50), 1u, 100u));
+    // Hysteresis: exit must be at or above enter, otherwise oscillation.
+    return std::max(exitPct, enterPct);
+}
+
+inline float GetCombatFleeDistance()
+{
+    return std::clamp<float>(sConfigMgr->GetFloatDefault("Playerbots.Combat.FleeDistance", 20.0f), 5.0f, 60.0f);
+}
+
+inline float GetCombatRangedDistance()
+{
+    return std::clamp<float>(sConfigMgr->GetFloatDefault("Playerbots.Combat.RangedDistance", 28.0f), 8.0f, 40.0f);
+}
+
+// -1 = ChrSpecialization Caster/Ranged heuristic, 0 = force melee, 1 = force ranged.
+inline int32 GetCombatPreferRanged()
+{
+    return sConfigMgr->GetIntDefault("Playerbots.Combat.PreferRanged", -1);
+}
+
+// Gate 13 — Midnight TraitMgr starter loadout auto-apply (AC Talentspec role).
+inline bool GetTalentAutoApply()
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.Talent.AutoApply", true);
+}
+
+inline bool GetTalentApplyOnLogin()
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.Talent.ApplyOnLogin", true);
+}
+
+inline bool GetTalentApplyOnLevelUp()
+{
+    return sConfigMgr->GetBoolDefault("Playerbots.Talent.ApplyOnLevelUp", false);
+}
+
 inline uint32 GetMaxActiveBots()
 {
     return std::max<uint32>(sConfigMgr->GetIntDefault("Playerbots.MaxActiveBots", 1), 1u);
