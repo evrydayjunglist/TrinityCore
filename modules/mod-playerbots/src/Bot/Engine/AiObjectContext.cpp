@@ -51,3 +51,44 @@ Trigger* AiObjectContext::GetTrigger(std::string const& name)
     auto itr = _triggers.find(name);
     return itr != _triggers.end() ? itr->second.get() : nullptr;
 }
+
+void AiObjectContext::RegisterValue(std::string const& name, std::unique_ptr<UntypedValue> value)
+{
+    _values[name] = std::move(value);
+}
+
+void AiObjectContext::RegisterQualifiedValueCreator(std::string const& name, QualifiedValueCreator creator)
+{
+    _qualifiedValueCreators[name] = std::move(creator);
+}
+
+UntypedValue* AiObjectContext::GetUntypedValue(std::string const& name)
+{
+    auto itr = _values.find(name);
+    if (itr != _values.end())
+        return itr->second.get();
+
+    return CreateQualifiedValue(name);
+}
+
+UntypedValue* AiObjectContext::CreateQualifiedValue(std::string const& qualifiedName)
+{
+    auto const sep = qualifiedName.find("::");
+    if (sep == std::string::npos)
+        return nullptr;
+
+    std::string const baseName = qualifiedName.substr(0, sep);
+    std::string const qualifier = qualifiedName.substr(sep + 2);
+
+    auto creatorItr = _qualifiedValueCreators.find(baseName);
+    if (creatorItr == _qualifiedValueCreators.end())
+        return nullptr;
+
+    std::unique_ptr<UntypedValue> created = creatorItr->second(_botAI, qualifier);
+    if (!created)
+        return nullptr;
+
+    UntypedValue* raw = created.get();
+    _values[qualifiedName] = std::move(created);
+    return raw;
+}

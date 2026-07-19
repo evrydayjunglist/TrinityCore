@@ -19,34 +19,25 @@
 #include "AttackValidity.h"
 #include "BotPlayerbotAI.h"
 #include "MotionMaster.h"
-#include "ObjectAccessor.h"
 #include "Player.h"
+#include "Playerbots.h"
 #include "SafeMovement.h"
 #include "Unit.h"
 
-namespace
-{
-Unit* GetMasterAttackTarget(BotPlayerbotAI* botAI, Player* bot)
-{
-    if (!botAI || !bot)
-        return nullptr;
-
-    Player* master = botAI->GetMaster();
-    if (!master || !master->IsInWorld())
-        return nullptr;
-
-    ObjectGuid const targetGuid = master->GetTarget();
-    if (!targetGuid)
-        return nullptr;
-
-    return ObjectAccessor::GetUnit(*bot, targetGuid);
-}
-}
-
 bool HasAttackableMasterTarget(BotPlayerbotAI* botAI, Player* bot)
 {
-    Unit* target = GetMasterAttackTarget(botAI, bot);
-    return IsValidAttackTarget(bot, target);
+    if (!botAI || !bot)
+        return false;
+
+    AiObjectContext* context = botAI->GetAiObjectContext();
+    if (!context)
+        return false;
+
+    Value<Unit*>* masterTarget = context->GetValue<Unit*>("master target");
+    if (!masterTarget)
+        return false;
+
+    return IsValidAttackTarget(bot, masterTarget->Get());
 }
 
 bool AttackMyTargetAction::IsUseful()
@@ -60,7 +51,7 @@ bool AttackMyTargetAction::Execute(Event /*event*/)
     if (!bot)
         return false;
 
-    Unit* target = GetMasterAttackTarget(_botAI, bot);
+    Unit* target = AI_VALUE(Unit*, "master target");
     if (!IsValidAttackTarget(bot, target))
         return false;
 
@@ -79,7 +70,8 @@ bool AttackMyTargetAction::Execute(Event /*event*/)
     // as AttackAnythingAction — this action's IsUseful() stays true every tick the master keeps
     // its target, so an unwalkable approach gets re-checked (and can clear) as the fight moves,
     // unlike the once-per-engagement AttackAnythingAction check.
-    if (bot->IsWithinMeleeRange(target) ||
+    // Gate 11: "in melee range" reads current target after SetSelection/Attack (same unit).
+    if (AI_VALUE(bool, "in melee range") ||
         IsApproachPathWalkable(bot, target->GetPositionX(), target->GetPositionY(), target->GetPositionZ()))
         bot->GetMotionMaster()->MoveChase(target);
 

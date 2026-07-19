@@ -17,6 +17,7 @@
 
 #include "AiFactory.h"
 #include "AiObjectContext.h"
+#include "Bot/Engine/Value/StarterValues.h"
 #include "Bot/Action/AttackAction.h"
 #include "Bot/Action/AttackAnythingAction.h"
 #include "Bot/Action/DeathActions.h"
@@ -68,6 +69,32 @@
 std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI, Player* player)
 {
     auto context = std::make_unique<AiObjectContext>(botAI);
+
+    // Gate 11 — fourth registry: starter general values (AI_VALUE / AI_VALUE2).
+    context->RegisterValue("current target", std::make_unique<CurrentTargetValue>(botAI));
+    context->RegisterValue("master target", std::make_unique<MasterTargetValue>(botAI));
+    context->RegisterValue("attackers", std::make_unique<AttackersValue>(botAI));
+    context->RegisterValue("attacker count", std::make_unique<AttackerCountValue>(botAI));
+    context->RegisterValue("health", std::make_unique<HealthValue>(botAI));
+    context->RegisterValue("distance", std::make_unique<DistanceValue>(botAI, "current target", "distance"));
+    context->RegisterValue("in melee range", std::make_unique<InMeleeRangeValue>(botAI));
+    context->RegisterValue("is casting", std::make_unique<IsCastingValue>(botAI));
+    context->RegisterQualifiedValueCreator("distance",
+        [](BotPlayerbotAI* ai, std::string const& qualifier) -> std::unique_ptr<UntypedValue>
+        {
+            return std::make_unique<DistanceValue>(ai, qualifier, MakeQualifiedValueName("distance", qualifier));
+        });
+    context->RegisterQualifiedValueCreator("has aura",
+        [](BotPlayerbotAI* ai, std::string const& qualifier) -> std::unique_ptr<UntypedValue>
+        {
+            return std::make_unique<HasAuraValue>(ai, qualifier);
+        });
+    context->RegisterQualifiedValueCreator("target has aura",
+        [](BotPlayerbotAI* ai, std::string const& qualifier) -> std::unique_ptr<UntypedValue>
+        {
+            return std::make_unique<TargetHasAuraValue>(ai, qualifier);
+        });
+
     context->RegisterStrategy("passive", std::make_unique<PassiveStrategy>(botAI));
     context->RegisterStrategy("follow", std::make_unique<FollowMasterStrategy>(botAI));
     context->RegisterStrategy("attack", std::make_unique<CombatStrategy>(botAI));
