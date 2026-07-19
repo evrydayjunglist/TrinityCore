@@ -365,6 +365,30 @@ bool LoginQueryHolder::Initialize()
     return res;
 }
 
+namespace
+{
+// Retail sniff B (12.0.7.68453): Catch Up login lands here.
+constexpr uint32 ARATHI_RPE_MAP_ID = 2927;
+constexpr float ARATHI_RPE_POSITION_X = -1101.67f;
+constexpr float ARATHI_RPE_POSITION_Y = -3554.37f;
+constexpr float ARATHI_RPE_POSITION_Z = 48.9203f;
+constexpr float ARATHI_RPE_ORIENTATION = 6.2583666f;
+
+// Provisional until sniff A locks the retail inactivity window (owner-approved stub).
+constexpr time_t ARATHI_RPE_INACTIVE_SECONDS = time_t(60) * DAY;
+
+void ApplyArathiRpeEnumEligibility(WorldPackets::Character::EnumCharactersResult::CharacterInfo& charInfo)
+{
+    time_t const lastActive = time_t(charInfo.Basic.LastActiveTime);
+    bool const inactiveLongEnough = lastActive > 0
+        && (GameTime::GetGameTime() >= lastActive + ARATHI_RPE_INACTIVE_SECONDS);
+
+    charInfo.RestrictionsAndMails.RpeAvailable = inactiveLongEnough;
+    // NoRpeReason 4 = "recently active" (CharacterPackets.h default comment).
+    charInfo.RestrictionsAndMails.NoRpeReason = inactiveLongEnough ? 0 : 4;
+}
+}
+
 class EnumCharactersQueryHolder : public CharacterDatabaseQueryHolder
 {
 public:
@@ -438,10 +462,14 @@ void WorldSession::HandleCharEnum(CharacterDatabaseQueryHolder const& holder)
         {
             charEnum.Characters.emplace_back(result->Fetch());
 
-            WorldPackets::Character::EnumCharactersResult::CharacterInfoBasic& charInfo = charEnum.Characters.back().Basic;
+            WorldPackets::Character::EnumCharactersResult::CharacterInfo& characterInfo = charEnum.Characters.back();
+            WorldPackets::Character::EnumCharactersResult::CharacterInfoBasic& charInfo = characterInfo.Basic;
 
             if (std::vector<UF::ChrCustomizationChoice>* customizationsForChar = Trinity::Containers::MapGetValuePtr(customizations, charInfo.Guid.GetCounter()))
                 charInfo.Customizations = std::move(*customizationsForChar);
+
+            if (!charEnum.IsDeletedCharacters)
+                ApplyArathiRpeEnumEligibility(characterInfo);
 
             TC_LOG_INFO("network", "Loading char guid {} from account {}.", charInfo.Guid.ToString(), GetAccountId());
 
@@ -1100,12 +1128,14 @@ void WorldSession::HandlePlayerLoginOpcode(WorldPackets::Character::PlayerLogin&
     }
 
     m_playerLoading = playerLogin.Guid;
+    m_playerLoginRPE = playerLogin.RPE;
 
-    TC_LOG_DEBUG("network", "Character {} logging in", playerLogin.Guid.ToString());
+    TC_LOG_DEBUG("network", "Character {} logging in (RPE={})", playerLogin.Guid.ToString(), playerLogin.RPE);
 
     if (!IsLegitCharacterForAccount(playerLogin.Guid))
     {
         TC_LOG_ERROR("network", "Account ({}) can't login with that character ({}).", GetAccountId(), playerLogin.Guid.ToString());
+        m_playerLoginRPE = false;
         KickPlayer("WorldSession::HandlePlayerLoginOpcode Trying to login with a character of another account");
         return;
     }
@@ -1125,6 +1155,7 @@ void WorldSession::HandleContinuePlayerLogin()
     if (!holder->Initialize())
     {
         m_playerLoading.Clear();
+        m_playerLoginRPE = false;
         return;
     }
 
@@ -1148,6 +1179,7 @@ void WorldSession::AbortLogin(WorldPackets::Character::LoginFailureReason reason
     }
 
     m_playerLoading.Clear();
+    m_playerLoginRPE = false;
     SendPacket(WorldPackets::Character::CharacterLoginFailed(reason).Write());
 }
 
@@ -1171,7 +1203,24 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
         KickPlayer("WorldSession::HandlePlayerLogin Player::LoadFromDB failed"); // disconnect client, player no set to session and it will not deleted or saved at kick
         delete pCurrChar;                                   // delete it manually
         m_playerLoading.Clear();
+        m_playerLoginRPE = false;
         return;
+    }
+
+    // Catch Up Experience (Arathi RPE): honor CMSG_PLAYER_LOGIN.RPE (retail sniff B, map 2927).
+    bool const enterArathiRpe = m_playerLoginRPE;
+    m_playerLoginRPE = false;
+    if (enterArathiRpe)
+    {
+        if (sMapStore.LookupEntry(ARATHI_RPE_MAP_ID))
+        {
+            pCurrChar->WorldRelocate(ARATHI_RPE_MAP_ID, ARATHI_RPE_POSITION_X, ARATHI_RPE_POSITION_Y,
+                ARATHI_RPE_POSITION_Z, ARATHI_RPE_ORIENTATION);
+            TC_LOG_DEBUG("network", "Player {} entering Arathi RPE map {}", pCurrChar->GetGUID().ToString(), ARATHI_RPE_MAP_ID);
+        }
+        else
+            TC_LOG_ERROR("network", "Player {} requested Arathi RPE login but map {} is missing from Map.db2",
+                pCurrChar->GetGUID().ToString(), ARATHI_RPE_MAP_ID);
     }
 
     if (!_timeSyncClockDeltaQueue->empty())
