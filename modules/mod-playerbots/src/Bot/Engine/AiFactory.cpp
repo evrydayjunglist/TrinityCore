@@ -18,9 +18,18 @@
 #include "AiFactory.h"
 #include "AiObjectContext.h"
 #include "Bot/Engine/Value/StarterValues.h"
+#include "Ai/Class/Hunter/Action/HunterBeastMasteryActions.h"
+#include "Ai/Class/Hunter/Strategy/BeastMasteryHunterStrategy.h"
+#include "Ai/Class/Hunter/Strategy/HunterBuffStrategy.h"
+#include "Ai/Class/Mage/Action/MageFrostActions.h"
+#include "Ai/Class/Mage/Strategy/FrostMageStrategy.h"
+#include "Ai/Class/Mage/Strategy/MageBuffStrategy.h"
 #include "Ai/Class/Rogue/Action/RogueAssassinationActions.h"
 #include "Ai/Class/Rogue/Strategy/AssassinationRogueStrategy.h"
 #include "Ai/Class/Rogue/Strategy/RogueBuffStrategy.h"
+#include "Ai/Class/Warlock/Action/WarlockDestructionActions.h"
+#include "Ai/Class/Warlock/Strategy/DestructionWarlockStrategy.h"
+#include "Ai/Class/Warlock/Strategy/WarlockBuffStrategy.h"
 #include "Bot/Action/AttackAction.h"
 #include "Bot/Action/AttackAnythingAction.h"
 #include "Bot/Action/FleeAction.h"
@@ -108,9 +117,15 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterStrategy("attack", std::make_unique<CombatStrategy>(botAI));
     context->RegisterStrategy("flee", std::make_unique<FleeStrategy>(botAI));
     context->RegisterStrategy("newrpg", std::make_unique<NewRpgStrategy>(botAI));
-    // Gate 14 — Rogue Assassination pilot (Ai/Class scaffold). Other classes keep Gate 8/12 only.
+    // Gate 14/15a — Ai/Class strategies (register all; ResetStrategies attaches by spec).
     context->RegisterStrategy("assassination", std::make_unique<AssassinationRogueStrategy>(botAI));
     context->RegisterStrategy("rogue buff", std::make_unique<RogueBuffStrategy>(botAI));
+    context->RegisterStrategy("frost", std::make_unique<FrostMageStrategy>(botAI));
+    context->RegisterStrategy("mage buff", std::make_unique<MageBuffStrategy>(botAI));
+    context->RegisterStrategy("beast mastery", std::make_unique<BeastMasteryHunterStrategy>(botAI));
+    context->RegisterStrategy("hunter buff", std::make_unique<HunterBuffStrategy>(botAI));
+    context->RegisterStrategy("destruction", std::make_unique<DestructionWarlockStrategy>(botAI));
+    context->RegisterStrategy("warlock buff", std::make_unique<WarlockBuffStrategy>(botAI));
     context->RegisterAction("follow", std::make_unique<FollowAction>(botAI));
     context->RegisterAction("attack my target", std::make_unique<AttackMyTargetAction>(botAI));
     context->RegisterAction("flee", std::make_unique<FleeAction>(botAI));
@@ -118,6 +133,18 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterAction("mutilate", std::make_unique<CastMutilateAction>(botAI));
     context->RegisterAction("envenom", std::make_unique<CastEnvenomAction>(botAI));
     context->RegisterAction("crimson vial", std::make_unique<CastCrimsonVialAction>(botAI));
+    context->RegisterAction("frostbolt", std::make_unique<CastFrostboltAction>(botAI));
+    context->RegisterAction("ice lance", std::make_unique<CastIceLanceAction>(botAI));
+    context->RegisterAction("ice barrier", std::make_unique<CastIceBarrierAction>(botAI));
+    context->RegisterAction("kill command", std::make_unique<CastKillCommandAction>(botAI));
+    context->RegisterAction("barbed shot", std::make_unique<CastBarbedShotAction>(botAI));
+    context->RegisterAction("cobra shot", std::make_unique<CastCobraShotAction>(botAI));
+    context->RegisterAction("exhilaration", std::make_unique<CastExhilarationAction>(botAI));
+    context->RegisterAction("immolate", std::make_unique<CastImmolateAction>(botAI));
+    context->RegisterAction("incinerate", std::make_unique<CastIncinerateAction>(botAI));
+    context->RegisterAction("conflagrate", std::make_unique<CastConflagrateAction>(botAI));
+    context->RegisterAction("chaos bolt", std::make_unique<CastChaosBoltAction>(botAI));
+    context->RegisterAction("unending resolve", std::make_unique<CastUnendingResolveAction>(botAI));
     context->RegisterTrigger("has combat target", std::make_unique<HasCombatTargetTrigger>(botAI));
     context->RegisterTrigger("has attackers", std::make_unique<HasAttackersTrigger>(botAI));
     context->RegisterTrigger("flee health", std::make_unique<FleeHealthTrigger>(botAI));

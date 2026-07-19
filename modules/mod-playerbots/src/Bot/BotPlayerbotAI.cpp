@@ -16,7 +16,10 @@
  */
 
 #include "BotPlayerbotAI.h"
+#include "Ai/Class/Hunter/HunterSpellIds.h"
+#include "Ai/Class/Mage/MageSpellIds.h"
 #include "Ai/Class/Rogue/RogueSpellIds.h"
+#include "Ai/Class/Warlock/WarlockSpellIds.h"
 #include "AiFactory.h"
 #include "Bot/PacketHandler/BotPacketSignal.h"
 #include "Engine.h"
@@ -50,7 +53,35 @@ void BotPlayerbotAI::ResetStrategies()
     _engine->RemoveAllStrategies();
 
     Player* bot = GetBot();
-    bool const assassinationPilot = Playerbots::Rogue::Assassination::IsAssassinationRogue(bot);
+
+    auto appendClassStrategies = [&](std::string& applied)
+    {
+        // Gate 14/15a — attach combat+buff pair only when primary spec matches.
+        if (Playerbots::Rogue::Assassination::IsAssassinationRogue(bot))
+        {
+            _engine->AddStrategy("assassination");
+            _engine->AddStrategy("rogue buff");
+            applied += ",assassination,rogue buff";
+        }
+        else if (Playerbots::Mage::Frost::IsFrostMage(bot))
+        {
+            _engine->AddStrategy("frost");
+            _engine->AddStrategy("mage buff");
+            applied += ",frost,mage buff";
+        }
+        else if (Playerbots::Hunter::BeastMastery::IsBeastMasteryHunter(bot))
+        {
+            _engine->AddStrategy("beast mastery");
+            _engine->AddStrategy("hunter buff");
+            applied += ",beast mastery,hunter buff";
+        }
+        else if (Playerbots::Warlock::Destruction::IsDestructionWarlock(bot))
+        {
+            _engine->AddStrategy("destruction");
+            _engine->AddStrategy("warlock buff");
+            applied += ",destruction,warlock buff";
+        }
+    };
 
     std::string appliedStrategies;
     if (HasMaster())
@@ -59,13 +90,7 @@ void BotPlayerbotAI::ResetStrategies()
         _engine->AddStrategy("attack");
         _engine->AddStrategy("flee");
         appliedStrategies = "follow,attack,flee";
-        // Gate 14 — attach pilot class strategies from class + GetPrimarySpecialization.
-        if (assassinationPilot)
-        {
-            _engine->AddStrategy("assassination");
-            _engine->AddStrategy("rogue buff");
-            appliedStrategies += ",assassination,rogue buff";
-        }
+        appendClassStrategies(appliedStrategies);
     }
     else if (bot && sRandomPlayerbotMgr->IsRandomBot(bot->GetGUID()) &&
         roll_chance(Playerbots::GetRandomBotRpgChance()))
@@ -73,12 +98,7 @@ void BotPlayerbotAI::ResetStrategies()
         _engine->AddStrategy("newrpg");
         _engine->AddStrategy("flee");
         appliedStrategies = "newrpg,flee";
-        if (assassinationPilot)
-        {
-            _engine->AddStrategy("assassination");
-            _engine->AddStrategy("rogue buff");
-            appliedStrategies += ",assassination,rogue buff";
-        }
+        appendClassStrategies(appliedStrategies);
         _rpgInfo.Reset();
     }
     else
