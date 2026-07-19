@@ -15,27 +15,38 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TRINITY_PLAYERBOT_ATTACK_ACTION_H
-#define TRINITY_PLAYERBOT_ATTACK_ACTION_H
+#ifndef TRINITY_PLAYERBOT_COMBAT_TRIGGERS_H
+#define TRINITY_PLAYERBOT_COMBAT_TRIGGERS_H
 
-#include "Action.h"
+#include "Trigger.h"
 
 class BotPlayerbotAI;
-class Player;
-class Unit;
 
-// Gate 12: true when SelectCombatTarget finds a valid unit (master target OR attackers).
-// Name kept for FollowAction / Gate 8 call sites — semantics widened intentionally.
-bool HasAttackableMasterTarget(BotPlayerbotAI* botAI, Player* bot);
+// Gate 12 — minimal combat brain triggers (AI_VALUE-backed).
 
-// Action name kept as "attack my target" (Gate 8 wire); Execute uses CombatTargetSelect priority.
-class AttackMyTargetAction : public Action
+class HasCombatTargetTrigger : public Trigger
 {
 public:
-    AttackMyTargetAction(BotPlayerbotAI* botAI) : Action(botAI, "attack my target") { }
+    explicit HasCombatTargetTrigger(BotPlayerbotAI* botAI) : Trigger(botAI, "has combat target") { }
 
-    bool Execute(Event event) override;
-    bool IsUseful() override;
+    bool IsActive() override;
+};
+
+class HasAttackersTrigger : public Trigger
+{
+public:
+    explicit HasAttackersTrigger(BotPlayerbotAI* botAI) : Trigger(botAI, "has attackers") { }
+
+    bool IsActive() override;
+};
+
+// Low health + combat/attackers, with hysteresis via ManualSetValue "is fleeing".
+class FleeHealthTrigger : public Trigger
+{
+public:
+    explicit FleeHealthTrigger(BotPlayerbotAI* botAI) : Trigger(botAI, "flee health") { }
+
+    bool IsActive() override;
 };
 
 #endif

@@ -20,6 +20,7 @@
 #include "Bot/Engine/Value/StarterValues.h"
 #include "Bot/Action/AttackAction.h"
 #include "Bot/Action/AttackAnythingAction.h"
+#include "Bot/Action/FleeAction.h"
 #include "Bot/Action/DeathActions.h"
 #include "Bot/Action/FollowAction.h"
 #include "Bot/Action/GroupActions.h"
@@ -48,9 +49,11 @@
 #include "Bot/Action/UseQuestObjectAction.h"
 #include "Bot/Action/WanderAction.h"
 #include "Bot/Strategy/CombatStrategy.h"
+#include "Bot/Strategy/FleeStrategy.h"
 #include "Bot/Strategy/FollowMasterStrategy.h"
 #include "Bot/Strategy/NewRpgStrategy.h"
 #include "Bot/Strategy/PassiveStrategy.h"
+#include "Bot/Trigger/CombatTriggers.h"
 #include "Bot/Trigger/GroupTriggers.h"
 #include "Bot/Trigger/GuildTriggers.h"
 #include "Bot/Trigger/DuelTriggers.h"
@@ -79,6 +82,8 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterValue("distance", std::make_unique<DistanceValue>(botAI, "current target", "distance"));
     context->RegisterValue("in melee range", std::make_unique<InMeleeRangeValue>(botAI));
     context->RegisterValue("is casting", std::make_unique<IsCastingValue>(botAI));
+    // Gate 12 — flee hysteresis latch (ManualSetValue; cleared when combat ends / re-engage).
+    context->RegisterValue("is fleeing", std::make_unique<ManualSetValue<bool>>(botAI, false, "is fleeing"));
     context->RegisterQualifiedValueCreator("distance",
         [](BotPlayerbotAI* ai, std::string const& qualifier) -> std::unique_ptr<UntypedValue>
         {
@@ -98,9 +103,14 @@ std::unique_ptr<AiObjectContext> AiFactory::CreateContext(BotPlayerbotAI* botAI,
     context->RegisterStrategy("passive", std::make_unique<PassiveStrategy>(botAI));
     context->RegisterStrategy("follow", std::make_unique<FollowMasterStrategy>(botAI));
     context->RegisterStrategy("attack", std::make_unique<CombatStrategy>(botAI));
+    context->RegisterStrategy("flee", std::make_unique<FleeStrategy>(botAI));
     context->RegisterStrategy("newrpg", std::make_unique<NewRpgStrategy>(botAI));
     context->RegisterAction("follow", std::make_unique<FollowAction>(botAI));
     context->RegisterAction("attack my target", std::make_unique<AttackMyTargetAction>(botAI));
+    context->RegisterAction("flee", std::make_unique<FleeAction>(botAI));
+    context->RegisterTrigger("has combat target", std::make_unique<HasCombatTargetTrigger>(botAI));
+    context->RegisterTrigger("has attackers", std::make_unique<HasAttackersTrigger>(botAI));
+    context->RegisterTrigger("flee health", std::make_unique<FleeHealthTrigger>(botAI));
     context->RegisterAction("accept invitation", std::make_unique<AcceptInvitationAction>(botAI));
     context->RegisterAction("wander", std::make_unique<WanderAction>(botAI));
     context->RegisterAction("quest giver", std::make_unique<QuestGiverAction>(botAI));

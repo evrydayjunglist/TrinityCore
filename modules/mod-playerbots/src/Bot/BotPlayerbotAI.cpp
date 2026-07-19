@@ -53,13 +53,15 @@ void BotPlayerbotAI::ResetStrategies()
     {
         _engine->AddStrategy("follow");
         _engine->AddStrategy("attack");
-        appliedStrategies = "follow,attack";
+        _engine->AddStrategy("flee");
+        appliedStrategies = "follow,attack,flee";
     }
     else if (Player* bot = GetBot(); bot && sRandomPlayerbotMgr->IsRandomBot(bot->GetGUID()) &&
         roll_chance(Playerbots::GetRandomBotRpgChance()))
     {
         _engine->AddStrategy("newrpg");
-        appliedStrategies = "newrpg";
+        _engine->AddStrategy("flee");
+        appliedStrategies = "newrpg,flee";
         _rpgInfo.Reset();
     }
     else

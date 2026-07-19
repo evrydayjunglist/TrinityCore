@@ -64,6 +64,23 @@ Playerbots.GlobalCooldown = 500
 Playerbots.FollowDistance = 3.0
 
 #
+# Gate 12 — class-agnostic combat brain (targeting / range hold / flee).
+# Still no spell rotations (Gate 14+) and no talent trees (Gate 13).
+#
+# Enter flee at/below this self health % while in combat / has attackers.
+Playerbots.Combat.FleeHealthPct = 35
+# Hysteresis exit — stop fleeing only after health recovers above this (must be >= FleeHealthPct).
+Playerbots.Combat.FleeHealthExitPct = 50
+# How far (yd) FleeManager samples candidate flee points from the bot.
+Playerbots.Combat.FleeDistance = 20.0
+# Preferred hold distance (yd) for coarse ranged role.
+Playerbots.Combat.RangedDistance = 28.0
+# -1 = ChrSpecialization Caster/Ranged heuristic, 0 = force melee, 1 = force ranged.
+Playerbots.Combat.PreferRanged = -1
+# Kill-switch for flee/kite (1 = on).
+Playerbots.Combat.FleeEnabled = 1
+
+#
 # Playerbots database (Gate 9) — AC-shaped dedicated DB (Option A core hook + module SQL).
 # Requires MODULE_MOD_PLAYERBOTS=static build with WITH_PLAYERBOTS.
 #
