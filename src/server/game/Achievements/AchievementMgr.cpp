@@ -200,6 +200,65 @@ void CollectChangedAccountAchievementSaveTargets(
             outCriteriaIds.push_back(criteriaId);
 }
 
+bool ApplySiblingAccountCriteriaProgress(CriteriaProgressMap& progressMap, uint32 criteriaId,
+    uint64 counter, std::time_t date, ObjectGuid accountGuid)
+{
+    auto itr = progressMap.find(criteriaId);
+    if (itr == progressMap.end())
+    {
+        // Do not materialize a zero row that was never tracked locally.
+        if (!counter)
+            return false;
+
+        CriteriaProgress& progress = progressMap[criteriaId];
+        progress.Counter = counter;
+        progress.Date = date;
+        progress.PlayerGUID = accountGuid;
+        progress.Changed = true;
+        return true;
+    }
+
+    if (!counter)
+    {
+        if (!itr->second.Counter)
+            return false;
+
+        itr->second.Counter = 0;
+        itr->second.Date = date;
+        itr->second.PlayerGUID = accountGuid;
+        itr->second.Changed = true;
+        return true;
+    }
+
+    // ACCUMULATE / HIGHEST durability: never regress a sibling that already advanced further.
+    if (itr->second.Counter >= counter)
+        return false;
+
+    itr->second.Counter = counter;
+    itr->second.Date = date;
+    itr->second.PlayerGUID = accountGuid;
+    itr->second.Changed = true;
+    return true;
+}
+
+bool ApplySiblingAccountCompletedAchievement(
+    std::unordered_map<uint32, CompletedAchievementData>& completedAchievements, uint32& achievementPoints,
+    uint32 achievementId, std::time_t date, uint32 points, bool trackingFlag)
+{
+    if (completedAchievements.contains(achievementId))
+        return false;
+
+    CompletedAchievementData& completedAchievement = completedAchievements[achievementId];
+    completedAchievement.Date = date;
+    // Mark dirty so a racing sibling SaveToDB still persists the row if the publisher's save is delayed.
+    completedAchievement.Changed = true;
+
+    if (!trackingFlag)
+        achievementPoints += points;
+
+    return true;
+}
+
 AchievementMgr::AchievementMgr() : _achievementPoints(0) { }
 
 AchievementMgr::~AchievementMgr() { }
@@ -680,6 +739,60 @@ void AccountAchievementMgr::CompletedAchievement(AchievementEntry const* achieve
     referencePlayer->UpdateCriteria(CriteriaType::EarnAchievementPoints, achievement->Points, 0, 0, nullptr);
     sScriptMgr->OnAchievementCompleted(referencePlayer, achievement);
     RewardAchievement(referencePlayer, achievement);
+
+    // Sibling sessions still hold a pre-completion HasAchieved=false snapshot. Without an immediate
+    // publish they can CompletedAchievement + RewardAchievement again (duplicate mail/items) and
+    // SaveToDB a second completion race. Mirror completion into siblings without re-rewarding.
+    sWorld->PublishSiblingAccountAchievementCompleted(_owner, achievement, completedAchievement.Date);
+}
+
+void AccountAchievementMgr::ApplyPublishedCriteriaProgress(uint32 criteriaId, uint64 counter, std::time_t date)
+{
+    if (!ApplySiblingAccountCriteriaProgress(_criteriaProgress, criteriaId, counter, date, _owner->GetBattlenetAccountGUID()))
+        return;
+
+    CriteriaProgress const* progress = &_criteriaProgress[criteriaId];
+    if (!counter)
+    {
+        SendCriteriaProgressRemoved(criteriaId);
+        return;
+    }
+
+    if (Criteria const* criteria = sCriteriaMgr->GetCriteria(criteriaId))
+        SendCriteriaUpdate(criteria, progress, Seconds::zero(), false);
+}
+
+void AccountAchievementMgr::ApplyPublishedCompletedAchievement(AchievementEntry const* achievement, std::time_t date)
+{
+    if (!achievement)
+        return;
+
+    if (!ApplySiblingAccountCompletedAchievement(_completedAchievements, _achievementPoints, achievement->ID, date,
+            achievement->Points, achievement->Flags & ACHIEVEMENT_FLAG_TRACKING_FLAG))
+        return;
+
+    if (Player* player = _owner->GetPlayer())
+    {
+        if (!_owner->PlayerLoading())
+            SendAchievementEarned(achievement);
+
+        // Titles only — RewardAchievement mail/items already ran on the publishing session.
+        if (AchievementReward const* reward = sAchievementMgr->GetAchievementReward(achievement))
+            if (CharTitlesEntry const* titleEntry = sCharTitlesStore.LookupEntry(GetAchievementRewardTitleId(achievement, reward, player)))
+                player->SetTitle(titleEntry);
+    }
+}
+
+void AccountAchievementMgr::AfterCriteriaProgressChanged(Criteria const* criteria, CriteriaProgress const* progress)
+{
+    if (!criteria || !progress || !_owner->GetBattlenetAccountId())
+        return;
+
+    if (!(criteria->FlagsCu & CRITERIA_FLAG_CU_ACCOUNT))
+        return;
+
+    // Publish absolute counter so sibling ACCUMULATE bases cannot last-write-wins regress DB progress.
+    sWorld->PublishSiblingAccountCriteriaProgress(_owner, criteria->ID, progress->Counter, progress->Date);
 }
 
 bool AccountAchievementMgr::CanUpdateCriteriaTree(Criteria const* criteria, CriteriaTree const* tree, Player* referencePlayer) const

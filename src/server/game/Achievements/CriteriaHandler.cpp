@@ -1111,6 +1111,7 @@ void CriteriaHandler::SetCriteriaProgress(Criteria const* criteria, uint64 chang
     }
 
     SendCriteriaUpdate(criteria, progress, timeElapsed, true);
+    AfterCriteriaProgressChanged(criteria, progress);
 }
 
 void CriteriaHandler::RemoveCriteriaProgress(Criteria const* criteria)
@@ -1126,6 +1127,7 @@ void CriteriaHandler::RemoveCriteriaProgress(Criteria const* criteria)
 
     criteriaProgress->second.Counter = 0;
     criteriaProgress->second.Changed = true;
+    AfterCriteriaProgressChanged(criteria, &criteriaProgress->second);
 }
 
 bool CriteriaHandler::IsCompletedCriteriaTree(CriteriaTree const* tree)

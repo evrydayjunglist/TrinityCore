@@ -367,6 +367,71 @@ bool World::HasOtherOnlineSessionOnAccount(uint32 accountId, WorldSession const*
     return false;
 }
 
+void World::PublishSiblingAccountCriteriaProgress(WorldSession* source, uint32 criteriaId, uint64 counter, time_t date)
+{
+    if (!source)
+        return;
+
+    uint32 const battlenetAccountId = source->GetBattlenetAccountId();
+    ObjectGuid const battlenetAccountGuid = source->GetBattlenetAccountGUID();
+    if (!battlenetAccountId || battlenetAccountGuid.IsEmpty())
+        return;
+
+    auto publish = [&](WorldSession* session)
+    {
+        if (!session || session == source)
+            return;
+        if (AccountAchievementMgr* mgr = session->GetAccountAchievementMgr())
+            mgr->ApplyPublishedCriteriaProgress(criteriaId, counter, date);
+    };
+
+    for (auto&& sessionForBnet : Trinity::Containers::MapEqualRange(m_sessionsByBnetGuid, battlenetAccountGuid))
+        publish(sessionForBnet.second);
+
+    // Bot sessions live only in m_botSessionsByGuid and are never added to m_sessionsByBnetGuid.
+    for (auto const& [guid, session] : m_botSessionsByGuid)
+    {
+        (void)guid;
+        if (!session || session == source)
+            continue;
+        if (session->GetBattlenetAccountId() != battlenetAccountId)
+            continue;
+        publish(session);
+    }
+}
+
+void World::PublishSiblingAccountAchievementCompleted(WorldSession* source, AchievementEntry const* achievement, time_t date)
+{
+    if (!source || !achievement)
+        return;
+
+    uint32 const battlenetAccountId = source->GetBattlenetAccountId();
+    ObjectGuid const battlenetAccountGuid = source->GetBattlenetAccountGUID();
+    if (!battlenetAccountId || battlenetAccountGuid.IsEmpty())
+        return;
+
+    auto publish = [&](WorldSession* session)
+    {
+        if (!session || session == source)
+            return;
+        if (AccountAchievementMgr* mgr = session->GetAccountAchievementMgr())
+            mgr->ApplyPublishedCompletedAchievement(achievement, date);
+    };
+
+    for (auto&& sessionForBnet : Trinity::Containers::MapEqualRange(m_sessionsByBnetGuid, battlenetAccountGuid))
+        publish(sessionForBnet.second);
+
+    for (auto const& [guid, session] : m_botSessionsByGuid)
+    {
+        (void)guid;
+        if (!session || session == source)
+            continue;
+        if (session->GetBattlenetAccountId() != battlenetAccountId)
+            continue;
+        publish(session);
+    }
+}
+
 bool World::AddBotSession(WorldSession* s, ObjectGuid characterGuid)
 {
     ASSERT(s && s->IsBotSession());
