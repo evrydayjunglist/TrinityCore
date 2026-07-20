@@ -863,6 +863,17 @@ void WorldSession::LogoutPlayer(bool save)
             CharacterDatabase.Execute(stmt);
         }
     }
+    else if (PlayerLoading())
+    {
+        // Socketless bot login queues HandlePlayerLogin via DelayQueryHolder after setting
+        // m_playerLoading. BanAccount / KickAll call RemoveBotSession → LogoutPlayer while the
+        // async load is still outstanding; without canceling that holder (and clearing the
+        // loading GUID), Update() keeps the session alive and the callback finishes login for a
+        // banned/kicked account.
+        _queryProcessor.CancelAll();
+        _queryHolderProcessor.CancelAll();
+        m_playerLoading.Clear();
+    }
 
     if (m_Socket[CONNECTION_TYPE_INSTANCE])
     {
@@ -880,6 +891,28 @@ void WorldSession::LogoutPlayer(bool save)
 void WorldSession::KickPlayer(std::string_view reason)
 {
     TC_LOG_INFO("network.kick", "{} kicked with reason: {}", GetPlayerInfo(), reason);
+
+    // Socketless bot sessions never close anything via m_Socket, so the human KickPlayer path
+    // is a no-op for them. BanCharacter / .kick / character erase all call KickPlayer and would
+    // leave the bot Player* in-world (and erase/rename can DeleteFromDB while still live).
+    // Evict through RemoveBotSession -> LogoutPlayer, matching KickAll / BanAccount.
+    if (IsBotSession())
+    {
+        ObjectGuid characterGuid;
+        if (Player* player = GetPlayer())
+            characterGuid = player->GetGUID();
+        else if (!m_playerLoading.IsEmpty())
+            characterGuid = m_playerLoading;
+        else if (m_GUIDLow)
+            characterGuid = ObjectGuid::Create<HighGuid::Player>(m_GUIDLow);
+
+        if (!characterGuid.IsEmpty())
+            sWorld->RemoveBotSession(characterGuid);
+        else
+            TC_LOG_ERROR("network.kick", "WorldSession::KickPlayer: bot session has no character GUID to evict (account {})",
+                GetAccountId());
+        return;
+    }
 
     for (std::shared_ptr<WorldSocket> const& socket : m_Socket)
     {

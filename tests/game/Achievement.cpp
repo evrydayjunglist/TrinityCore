@@ -183,3 +183,87 @@ TEST_CASE("Account achievement saves target only dirty rows", "[Achievement]")
     CHECK(std::find(dirtyCriteria.begin(), dirtyCriteria.end(), 33) != dirtyCriteria.end());
     CHECK(std::find(dirtyCriteria.begin(), dirtyCriteria.end(), 11) == dirtyCriteria.end());
 }
+
+TEST_CASE("Account achievement reset must clear sibling clean rows for SaveToDB contract", "[Achievement]")
+{
+    // AccountAchievementMgr::Reset deletes the whole battlenet account's durable rows, then
+    // SaveToDB only rewrites Changed=true rows. A sibling session that still holds the pre-reset
+    // snapshot as Changed=false therefore never restores (or deletes) those rows — permanent loss
+    // unless Reset also clears sibling in-memory state (ClearLocalState / World invalidate).
+    std::unordered_map<uint32, CompletedAchievementData> siblingCompleted;
+    siblingCompleted[100].Changed = false;
+    siblingCompleted[100].Date = 1;
+
+    CriteriaProgressMap siblingProgress;
+    siblingProgress[11].Changed = false;
+    siblingProgress[11].Counter = 9;
+
+    std::vector<uint32> dirtyAchievements;
+    std::vector<uint32> dirtyCriteria;
+    CollectChangedAccountAchievementSaveTargets(siblingCompleted, siblingProgress, dirtyAchievements, dirtyCriteria);
+
+    CHECK(dirtyAchievements.empty());
+    CHECK(dirtyCriteria.empty());
+
+    // After ClearLocalState-equivalent wipe, there is nothing left to accidentally resurrect.
+    siblingCompleted.clear();
+    siblingProgress.clear();
+    dirtyAchievements.clear();
+    dirtyCriteria.clear();
+    CollectChangedAccountAchievementSaveTargets(siblingCompleted, siblingProgress, dirtyAchievements, dirtyCriteria);
+    CHECK(dirtyAchievements.empty());
+    CHECK(dirtyCriteria.empty());
+}
+
+TEST_CASE("Sibling account criteria progress takes MAX and marks dirty", "[Achievement]")
+{
+    // MasterAlt sessions each own an AccountAchievementMgr. When session A advances N->N+k and
+    // publishes, session B must adopt N+k before its next ACCUMULATE or SaveToDB last-write-wins
+    // to N+1 (data loss).
+    CriteriaProgressMap sibling;
+    sibling[42].Counter = 5;
+    sibling[42].Date = 10;
+    sibling[42].Changed = false;
+
+    CHECK(ApplySiblingAccountCriteriaProgress(sibling, 42, 12, 20, ObjectGuid::Empty));
+    CHECK(sibling[42].Counter == 12);
+    CHECK(sibling[42].Date == 20);
+    CHECK(sibling[42].Changed);
+
+    // Never regress a sibling that already advanced further on its own.
+    CHECK_FALSE(ApplySiblingAccountCriteriaProgress(sibling, 42, 8, 30, ObjectGuid::Empty));
+    CHECK(sibling[42].Counter == 12);
+
+    // Missing row is created; zero does not materialize an empty row.
+    CriteriaProgressMap empty;
+    CHECK_FALSE(ApplySiblingAccountCriteriaProgress(empty, 7, 0, 1, ObjectGuid::Empty));
+    CHECK(empty.empty());
+    CHECK(ApplySiblingAccountCriteriaProgress(empty, 7, 3, 1, ObjectGuid::Empty));
+    CHECK(empty[7].Counter == 3);
+
+    // Published remove forces local counter to zero and dirties for SaveToDB delete.
+    CHECK(ApplySiblingAccountCriteriaProgress(empty, 7, 0, 2, ObjectGuid::Empty));
+    CHECK(empty[7].Counter == 0);
+    CHECK(empty[7].Changed);
+}
+
+TEST_CASE("Sibling account achievement completion inserts without duplicating", "[Achievement]")
+{
+    // Completing session already RewardAchievement'd. Sibling must gain HasAchieved-equivalent
+    // state so it cannot complete+reward again, but ApplySibling must be insert-only.
+    std::unordered_map<uint32, CompletedAchievementData> siblingCompleted;
+    uint32 points = 0;
+
+    CHECK(ApplySiblingAccountCompletedAchievement(siblingCompleted, points, 100, 50, 10, false));
+    REQUIRE(siblingCompleted.contains(100));
+    CHECK(siblingCompleted[100].Date == 50);
+    CHECK(siblingCompleted[100].Changed);
+    CHECK(points == 10);
+
+    CHECK_FALSE(ApplySiblingAccountCompletedAchievement(siblingCompleted, points, 100, 99, 10, false));
+    CHECK(points == 10);
+
+    CHECK(ApplySiblingAccountCompletedAchievement(siblingCompleted, points, 200, 60, 5, true));
+    CHECK(points == 10); // tracking flags do not add achievement points
+    CHECK(siblingCompleted.contains(200));
+}

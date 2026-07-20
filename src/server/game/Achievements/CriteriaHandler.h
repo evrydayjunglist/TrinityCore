@@ -309,6 +309,9 @@ protected:
     virtual bool CanCompleteCriteriaTree(CriteriaTree const* tree);
     virtual void CompletedCriteriaTree(CriteriaTree const* tree, Player* referencePlayer) = 0;
     virtual void AfterCriteriaTreeUpdate(CriteriaTree const* /*tree*/, Player* /*referencePlayer*/) { }
+    // Fired after local criteria counter changes (set/accumulate/highest/remove). AccountAchievementMgr
+    // uses this to publish absolute progress to sibling sessions that share the Battle.net account.
+    virtual void AfterCriteriaProgressChanged(Criteria const* /*criteria*/, CriteriaProgress const* /*progress*/) { }
 
     bool IsCompletedCriteria(Criteria const* criteria, uint64 requiredAmount);
     bool CanUpdateCriteria(Criteria const* criteria, CriteriaTreeList const* trees, uint64 miscValue1, uint64 miscValue2, uint64 miscValue3, WorldObject const* ref, Player* referencePlayer);
