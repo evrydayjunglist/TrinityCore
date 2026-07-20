@@ -8477,6 +8477,29 @@ void Unit::UpdateMountCapability()
 
             if (!HasAura(capability->ModSpellAuraID))
                 CastSpell(this, capability->ModSpellAuraID, aurEff);
+            else if (Aura* modAura = GetAura(capability->ModSpellAuraID))
+            {
+                // ModSpellAura can outlive its LINKED / LINKED_2 triggers across login:
+                // CharacterHandler removes SpellAuraInterruptFlags::Login auras after LoadFromDB
+                // (Dragonrider Energy 372773 has Login interrupt) while leaving ModSpellAura
+                // (e.g. 406095) intact. Remount re-casts ModSpellAura and LINKED_2 re-applies
+                // 372773; mirror that refresh here without removing the mount aura.
+                for (AuraEffect* modEff : modAura->GetAuraEffects())
+                {
+                    if (!modEff)
+                        continue;
+
+                    AuraType const type = modEff->GetAuraType();
+                    if (type != SPELL_AURA_LINKED && type != SPELL_AURA_LINKED_2)
+                        continue;
+
+                    uint32 const triggeredSpellId = modEff->GetSpellEffectInfo().TriggerSpell;
+                    if (!triggeredSpellId || HasAura(triggeredSpellId))
+                        continue;
+
+                    CastSpell(this, triggeredSpellId, modEff);
+                }
+            }
         }
     }
 }
