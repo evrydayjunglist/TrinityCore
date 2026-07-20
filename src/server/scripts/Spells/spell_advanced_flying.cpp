@@ -9,17 +9,37 @@
 
 #include "ScriptMgr.h"
 #include "SpellScript.h"
+#include "Unit.h"
+
+enum SkyridingLiftOffSpells
+{
+    SPELL_SKYRIDING_LAUNCH_BOOST = 392752 // Launch Boost — retail Lift Off cast-chain child (no SpellEffect trigger parent)
+};
 
 // 374763 - Lift Off
 class spell_skyriding_lift_off : public SpellScript
 {
     PrepareSpellScript(spell_skyriding_lift_off);
 
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_SKYRIDING_LAUNCH_BOOST });
+    }
+
     void HandleLaunch(SpellEffIndex /*effIndex*/)
     {
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
         // SpellEffect base points are stored in tenths for this impulse: 450 produces the
         // (0, 0, 45) SMSG_MOVE_ADD_IMPULSE observed on retail 12.0.7.68453.
-        GetCaster()->AddMoveImpulse(Position(0.0f, 0.0f, GetEffectValue() / 10.0f));
+        caster->AddMoveImpulse(Position(0.0f, 0.0f, GetEffectValue() / 10.0f));
+
+        // Retail applies Launch Boost in the same Lift Off chain (OriginalCastID → 374763).
+        // No SpellEffect.EffectTriggerSpell parent exists in DB2; CastSpell(..., GetSpell())
+        // preserves triggered cast linkage the way FORCE_CAST / script children do elsewhere.
+        caster->CastSpell(caster, SPELL_SKYRIDING_LAUNCH_BOOST, GetSpell());
     }
 
     void Register() override
