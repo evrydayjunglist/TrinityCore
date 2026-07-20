@@ -65,6 +65,15 @@ TC_GAME_API void CollectChangedAccountAchievementSaveTargets(
     std::vector<uint32>& outAchievementIds,
     std::vector<uint32>& outCriteriaIds);
 
+// Absolute sibling sync helpers for multi-session AccountAchievementMgr (MasterAlt bots).
+// Progress: take MAX(local, published); counter==0 forces a remove. Completion: insert-only
+// (never RewardAchievement — the publishing session already rewarded).
+TC_GAME_API bool ApplySiblingAccountCriteriaProgress(CriteriaProgressMap& progressMap, uint32 criteriaId,
+    uint64 counter, std::time_t date, ObjectGuid accountGuid);
+TC_GAME_API bool ApplySiblingAccountCompletedAchievement(
+    std::unordered_map<uint32, CompletedAchievementData>& completedAchievements, uint32& achievementPoints,
+    uint32 achievementId, std::time_t date, uint32 points, bool trackingFlag);
+
 class TC_GAME_API AchievementMgr : public CriteriaHandler
 {
 public:
@@ -100,6 +109,12 @@ public:
 
     void Reset() override;
 
+    // Clears only this session's in-memory account achievement/criteria state (and notifies the
+    // client). Used by Reset() for the owning session and for live sibling sessions that share the
+    // same Battle.net account — after an account-wide DB delete, SaveToDB will not rewrite clean
+    // (Changed=false) sibling rows, so stale memory must be invalidated explicitly.
+    void ClearLocalState();
+
     void LoadFromDB(PreparedQueryResult achievementResult, PreparedQueryResult criteriaResult);
     void SaveToDB(LoginDatabaseTransaction trans);
     void MigrateLegacyCharacterData(uint32 gameAccountId);
@@ -111,10 +126,17 @@ public:
 
     void CompletedAchievement(AchievementEntry const* entry, Player* referencePlayer) override;
 
+    // Apply a sibling session's published absolute progress / completion without re-publishing or
+    // re-rewarding. Used by World::PublishSiblingAccount* after another live session mutated shared
+    // Battle.net account achievement state.
+    void ApplyPublishedCriteriaProgress(uint32 criteriaId, uint64 counter, std::time_t date);
+    void ApplyPublishedCompletedAchievement(AchievementEntry const* achievement, std::time_t date);
+
 protected:
     bool CanUpdateCriteriaTree(Criteria const* criteria, CriteriaTree const* tree, Player* referencePlayer) const override;
     void SendCriteriaUpdate(Criteria const* entry, CriteriaProgress const* progress, Seconds timeElapsed, bool timedCompleted) const override;
     void SendCriteriaProgressRemoved(uint32 criteriaId) override;
+    void AfterCriteriaProgressChanged(Criteria const* criteria, CriteriaProgress const* progress) override;
 
     void SendAchievementEarned(AchievementEntry const* achievement) const;
 

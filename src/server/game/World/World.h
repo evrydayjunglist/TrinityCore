@@ -43,6 +43,7 @@ class Player;
 class WorldPacket;
 class WorldSession;
 class WorldSocket;
+struct AchievementEntry;
 enum class GameRule : int32;
 
 // ServerMessages.dbc
@@ -581,6 +582,16 @@ class TC_GAME_API World
         // True when another human or in-world/loading bot session still owns this account.
         // Used so logout must not wipe siblings' characters.online / account.online flags.
         bool HasOtherOnlineSessionOnAccount(uint32 accountId, WorldSession const* except) const;
+        // Clears AccountAchievementMgr memory on every live human/bot session for this Battle.net
+        // account except `except`. Required after AccountAchievementMgr::Reset's account-wide DELETE
+        // because per-row SaveToDB skips Changed=false rows (sibling stale state would never rewrite).
+        void InvalidateSiblingAccountAchievementManagers(ObjectGuid battlenetAccountGuid, uint32 battlenetAccountId, WorldSession* except);
+        // Push absolute account criteria / completion into every live human/bot session for the same
+        // Battle.net account except `source`. Required because each WorldSession owns a separate
+        // AccountAchievementMgr — without this, MasterAlt ACCUMULATE last-write-wins loses progress
+        // and siblings re-run RewardAchievement for already-completed account achievements.
+        void PublishSiblingAccountCriteriaProgress(WorldSession* source, uint32 criteriaId, uint64 counter, time_t date);
+        void PublishSiblingAccountAchievementCompleted(WorldSession* source, AchievementEntry const* achievement, time_t date);
         void AddSession(WorldSession* s);
         bool AddBotSession(WorldSession* s, ObjectGuid characterGuid);
         void RemoveBotSession(ObjectGuid characterGuid);
@@ -832,7 +843,8 @@ class TC_GAME_API World
         World();
         ~World();
 
-        /// Bot-safe eviction for GUID-keyed sessions (KickPlayer is a socket-only no-op for bots).
+        /// Bulk bot eviction helpers (KickAll / KickAllLess / BanAccount). Single-session kicks go
+        /// through WorldSession::KickPlayer, which now also RemoveBotSession for IsBotSession().
         /// Collects GUIDs first, then RemoveBotSession -> LogoutPlayer; map erase on next UpdateSessions.
         void LogoutAllBotSessions();
         void LogoutAllBotSessionsLess(AccountTypes sec);

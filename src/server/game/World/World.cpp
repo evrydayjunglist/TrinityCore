@@ -367,6 +367,104 @@ bool World::HasOtherOnlineSessionOnAccount(uint32 accountId, WorldSession const*
     return false;
 }
 
+void World::InvalidateSiblingAccountAchievementManagers(ObjectGuid battlenetAccountGuid, uint32 battlenetAccountId, WorldSession* except)
+{
+    if (!battlenetAccountId || battlenetAccountGuid.IsEmpty())
+        return;
+
+    auto invalidate = [](WorldSession* session)
+    {
+        if (!session)
+            return;
+
+        // Clear memory only — do not CheckAllAchievementCriteria here. Re-evaluating on a sibling
+        // character could immediately re-complete account achievements and SaveToDB them back after
+        // the account-wide wipe. The resetting session still re-checks its own player in Reset().
+        if (AccountAchievementMgr* mgr = session->GetAccountAchievementMgr())
+            mgr->ClearLocalState();
+    };
+
+    // Human (and any other) sessions indexed by Battle.net account.
+    for (auto&& sessionForBnet : Trinity::Containers::MapEqualRange(m_sessionsByBnetGuid, battlenetAccountGuid))
+        if (sessionForBnet.second && sessionForBnet.second != except)
+            invalidate(sessionForBnet.second);
+
+    // Bot sessions live only in m_botSessionsByGuid and are never added to m_sessionsByBnetGuid.
+    for (auto const& [guid, session] : m_botSessionsByGuid)
+    {
+        (void)guid;
+        if (!session || session == except)
+            continue;
+        if (session->GetBattlenetAccountId() != battlenetAccountId)
+            continue;
+        invalidate(session);
+    }
+}
+
+void World::PublishSiblingAccountCriteriaProgress(WorldSession* source, uint32 criteriaId, uint64 counter, time_t date)
+{
+    if (!source)
+        return;
+
+    uint32 const battlenetAccountId = source->GetBattlenetAccountId();
+    ObjectGuid const battlenetAccountGuid = source->GetBattlenetAccountGUID();
+    if (!battlenetAccountId || battlenetAccountGuid.IsEmpty())
+        return;
+
+    auto publish = [&](WorldSession* session)
+    {
+        if (!session || session == source)
+            return;
+        if (AccountAchievementMgr* mgr = session->GetAccountAchievementMgr())
+            mgr->ApplyPublishedCriteriaProgress(criteriaId, counter, date);
+    };
+
+    for (auto&& sessionForBnet : Trinity::Containers::MapEqualRange(m_sessionsByBnetGuid, battlenetAccountGuid))
+        publish(sessionForBnet.second);
+
+    for (auto const& [guid, session] : m_botSessionsByGuid)
+    {
+        (void)guid;
+        if (!session || session == source)
+            continue;
+        if (session->GetBattlenetAccountId() != battlenetAccountId)
+            continue;
+        publish(session);
+    }
+}
+
+void World::PublishSiblingAccountAchievementCompleted(WorldSession* source, AchievementEntry const* achievement, time_t date)
+{
+    if (!source || !achievement)
+        return;
+
+    uint32 const battlenetAccountId = source->GetBattlenetAccountId();
+    ObjectGuid const battlenetAccountGuid = source->GetBattlenetAccountGUID();
+    if (!battlenetAccountId || battlenetAccountGuid.IsEmpty())
+        return;
+
+    auto publish = [&](WorldSession* session)
+    {
+        if (!session || session == source)
+            return;
+        if (AccountAchievementMgr* mgr = session->GetAccountAchievementMgr())
+            mgr->ApplyPublishedCompletedAchievement(achievement, date);
+    };
+
+    for (auto&& sessionForBnet : Trinity::Containers::MapEqualRange(m_sessionsByBnetGuid, battlenetAccountGuid))
+        publish(sessionForBnet.second);
+
+    for (auto const& [guid, session] : m_botSessionsByGuid)
+    {
+        (void)guid;
+        if (!session || session == source)
+            continue;
+        if (session->GetBattlenetAccountId() != battlenetAccountId)
+            continue;
+        publish(session);
+    }
+}
+
 bool World::AddBotSession(WorldSession* s, ObjectGuid characterGuid)
 {
     ASSERT(s && s->IsBotSession());
@@ -403,10 +501,10 @@ void World::RemoveBotSession(ObjectGuid characterGuid)
     if (itr == m_botSessionsByGuid.end() || !itr->second)
         return;
 
-    // Bot sessions have no socket, so WorldSession::KickPlayer() (which only closes sockets) is a
-    // no-op for them. LogoutPlayer() is what actually clears the session's player, which lets
+    // Bot sessions have no socket, so KickPlayer socket-close alone is a no-op. LogoutPlayer()
+    // clears the session's player (or cancels an in-flight LoginBotCharacter load), which lets
     // WorldSession::Update()'s IsBotSession() branch signal removal - the per-tick bot-session
-    // loop below then safely erases + deletes, exactly like the human RemoveSession() path above.
+    // loop below then safely erases + deletes. KickPlayer routes IsBotSession() here.
     // Mirrors modules/mod-playerbots/src/Mgr/BotSessionMgr.cpp's LogoutBotSession, so this is safe
     // to call even from within the target session's own call stack.
     itr->second->LogoutPlayer(true);
@@ -2754,7 +2852,7 @@ void World::KickAll()
     for (SessionMap::const_iterator itr = m_sessions.begin(); itr != m_sessions.end(); ++itr)
         itr->second->KickPlayer("World::KickAll");
 
-    // Bots live only in m_botSessionsByGuid — KickPlayer is a no-op for socketless sessions.
+    // Bots live only in m_botSessionsByGuid — walk that map; KickPlayer on humans above is socket-only.
     LogoutAllBotSessions();
 }
 
