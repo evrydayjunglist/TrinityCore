@@ -10,11 +10,17 @@
 #include "ScriptMgr.h"
 #include "SpellScript.h"
 #include "Unit.h"
+#include <cmath>
 
 enum SkyridingLiftOffSpells
 {
     SPELL_SKYRIDING_LAUNCH_BOOST = 392752 // Launch Boost — retail Lift Off cast-chain child (no SpellEffect trigger parent)
 };
+
+// Sniff-derived provisional Skyward Ascent impulse (retail 12.0.7.68453, two matched samples).
+// Not EffectBasePointsF/10 — that field is 450 (same as Lift Off) but retail sends Z≈49 with |xy|≈12.25.
+constexpr float SKYRIDING_SKYWARD_ASCENT_IMPULSE_XY = 12.25f;
+constexpr float SKYRIDING_SKYWARD_ASCENT_IMPULSE_Z = 49.0f;
 
 // 374763 - Lift Off
 class spell_skyriding_lift_off : public SpellScript
@@ -48,7 +54,32 @@ class spell_skyriding_lift_off : public SpellScript
     }
 };
 
+// 372610 - Skyward Ascent
+class spell_skyriding_skyward_ascent : public SpellScript
+{
+    PrepareSpellScript(spell_skyriding_skyward_ascent);
+
+    void HandleAscent(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
+        // Facing-relative SMSG_MOVE_ADD_IMPULSE. DB2 EFFECT_0 is SPELL_EFFECT_DUMMY
+        // (EffectBasePointsF=450); retail wire is not pure-up (0,0,45) — see provisional constants.
+        float const o = caster->GetOrientation();
+        float const xy = SKYRIDING_SKYWARD_ASCENT_IMPULSE_XY;
+        caster->AddMoveImpulse(Position(std::cos(o) * xy, std::sin(o) * xy, SKYRIDING_SKYWARD_ASCENT_IMPULSE_Z));
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_skyriding_skyward_ascent::HandleAscent, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
 void AddSC_advanced_flying_spell_scripts()
 {
     RegisterSpellScript(spell_skyriding_lift_off);
+    RegisterSpellScript(spell_skyriding_skyward_ascent);
 }
