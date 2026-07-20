@@ -6234,7 +6234,15 @@ void Spell::EffectCreateTraitTreeConfig()
     }).first;
 
     if (!existingConfigIdForSystem)
+    {
         target->CreateTraitConfig(newConfig);
+        // CreateTraitConfig writes Granted ranks into the UF but does not learn definition spells.
+        // Apply immediately so CREATE_TRAIT_TREE_CONFIG (e.g. 384557 / Dragonriding tree 672) grants
+        // starter TraitDefinition spells such as 376359 in the same cast.
+        target->ApplyTraitConfig(newConfig.ID, true);
+    }
+    else
+        target->SyncGrantedTraitEntries(*existingConfigIdForSystem);
 }
 
 void Spell::EffectChangeActiveCombatTraitConfig()

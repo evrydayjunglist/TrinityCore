@@ -19141,10 +19141,13 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     InitTalentForLevel();
     LearnDefaultSkills();
     LearnCustomSpells();
-    LearnSkyridingV1(); // Skyriding V1: auto-grant Skyriding skill/abilities/Vigor on login (retail quest unlock NYI)
 
     _LoadTraits(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_TRAIT_CONFIGS),
         holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_TRAIT_ENTRIES)); // must be after loading spells
+
+    // After traits: LearnSkyridingV1 casts 384557 (CREATE_TRAIT_TREE_CONFIG). That effect early-outs
+    // while IsLoading() && TraitConfigs.empty(), so it must run only once combat/generic configs exist.
+    LearnSkyridingV1(); // Skyriding V1: auto-grant Skyriding skill/abilities/Vigor on login (retail quest unlock NYI)
 
     // must be before inventory (some items required reputation check)
     m_reputationMgr->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_REPUTATION));
@@ -25830,20 +25833,40 @@ void Player::LearnSkyridingV1()
     // Skyriding V1 (Phase V1) — auto-grant on login. Retail teaches these via the Skyriding intro
     // quest chain; that unlock path is NYI (later phase). This build is data-complete for Skyriding
     // (FlightCapability / dragonriding MountCapability / abilities all present in DB2), so V1 just:
+    //   - completes TraitCond::Granted unlock achievements for Dragonriding TraitTree 672 (quest NYI),
     //   - learns "Skyriding Basics" (376777) — required as ReqSpellKnownID by dragonriding MountCapability,
+    //     and ensures CREATE_TRAIT_TREE_CONFIG 384557 creates/applies TraitSystem 1 / tree 672
+    //     (retail TraitDefinition grants incl. 376359 Whirling Surge teach wrapper),
     //   - learns the core active abilities (Surge Forward / Skyward Ascent / Whirling Surge /
-    //     Aerial Halt / Upward Flap / Second Wind),
+    //     Aerial Halt / Upward Flap / Second Wind) as a playability bridge while trait spend stays Phase T,
     //   - applies effect 0 of "Dragonrider Energy" (372773) — the caster-aura every active ability
     //     requires via SpellAuraRestrictions. Midnight does not apply the obsolete periodic Vigor
     //     effect 1; its resource economy is SpellCategory 2391's six shared charges.
     // Combined with no longer forcing "Flight Style: Steady" (see _LoadAuras), a Skyriding-capable
     // mount now drives AdvFlying instead of old flight. See docs/midnight-assessment/skyriding/.
     constexpr uint32 SKYRIDING_BASICS = 376777;
+    constexpr uint32 CREATE_DRAGONRIDING_TRAITS_LOADOUT = 384557; // SpellEffect CREATE_TRAIT_TREE_CONFIG → TraitTree 672
     constexpr uint32 DRAGONRIDER_ENERGY = 372773;
     static constexpr uint32 skyridingAbilities[] = { 372608, 372610, 361584, 403092, 401671, 425782 };
+    // TraitCond::Granted on tree 672 starter nodes (EvryDb2Export 12.0.7.67808 TraitCond):
+    //   15797 An Azure Ally → 376359; 40172 Dynamic Flight Power 1 → 376777/383363/383366;
+    //   61554/61553 → Aerial Halt / Second Wind. Retail earns these via campaign / scripts; V1 bridges.
+    static constexpr uint32 skyridingTraitUnlockAchievements[] = { 15797, 40172, 61554, 61553 };
+
+    for (uint32 achievementId : skyridingTraitUnlockAchievements)
+    {
+        if (HasAchieved(achievementId))
+            continue;
+        if (AchievementEntry const* achievement = sAchievementStore.LookupEntry(achievementId))
+            CompletedAchievement(achievement);
+    }
 
     if (!HasSpell(SKYRIDING_BASICS))
         LearnSpell(SKYRIDING_BASICS, false);
+
+    // Basics FORCE_CASTs 384557, but already-known Basics never re-fire that effect. Always ensure
+    // the Dragonriding Traits loadout exists and Granted ranks (incl. 376359) are applied.
+    CastSpell(this, CREATE_DRAGONRIDING_TRAITS_LOADOUT, true);
 
     for (uint32 abilityId : skyridingAbilities)
         if (!HasSpell(abilityId))
@@ -30280,6 +30303,44 @@ void Player::CreateTraitConfig(WorldPackets::Traits::TraitConfig& traitConfig)
     }
 
     m_traitConfigStates[configId] = PLAYERSPELL_CHANGED;
+}
+
+void Player::SyncGrantedTraitEntries(int32 configId)
+{
+    UF::TraitConfig const* traitConfig = GetTraitConfig(configId);
+    if (!traitConfig)
+        return;
+
+    WorldPackets::Traits::TraitConfig view(*traitConfig);
+    auto configSetter = m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::TraitConfigs, configId);
+
+    for (UF::TraitEntry const& grantedEntry : TraitMgr::GetGrantedTraitEntriesForConfig(view, this))
+    {
+        int32 existingIndex = traitConfig->Entries.FindIndexIf([&](UF::TraitEntry const& entry)
+        {
+            return entry.TraitNodeID == grantedEntry.TraitNodeID && entry.TraitNodeEntryID == grantedEntry.TraitNodeEntryID;
+        });
+
+        if (existingIndex < 0)
+        {
+            AddDynamicUpdateFieldValue(configSetter.ModifyValue(&UF::TraitConfig::Entries)) = grantedEntry;
+            ApplyTraitEntry(grantedEntry.TraitNodeEntryID, grantedEntry.Rank, grantedEntry.GrantedRanks, true);
+            m_traitConfigStates[configId] = PLAYERSPELL_CHANGED;
+            continue;
+        }
+
+        UF::TraitEntry const& existing = traitConfig->Entries[existingIndex];
+        if (existing.GrantedRanks >= grantedEntry.GrantedRanks)
+            continue;
+
+        ApplyTraitEntry(existing.TraitNodeEntryID, existing.Rank, existing.GrantedRanks, false);
+        SetUpdateFieldValue(configSetter
+            .ModifyValue(&UF::TraitConfig::Entries, existingIndex)
+            .ModifyValue(&UF::TraitEntry::GrantedRanks), grantedEntry.GrantedRanks);
+        ApplyTraitEntry(grantedEntry.TraitNodeEntryID, existing.Rank, grantedEntry.GrantedRanks, true);
+        m_traitConfigStates[configId] = PLAYERSPELL_CHANGED;
+    }
 }
 
 void Player::AddTraitConfig(WorldPackets::Traits::TraitConfig const& traitConfig)
