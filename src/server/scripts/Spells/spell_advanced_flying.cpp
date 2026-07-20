@@ -22,6 +22,16 @@ enum SkyridingLiftOffSpells
 constexpr float SKYRIDING_SKYWARD_ASCENT_IMPULSE_XY = 12.25f;
 constexpr float SKYRIDING_SKYWARD_ASCENT_IMPULSE_Z = 49.0f;
 
+// Sniff-derived provisional Surge Forward impulse (retail 12.0.7.68453 sample |v|≈18.9).
+// EFFECT_0 is SPELL_EFFECT_DUMMY with EffectBasePointsF=0 — do not derive magnitude from /10.
+constexpr float SKYRIDING_SURGE_FORWARD_IMPULSE_XY = 18.3f;
+constexpr float SKYRIDING_SURGE_FORWARD_IMPULSE_Z = -4.71f;
+
+// Sniff-derived provisional Whirling Surge impulse (retail 12.0.7.68453 sample |v|=60).
+// No SPELL_EFFECT_DUMMY row — cast-time OnCast hook; leave APPLY_AURA area-trigger misc alone.
+constexpr float SKYRIDING_WHIRLING_SURGE_IMPULSE_XY = 60.0f;
+constexpr float SKYRIDING_WHIRLING_SURGE_IMPULSE_Z = 1.95f;
+
 // 374763 - Lift Off
 class spell_skyriding_lift_off : public SpellScript
 {
@@ -78,8 +88,60 @@ class spell_skyriding_skyward_ascent : public SpellScript
     }
 };
 
+// 372608 - Surge Forward
+class spell_skyriding_surge_forward : public SpellScript
+{
+    PrepareSpellScript(spell_skyriding_surge_forward);
+
+    void HandleSurge(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
+        // Facing-relative SMSG_MOVE_ADD_IMPULSE. DB2 EFFECT_0 base points are 0; magnitudes
+        // are provisional from one retail 12.0.7.68453 sample (|xy|≈18.3, Z≈-4.71 → |v|≈18.9).
+        float const o = caster->GetOrientation();
+        float const xy = SKYRIDING_SURGE_FORWARD_IMPULSE_XY;
+        caster->AddMoveImpulse(Position(std::cos(o) * xy, std::sin(o) * xy, SKYRIDING_SURGE_FORWARD_IMPULSE_Z));
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_skyriding_surge_forward::HandleSurge, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
+// 361584 - Whirling Surge
+class spell_skyriding_whirling_surge : public SpellScript
+{
+    PrepareSpellScript(spell_skyriding_whirling_surge);
+
+    void HandleWhirl()
+    {
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
+        // Facing-relative SMSG_MOVE_ADD_IMPULSE. DB2 has APPLY_AURA rows only (EFFECT_0 aura
+        // DUMMY, EFFECT_1 aura 395 misc 26554) — no SPELL_EFFECT_DUMMY to hook. OnCast matches
+        // retail prepare/cast impulse timing without inventing a fake effect index.
+        // Provisional from one retail 12.0.7.68453 sample (|xy|=60, Z≈1.95).
+        float const o = caster->GetOrientation();
+        float const xy = SKYRIDING_WHIRLING_SURGE_IMPULSE_XY;
+        caster->AddMoveImpulse(Position(std::cos(o) * xy, std::sin(o) * xy, SKYRIDING_WHIRLING_SURGE_IMPULSE_Z));
+    }
+
+    void Register() override
+    {
+        OnCast += SpellCastFn(spell_skyriding_whirling_surge::HandleWhirl);
+    }
+};
+
 void AddSC_advanced_flying_spell_scripts()
 {
     RegisterSpellScript(spell_skyriding_lift_off);
     RegisterSpellScript(spell_skyriding_skyward_ascent);
+    RegisterSpellScript(spell_skyriding_surge_forward);
+    RegisterSpellScript(spell_skyriding_whirling_surge);
 }
