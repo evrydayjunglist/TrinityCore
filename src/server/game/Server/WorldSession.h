@@ -2049,6 +2049,7 @@ class TC_GAME_API WorldSession
         std::unique_ptr<BattlePets::BattlePetMgr> _battlePetMgr;
 
         std::unique_ptr<CollectionMgr> _collectionMgr;
+        std::unique_ptr<AccountAchievementMgr> _accountAchievementMgr;
 
         ConnectToKey _instanceConnectKey;
 
