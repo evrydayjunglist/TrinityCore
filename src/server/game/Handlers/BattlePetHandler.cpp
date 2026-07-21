@@ -19,6 +19,7 @@
 #include "BattlePetMgr.h"
 #include "BattlePetPackets.h"
 #include "ObjectAccessor.h"
+#include "PetBattle.h"
 #include "Player.h"
 #include "TemporarySummon.h"
 
@@ -131,4 +132,67 @@ void WorldSession::HandleBattlePetSummon(WorldPackets::BattlePet::BattlePetSummo
 void WorldSession::HandleBattlePetUpdateNotify(WorldPackets::BattlePet::BattlePetUpdateNotify& battlePetUpdateNotify)
 {
     GetBattlePetMgr()->UpdateBattlePetData(battlePetUpdateNotify.PetGuid);
+}
+
+void WorldSession::HandlePetBattleRequestWild(WorldPackets::BattlePet::PetBattleRequestWild& petBattleRequestWild)
+{
+    // Only one wild PvE battle per session at a time.
+    if (_petBattle)
+        return;
+
+    auto sendFailed = [this](uint8 reason)
+    {
+        WorldPackets::BattlePet::PetBattleRequestFailed failed;
+        failed.Reason = reason;
+        SendPacket(failed.Write());
+    };
+
+    if (_player->IsInCombat())
+    {
+        sendFailed(5); // ERR_PETBATTLE_NOT_HERE-class reason observed in retail while in world combat
+        return;
+    }
+
+    auto battle = std::make_unique<BattlePets::PetBattle>(this);
+    if (!battle->SetupWild(petBattleRequestWild.TargetGUID, petBattleRequestWild.Location))
+    {
+        sendFailed(5);
+        return;
+    }
+
+    _petBattle = std::move(battle);
+    _petBattle->Start();
+}
+
+void WorldSession::HandlePetBattleRequestUpdate(WorldPackets::BattlePet::PetBattleRequestUpdate& /*petBattleRequestUpdate*/)
+{
+    // NYI: reconcile pending/queued battle state (V1 wild path has nothing to answer yet).
+}
+
+void WorldSession::HandlePetBattleInput(WorldPackets::BattlePet::PetBattleInput& petBattleInput)
+{
+    if (_petBattle)
+        _petBattle->HandleInput(petBattleInput);
+}
+
+void WorldSession::HandlePetBattleReplaceFrontPet(WorldPackets::BattlePet::PetBattleReplaceFrontPet& petBattleReplaceFrontPet)
+{
+    if (_petBattle)
+        _petBattle->HandleReplaceFrontPet(petBattleReplaceFrontPet.FrontPet);
+}
+
+void WorldSession::HandlePetBattleQuitNotify(WorldPackets::BattlePet::PetBattleQuitNotify& /*petBattleQuitNotify*/)
+{
+    if (_petBattle)
+        _petBattle->HandleQuit();
+}
+
+void WorldSession::HandlePetBattleFinalNotify(WorldPackets::BattlePet::PetBattleFinalNotify& /*petBattleFinalNotify*/)
+{
+    if (!_petBattle)
+        return;
+
+    _petBattle->HandleFinalNotify();
+    if (_petBattle->IsFinished())
+        _petBattle.reset();
 }

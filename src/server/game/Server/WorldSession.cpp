@@ -24,6 +24,7 @@
 #include "AuthenticationPackets.h"
 #include "Bag.h"
 #include "BattlePetMgr.h"
+#include "PetBattle.h"
 #include "BattlegroundMgr.h"
 #include "BattlenetPackets.h"
 #include "CharacterPackets.h"
