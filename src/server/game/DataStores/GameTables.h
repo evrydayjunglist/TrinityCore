@@ -65,6 +65,20 @@ struct GtBattlePetXPEntry
     float Xp = 0.0f;
 };
 
+struct GtBattlePetTypeDamageModEntry
+{
+    float Humanoid = 0.0f;
+    float Dragonkin = 0.0f;
+    float Flying = 0.0f;
+    float Undead = 0.0f;
+    float Critter = 0.0f;
+    float Magic = 0.0f;
+    float Elemental = 0.0f;
+    float Beast = 0.0f;
+    float Aquatic = 0.0f;
+    float Mechanical = 0.0f;
+};
+
 struct GtCombatRatingsEntry
 {
     float Amplify = 0.0f;
@@ -199,6 +213,7 @@ TC_GAME_API extern GameTable<GtArtifactLevelXPEntry>                sArtifactLev
 TC_GAME_API extern GameTable<GtBarberShopCostBaseEntry>             sBarberShopCostBaseGameTable;
 TC_GAME_API extern GameTable<GtBaseMPEntry>                         sBaseMPGameTable;
 TC_GAME_API extern GameTable<GtBattlePetXPEntry>                    sBattlePetXPGameTable;
+TC_GAME_API extern GameTable<GtBattlePetTypeDamageModEntry>         sBattlePetTypeDamageModGameTable;
 TC_GAME_API extern GameTable<GtCombatRatingsEntry>                  sCombatRatingsGameTable;
 TC_GAME_API extern GameTable<GtCombatRatingsMultByILvl>             sCombatRatingsMultByILvlGameTable;
 TC_GAME_API extern GameTable<GtHpPerStaEntry>                       sHpPerStaGameTable;
@@ -316,6 +331,27 @@ inline float GetSpellScalingColumnForClass(GtSpellScalingEntry const* row, int32
 inline float GetBattlePetXPPerLevel(GtBattlePetXPEntry const* row)
 {
     return row->Wins * row->Xp;
+}
+
+// column order matches BattlePetTypeDamageMod.txt (attacker row -> defender column, both PetTypeEnum ordered)
+inline float GetBattlePetTypeDamageModForType(GtBattlePetTypeDamageModEntry const* row, int32 targetPetType)
+{
+    switch (targetPetType)
+    {
+        case 0: return row->Humanoid;
+        case 1: return row->Dragonkin;
+        case 2: return row->Flying;
+        case 3: return row->Undead;
+        case 4: return row->Critter;
+        case 5: return row->Magic;
+        case 6: return row->Elemental;
+        case 7: return row->Beast;
+        case 8: return row->Aquatic;
+        case 9: return row->Mechanical;
+        default: break;
+    }
+
+    return 1.0f;
 }
 
 template<class T>

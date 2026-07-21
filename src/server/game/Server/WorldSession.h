@@ -74,6 +74,7 @@ class Account;
 namespace BattlePets
 {
     class BattlePetMgr;
+    class PetBattle;
 }
 
 namespace lfg
@@ -212,6 +213,12 @@ namespace WorldPackets
         class BattlePetSummon;
         class BattlePetUpdateNotify;
         class CageBattlePet;
+        class PetBattleRequestWild;
+        class PetBattleRequestUpdate;
+        class PetBattleInput;
+        class PetBattleReplaceFrontPet;
+        class PetBattleQuitNotify;
+        class PetBattleFinalNotify;
     }
 
     namespace BlackMarket
@@ -1227,6 +1234,7 @@ class TC_GAME_API WorldSession
 
         // Battle Pets
         BattlePets::BattlePetMgr* GetBattlePetMgr() const { return _battlePetMgr.get(); }
+        BattlePets::PetBattle* GetPetBattle() const { return _petBattle.get(); }
 
         CollectionMgr* GetCollectionMgr() const { return _collectionMgr.get(); }
 
@@ -1872,6 +1880,14 @@ class TC_GAME_API WorldSession
         void HandleBattlePetUpdateNotify(WorldPackets::BattlePet::BattlePetUpdateNotify& battlePetUpdateNotify);
         void HandleCageBattlePet(WorldPackets::BattlePet::CageBattlePet& cageBattlePet);
 
+        // Pet Battle (combat)
+        void HandlePetBattleRequestWild(WorldPackets::BattlePet::PetBattleRequestWild& petBattleRequestWild);
+        void HandlePetBattleRequestUpdate(WorldPackets::BattlePet::PetBattleRequestUpdate& petBattleRequestUpdate);
+        void HandlePetBattleInput(WorldPackets::BattlePet::PetBattleInput& petBattleInput);
+        void HandlePetBattleReplaceFrontPet(WorldPackets::BattlePet::PetBattleReplaceFrontPet& petBattleReplaceFrontPet);
+        void HandlePetBattleQuitNotify(WorldPackets::BattlePet::PetBattleQuitNotify& petBattleQuitNotify);
+        void HandlePetBattleFinalNotify(WorldPackets::BattlePet::PetBattleFinalNotify& petBattleFinalNotify);
+
         // Battlenet
         void HandleBattlenetChangeRealmTicket(WorldPackets::Battlenet::ChangeRealmTicket& changeRealmTicket);
         void HandleBattlenetRequest(WorldPackets::Battlenet::Request& request);
@@ -2045,6 +2061,7 @@ class TC_GAME_API WorldSession
         time_t _calendarEventCreationCooldown;
 
         std::unique_ptr<BattlePets::BattlePetMgr> _battlePetMgr;
+        std::unique_ptr<BattlePets::PetBattle> _petBattle;
 
         std::unique_ptr<CollectionMgr> _collectionMgr;
 

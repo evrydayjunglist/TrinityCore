@@ -81,6 +81,12 @@ DB2Storage<BattlePetBreedQualityEntry>          sBattlePetBreedQualityStore("Bat
 DB2Storage<BattlePetBreedStateEntry>            sBattlePetBreedStateStore("BattlePetBreedState.db2", &BattlePetBreedStateLoadInfo::Instance);
 DB2Storage<BattlePetSpeciesEntry>               sBattlePetSpeciesStore("BattlePetSpecies.db2", &BattlePetSpeciesLoadInfo::Instance);
 DB2Storage<BattlePetSpeciesStateEntry>          sBattlePetSpeciesStateStore("BattlePetSpeciesState.db2", &BattlePetSpeciesStateLoadInfo::Instance);
+DB2Storage<BattlePetSpeciesXAbilityEntry>       sBattlePetSpeciesXAbilityStore("BattlePetSpeciesXAbility.db2", &BattlePetSpeciesXAbilityLoadInfo::Instance);
+DB2Storage<BattlePetAbilityTurnEntry>           sBattlePetAbilityTurnStore("BattlePetAbilityTurn.db2", &BattlePetAbilityTurnLoadInfo::Instance);
+DB2Storage<BattlePetAbilityEffectEntry>         sBattlePetAbilityEffectStore("BattlePetAbilityEffect.db2", &BattlePetAbilityEffectLoadInfo::Instance);
+DB2Storage<BattlePetEffectPropertiesEntry>      sBattlePetEffectPropertiesStore("BattlePetEffectProperties.db2", &BattlePetEffectPropertiesLoadInfo::Instance);
+DB2Storage<BattlePetStateEntry>                 sBattlePetStateStore("BattlePetState.db2", &BattlePetStateLoadInfo::Instance);
+DB2Storage<BattlePetAbilityStateEntry>          sBattlePetAbilityStateStore("BattlePetAbilityState.db2", &BattlePetAbilityStateLoadInfo::Instance);
 DB2Storage<BattlemasterListEntry>               sBattlemasterListStore("BattlemasterList.db2", &BattlemasterListLoadInfo::Instance);
 DB2Storage<BattlemasterListXMapEntry>           sBattlemasterListXMapStore("BattlemasterListXMap.db2", &BattlemasterListXMapLoadInfo::Instance);
 DB2Storage<BroadcastTextEntry>                  sBroadcastTextStore("BroadcastText.db2", &BroadcastTextLoadInfo::Instance);
@@ -724,6 +730,12 @@ uint32 DB2Manager::LoadStores(std::string const& dataPath, LocaleConstant defaul
     LOAD_DB2(sBattlePetBreedStateStore);
     LOAD_DB2(sBattlePetSpeciesStore);
     LOAD_DB2(sBattlePetSpeciesStateStore);
+    LOAD_DB2(sBattlePetSpeciesXAbilityStore);
+    LOAD_DB2(sBattlePetAbilityTurnStore);
+    LOAD_DB2(sBattlePetAbilityEffectStore);
+    LOAD_DB2(sBattlePetEffectPropertiesStore);
+    LOAD_DB2(sBattlePetStateStore);
+    LOAD_DB2(sBattlePetAbilityStateStore);
     LOAD_DB2(sBattlemasterListStore);
     LOAD_DB2(sBattlemasterListXMapStore);
     LOAD_DB2(sBroadcastTextStore);

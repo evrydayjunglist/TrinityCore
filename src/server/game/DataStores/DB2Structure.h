@@ -513,6 +513,60 @@ struct BattlePetSpeciesStateEntry
     uint32 BattlePetSpeciesID;
 };
 
+struct BattlePetSpeciesXAbilityEntry
+{
+    uint32 ID;
+    uint16 BattlePetAbilityID;
+    uint8 RequiredLevel;
+    int8 SlotEnum;
+    int32 BattlePetSpeciesID;
+};
+
+struct BattlePetAbilityTurnEntry
+{
+    uint32 ID;
+    uint16 BattlePetAbilityID;
+    uint8 OrderIndex;
+    uint8 TurnTypeEnum;
+    uint8 EventTypeEnum;
+    uint16 BattlePetVisualID;
+};
+
+struct BattlePetAbilityEffectEntry
+{
+    uint32 ID;
+    uint16 BattlePetAbilityTurnID;
+    uint8 OrderIndex;
+    uint16 BattlePetEffectPropertiesID;
+    uint16 AuraBattlePetAbilityID;
+    uint16 BattlePetVisualID;
+    int16 Param[6];
+};
+
+struct BattlePetEffectPropertiesEntry
+{
+    uint32 ID;
+    char const* ParamLabel[6];
+    uint16 BattlePetVisualID;
+    uint8 ParamTypeEnum[6];
+};
+
+struct BattlePetStateEntry
+{
+    uint32 ID;
+    char const* LuaName;
+    int32 Flags;
+    uint16 BattlePetVisualID;
+};
+
+struct BattlePetAbilityStateEntry
+{
+    uint32 ID;
+    uint32 BattlePetStateID;
+    int32 Value;
+    int32 BattlePetAbilityID;
+};
+
 struct BattlemasterListEntry
 {
     uint32 ID;

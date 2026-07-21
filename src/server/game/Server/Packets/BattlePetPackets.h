@@ -22,8 +22,11 @@
 #include "PacketUtilities.h"
 #include "ObjectGuid.h"
 #include "Optional.h"
+#include "Position.h"
 #include "UnitDefines.h"
+#include <array>
 #include <memory>
+#include <vector>
 
 namespace WorldPackets
 {
@@ -264,6 +267,279 @@ namespace WorldPackets
             void Read() override;
 
             ObjectGuid PetGuid;
+        };
+
+        // ---- Pet Battle (combat) ---------------------------------------------------------------
+        // Midnight (12.0.7) wire from retail sniffs; structural lead from BfaCore Reforged.
+
+        static constexpr uint8 PET_BATTLE_PARTICIPANTS_COUNT = 2;
+        static constexpr uint8 PET_BATTLE_ENVIRO_COUNT = 3;
+
+        struct PetBattleLocation
+        {
+            int32 LocationResult = 0;
+            TaggedPosition<Position::XYZ> BattleOrigin;
+            float BattleFacing = 0.0f;
+            TaggedPosition<Position::XYZ> PlayerPositions[PET_BATTLE_PARTICIPANTS_COUNT];
+        };
+
+        // effect target params kept minimal for V1 (front pet / pet health / state)
+        struct PetBattleEffectTarget
+        {
+            uint8 Type = 0;
+            int8 Petx = 0;
+            int32 Health = 0;      // PET_BATTLE_EFFECT_TARGET_PET
+            uint32 StateID = 0;    // PET_BATTLE_EFFECT_TARGET_STATE
+            int32 StateValue = 0;  // PET_BATTLE_EFFECT_TARGET_STATE
+        };
+
+        struct PetBattleEffect
+        {
+            uint32 AbilityEffectID = 0;
+            uint16 Flags = 0;
+            uint16 SourceAuraInstanceID = 0;
+            uint16 TurnInstanceID = 0;
+            uint8 EffectType = 0;
+            int8 CasterPBOID = 0;
+            uint8 StackDepth = 0;
+            std::vector<PetBattleEffectTarget> Targets;
+        };
+
+        struct PetBattleActiveAbility
+        {
+            int32 AbilityID = 0;
+            int16 CooldownRemaining = 0;
+            int16 LockdownRemaining = 0;
+            uint8 AbilityIndex = 0;
+            uint8 Pboid = 0;
+        };
+
+        struct PetBattleActiveAura
+        {
+            int32 AbilityID = 0;
+            uint32 InstanceID = 0;
+            int32 RoundsRemaining = 0;
+            int32 CurrentRound = 0;
+            uint8 CasterPBOID = 0;
+        };
+
+        struct PetBattleState
+        {
+            uint32 StateID = 0;
+            int32 StateValue = 0;
+        };
+
+        struct PetBattleRoundResult
+        {
+            uint32 CurRound = 0;
+            uint8 NextPetBattleState = 0;
+            uint8 NextInputFlags[PET_BATTLE_PARTICIPANTS_COUNT] = { };
+            uint8 NextTrapStatus[PET_BATTLE_PARTICIPANTS_COUNT] = { };
+            uint16 RoundTimeSecs[PET_BATTLE_PARTICIPANTS_COUNT] = { };
+            std::vector<PetBattleEffect> Effects;
+            std::vector<PetBattleActiveAbility> Cooldowns;
+            std::vector<uint8> PetXDied;
+        };
+
+        struct PetBattlePetUpdate
+        {
+            ObjectGuid BattlePetGUID;
+            uint32 SpeciesID = 0;
+            uint32 DisplayID = 0;
+            uint32 CollarID = 0;
+            uint16 Level = 0;
+            uint16 Xp = 0;
+            int32 CurHealth = 0;
+            int32 MaxHealth = 0;
+            int32 Power = 0;
+            int32 Speed = 0;
+            uint32 NpcTeamMemberID = 0;
+            uint16 BreedQuality = 0;
+            uint16 StatusFlags = 0;
+            uint8 Slot = 0;
+            std::vector<PetBattleActiveAbility> Abilities;
+            std::vector<PetBattleActiveAura> Auras;
+            std::vector<PetBattleState> States;
+            std::string CustomName;
+        };
+
+        struct PetBattlePlayerUpdate
+        {
+            ObjectGuid CharacterID;
+            int32 TrapAbilityID = 0;
+            int32 TrapStatus = 0;
+            uint16 RoundTimeSecs = 0;
+            int8 FrontPet = 0;
+            uint8 InputFlags = 0;
+            std::vector<PetBattlePetUpdate> Pets;
+        };
+
+        struct PetBattleEnviroUpdate
+        {
+            std::vector<PetBattleActiveAura> Auras;
+            std::vector<PetBattleState> States;
+        };
+
+        struct PetBattleFullUpdate
+        {
+            PetBattlePlayerUpdate Players[PET_BATTLE_PARTICIPANTS_COUNT];
+            PetBattleEnviroUpdate Enviros[PET_BATTLE_ENVIRO_COUNT];
+            ObjectGuid InitialWildPetGUID;
+            uint32 NpcCreatureID = 0;
+            uint32 NpcDisplayID = 0;
+            uint32 CurRound = 0;
+            uint16 WaitingForFrontPetsMaxSecs = 30;
+            uint16 PvpMaxRoundTime = 30;
+            uint8 ForfeitPenalty = 0;
+            int8 CurPetBattleState = 0;
+            bool IsPVP = false;
+            bool CanAwardXP = false;
+        };
+
+        struct PetBattleFinalPet
+        {
+            ObjectGuid Guid;
+            uint16 Level = 0;
+            uint16 Xp = 0;
+            int32 Health = 0;
+            int32 MaxHealth = 0;
+            uint16 InitialLevel = 0;
+            uint8 Pboid = 0;
+            bool Captured = false;
+            bool Caged = false;
+            bool SeenAction = false;
+            bool AwardedXP = false;
+        };
+
+        struct PetBattleFinalRoundData
+        {
+            bool Abandoned = false;
+            bool PvpBattle = false;
+            bool Winner[PET_BATTLE_PARTICIPANTS_COUNT] = { };
+            uint32 NpcCreatureID[PET_BATTLE_PARTICIPANTS_COUNT] = { };
+            std::vector<PetBattleFinalPet> Pets;
+        };
+
+        class PetBattleRequestWild final : public ClientPacket
+        {
+        public:
+            explicit PetBattleRequestWild(WorldPacket&& packet) : ClientPacket(CMSG_PET_BATTLE_REQUEST_WILD, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid TargetGUID;
+            PetBattleLocation Location;
+        };
+
+        class PetBattleRequestUpdate final : public ClientPacket
+        {
+        public:
+            explicit PetBattleRequestUpdate(WorldPacket&& packet) : ClientPacket(CMSG_PET_BATTLE_REQUEST_UPDATE, std::move(packet)) { }
+
+            void Read() override;
+
+            ObjectGuid TargetGUID;
+            bool Canceled = false;
+        };
+
+        class PetBattleInput final : public ClientPacket
+        {
+        public:
+            explicit PetBattleInput(WorldPacket&& packet) : ClientPacket(CMSG_PET_BATTLE_INPUT, std::move(packet)) { }
+
+            void Read() override;
+
+            uint32 MoveType = 0;
+            int32 NewFrontPet = 0;
+            uint8 DebugFlags = 0;
+            uint8 BattleInterrupted = 0;
+            int32 AbilityID = 0;
+            uint32 Round = 0;
+            bool IgnoreAbandonPenalty = false;
+        };
+
+        class PetBattleReplaceFrontPet final : public ClientPacket
+        {
+        public:
+            explicit PetBattleReplaceFrontPet(WorldPacket&& packet) : ClientPacket(CMSG_PET_BATTLE_REPLACE_FRONT_PET, std::move(packet)) { }
+
+            void Read() override;
+
+            uint8 FrontPet = 0;
+        };
+
+        class PetBattleQuitNotify final : public ClientPacket
+        {
+        public:
+            explicit PetBattleQuitNotify(WorldPacket&& packet) : ClientPacket(CMSG_PET_BATTLE_QUIT_NOTIFY, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        class PetBattleFinalNotify final : public ClientPacket
+        {
+        public:
+            explicit PetBattleFinalNotify(WorldPacket&& packet) : ClientPacket(CMSG_PET_BATTLE_FINAL_NOTIFY, std::move(packet)) { }
+
+            void Read() override { }
+        };
+
+        class PetBattleRequestFailed final : public ServerPacket
+        {
+        public:
+            PetBattleRequestFailed() : ServerPacket(SMSG_PET_BATTLE_REQUEST_FAILED, 1) { }
+
+            WorldPacket const* Write() override;
+
+            uint8 Reason = 0;
+        };
+
+        class PetBattleFinalizeLocation final : public ServerPacket
+        {
+        public:
+            PetBattleFinalizeLocation() : ServerPacket(SMSG_PET_BATTLE_FINALIZE_LOCATION, 44) { }
+
+            WorldPacket const* Write() override;
+
+            PetBattleLocation Location;
+        };
+
+        class PetBattleInitialUpdate final : public ServerPacket
+        {
+        public:
+            PetBattleInitialUpdate() : ServerPacket(SMSG_PET_BATTLE_INITIAL_UPDATE) { }
+
+            WorldPacket const* Write() override;
+
+            PetBattleFullUpdate MsgData;
+        };
+
+        class PetBattleRound final : public ServerPacket
+        {
+        public:
+            explicit PetBattleRound(OpcodeServer opcode) : ServerPacket(opcode) { }
+
+            WorldPacket const* Write() override;
+
+            PetBattleRoundResult MsgData;
+        };
+
+        class PetBattleFinalRound final : public ServerPacket
+        {
+        public:
+            PetBattleFinalRound() : ServerPacket(SMSG_PET_BATTLE_FINAL_ROUND) { }
+
+            WorldPacket const* Write() override;
+
+            PetBattleFinalRoundData MsgData;
+        };
+
+        class PetBattleFinished final : public ServerPacket
+        {
+        public:
+            PetBattleFinished() : ServerPacket(SMSG_PET_BATTLE_FINISHED, 0) { }
+
+            WorldPacket const* Write() override { return &_worldPacket; }
         };
     }
 }
