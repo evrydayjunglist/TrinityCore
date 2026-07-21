@@ -25850,39 +25850,32 @@ void Player::LearnSkyridingV1()
     // Skyriding V1 (Phase V1) — auto-grant on login. Retail teaches these via the Skyriding intro
     // quest chain; that unlock path is NYI (later phase). This build is data-complete for Skyriding
     // (FlightCapability / dragonriding MountCapability / abilities all present in DB2), so V1 just:
-    //   - completes TraitCond::Granted unlock achievements for Dragonriding TraitTree 672 (quest NYI),
     //   - learns "Skyriding Basics" (376777) — required as ReqSpellKnownID by dragonriding MountCapability,
-    //     and ensures CREATE_TRAIT_TREE_CONFIG 384557 creates/applies TraitSystem 1 / tree 672
-    //     (retail TraitDefinition grants incl. 376359 Whirling Surge teach wrapper),
+    //     and ensures CREATE_TRAIT_TREE_CONFIG 384557 creates/applies TraitSystem 1 / tree 672,
     //   - learns the core active abilities (Surge Forward / Skyward Ascent / Whirling Surge /
-    //     Aerial Halt / Upward Flap / Second Wind) as a playability bridge while trait spend stays Phase T,
+    //     Aerial Halt / Upward Flap / Second Wind) plus teach wrapper 376359 as a playability bridge
+    //     while trait spend / TraitCond::Granted campaign unlocks stay Phase T,
     //   - applies effect 0 of "Dragonrider Energy" (372773) — the caster-aura every active ability
     //     requires via SpellAuraRestrictions. Midnight does not apply the obsolete periodic Vigor
     //     effect 1; its resource economy is SpellCategory 2391's six shared charges.
     // Combined with no longer forcing "Flight Style: Steady" (see _LoadAuras), a Skyriding-capable
     // mount now drives AdvFlying instead of old flight. See docs/midnight-assessment/skyriding/.
+    //
+    // Do not CompletedAchievement() for TraitCond unlock IDs (15797/40172/61554/61553): those include
+    // visible account-wide achievements (e.g. 15797 "An Azure Ally", 10 points, ACHIEVEMENT_FLAG_ACCOUNT)
+    // and would permanently credit every login via AccountAchievementMgr::CompletedAchievement + RewardAchievement.
     constexpr uint32 SKYRIDING_BASICS = 376777;
     constexpr uint32 CREATE_DRAGONRIDING_TRAITS_LOADOUT = 384557; // SpellEffect CREATE_TRAIT_TREE_CONFIG → TraitTree 672
     constexpr uint32 DRAGONRIDER_ENERGY = 372773;
-    static constexpr uint32 skyridingAbilities[] = { 372608, 372610, 361584, 403092, 401671, 425782 };
-    // TraitCond::Granted on tree 672 starter nodes (EvryDb2Export 12.0.7.67808 TraitCond):
-    //   15797 An Azure Ally → 376359; 40172 Dynamic Flight Power 1 → 376777/383363/383366;
-    //   61554/61553 → Aerial Halt / Second Wind. Retail earns these via campaign / scripts; V1 bridges.
-    static constexpr uint32 skyridingTraitUnlockAchievements[] = { 15797, 40172, 61554, 61553 };
-
-    for (uint32 achievementId : skyridingTraitUnlockAchievements)
-    {
-        if (HasAchieved(achievementId))
-            continue;
-        if (AchievementEntry const* achievement = sAchievementStore.LookupEntry(achievementId))
-            CompletedAchievement(achievement);
-    }
+    // 376359: Whirling Surge teach wrapper (retail TraitCond::Granted via ach 15797); learn directly
+    // instead of forging that achievement. Active abilities remain the playability bridge.
+    static constexpr uint32 skyridingAbilities[] = { 376359, 372608, 372610, 361584, 403092, 401671, 425782 };
 
     if (!HasSpell(SKYRIDING_BASICS))
         LearnSpell(SKYRIDING_BASICS, false);
 
     // Basics FORCE_CASTs 384557, but already-known Basics never re-fire that effect. Always ensure
-    // the Dragonriding Traits loadout exists and Granted ranks (incl. 376359) are applied.
+    // the Dragonriding Traits loadout exists; Granted ranks gated by campaign achievements stay NYI.
     CastSpell(this, CREATE_DRAGONRIDING_TRAITS_LOADOUT, true);
 
     for (uint32 abilityId : skyridingAbilities)
