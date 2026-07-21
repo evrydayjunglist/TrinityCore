@@ -35,7 +35,10 @@ enum BattlePetMisc
 
     SPELL_BATTLE_PET_TRAINING           = 125610,
     SPELL_REVIVE_BATTLE_PETS            = 125439,
-    SPELL_SUMMON_BATTLE_PET             = 118301
+    SPELL_SUMMON_BATTLE_PET             = 118301,
+
+    // Quest objective "Win a Pet Battle" (Learning the Ropes 31308/31548/… and siblings)
+    NPC_KILL_CREDIT_WIN_A_PET_BATTLE    = 65355
 };
 
 static constexpr uint16 MAX_BATTLE_PET_LEVEL = 25;

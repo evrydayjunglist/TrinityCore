@@ -673,6 +673,10 @@ void PetBattle::WriteJournalResults()
     if (!mgr)
         return;
 
+    Player* player = _owner->GetPlayer();
+    if (!player)
+        return;
+
     uint16 wildLevel = _wildTeam.empty() ? 0 : _wildTeam.front().Level;
 
     std::vector<std::reference_wrapper<BattlePet const>> updates;
@@ -701,5 +705,19 @@ void PetBattle::WriteJournalResults()
     // NYI: post-battle auto HealBattlePetsPct / spell 125439 (PB-W4: no auto revive in sniff).
     if (!updates.empty())
         mgr->SendUpdates(updates, false);
+
+    // Real decisive outcome only — forfeit sets _finalAbandoned and must not grant quest credit.
+    // Newbie (7433) / Just a Pup (6566) unlock slots via BattlePetReachLevel from XP above;
+    // WinPetBattle feeds win-count achievements (e.g. Experienced Pet Battler).
+    if (_finalAbandoned)
+        return;
+
+    if (_finalPlayerWon)
+    {
+        player->UpdateCriteria(CriteriaType::WinPetBattle, 1);
+        player->KilledMonsterCredit(NPC_KILL_CREDIT_WIN_A_PET_BATTLE);
+    }
+    else
+        player->UpdateCriteria(CriteriaType::LosePetBattle, 1);
 }
 }
