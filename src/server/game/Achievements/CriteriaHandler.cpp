@@ -569,6 +569,8 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::SellItemsToVendors:
         case CriteriaType::ReachMaxLevel:
         case CriteriaType::LearnTaxiNode:
+        case CriteriaType::WinPetBattle:
+        case CriteriaType::LosePetBattle:
             SetCriteriaProgress(criteria, 1, referencePlayer, PROGRESS_ACCUMULATE);
             break;
         // std case: increment at miscValue1
@@ -831,7 +833,6 @@ void CriteriaHandler::UpdateCriteria(Criteria const* criteria, uint64 miscValue1
         case CriteriaType::KickTargetInLFRDungeon:
         case CriteriaType::GroupedTankLeftEarlyInLFRDungeon:
         case CriteriaType::AccountObtainPetThroughBattle:
-        case CriteriaType::WinPetBattle:
         case CriteriaType::PlayerObtainPetThroughBattle:
         case CriteriaType::ActivateGarrisonBuilding:
         case CriteriaType::UpgradeGarrison:
@@ -1253,6 +1254,8 @@ bool CriteriaHandler::IsCompletedCriteria(Criteria const* criteria, uint64 requi
         case CriteriaType::ReachRenownLevel:
         case CriteriaType::BankTabPurchased:
         case CriteriaType::LearnTaxiNode:
+        case CriteriaType::WinPetBattle:
+        case CriteriaType::LosePetBattle:
             return progress->Counter >= requiredAmount;
         case CriteriaType::EarnAchievement:
         case CriteriaType::CompleteQuest:
