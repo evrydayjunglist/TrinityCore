@@ -231,6 +231,8 @@ ByteBuffer& operator<<(ByteBuffer& data, PetBattleLocation const& location)
 
 ByteBuffer& operator<<(ByteBuffer& data, PetBattleEffectTarget const& target)
 {
+    // Match BfaCore / retail: byte-align, then 4-bit Type (WPP's Bits<3> mis-reads Midnight).
+    data.FlushBits();
     data << Bits<4>(target.Type);
     data << int8(target.Petx);
 
@@ -243,7 +245,7 @@ ByteBuffer& operator<<(ByteBuffer& data, PetBattleEffectTarget const& target)
             data << int32(target.StateID);
             data << int32(target.StateValue);
             break;
-        default: // FRONT_PET and others carry no extra payload in V1
+        default: // FRONT_PET (0) and others carry no extra payload in V1
             break;
     }
 
@@ -452,6 +454,9 @@ WorldPacket const* PetBattleInitialUpdate::Write()
 
 WorldPacket const* PetBattleRound::Write()
 {
+    // Wire order from PB-W1 FIRST_ROUND hex + WPP ReadPetBattleRoundResult:
+    // EffectsCount → team flags → CooldownsCount → Effects[] → Cooldowns[] → PetXDied bits.
+    // (Older BfaCore wrote cooldowns/bits before effects; that shifts Midnight readers.)
     _worldPacket << uint32(MsgData.CurRound);
     _worldPacket << uint8(MsgData.NextPetBattleState);
     _worldPacket << uint32(MsgData.Effects.size());
@@ -464,14 +469,15 @@ WorldPacket const* PetBattleRound::Write()
     }
 
     _worldPacket << uint32(MsgData.Cooldowns.size());
+
+    for (PetBattleEffect const& effect : MsgData.Effects)
+        _worldPacket << effect;
+
     for (PetBattleActiveAbility const& cooldown : MsgData.Cooldowns)
         _worldPacket << cooldown;
 
     _worldPacket << Bits<3>(uint32(MsgData.PetXDied.size()));
     _worldPacket.FlushBits();
-
-    for (PetBattleEffect const& effect : MsgData.Effects)
-        _worldPacket << effect;
 
     for (uint8 petX : MsgData.PetXDied)
         _worldPacket << uint8(petX);
