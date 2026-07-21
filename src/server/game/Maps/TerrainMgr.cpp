@@ -665,7 +665,8 @@ void TerrainInfo::GetZoneAndAreaId(PhaseShift const& phaseShift, uint32 mapId, u
 
 float TerrainInfo::GetMinHeight(PhaseShift const& phaseShift, uint32 mapId, float x, float y)
 {
-    if (GridMap const* grid = GetGrid(PhasingHandler::GetTerrainMapId(phaseShift, mapId, this, x, y), x, y))
+    // Probe only — do not cold-load map/VMAP on the map tick (FreezeDetector class 4).
+    if (GridMap const* grid = GetGrid(PhasingHandler::GetTerrainMapId(phaseShift, mapId, this, x, y), x, y, false))
         return grid->getMinHeight(x, y);
 
     return -500.0f;
@@ -673,7 +674,11 @@ float TerrainInfo::GetMinHeight(PhaseShift const& phaseShift, uint32 mapId, floa
 
 float TerrainInfo::GetGridHeight(PhaseShift const& phaseShift, uint32 mapId, float x, float y)
 {
-    if (GridMap* gmap = GetGrid(PhasingHandler::GetTerrainMapId(phaseShift, mapId, this, x, y), x, y))
+    // Height probes must not imply TerrainInfo::LoadMapAndVMapImpl. Grids become resident via
+    // EnsureGridCreated / EnsureGridLoaded; pathing/Z-normalize on a cold neighbour must fail
+    // soft (invalid height / retry) instead of blocking OpenMapTileFile on the MapUpdater worker
+    // (FreezeDetector class 4 — RandomMovement → GetHeight → LoadVMap).
+    if (GridMap* gmap = GetGrid(PhasingHandler::GetTerrainMapId(phaseShift, mapId, this, x, y), x, y, false))
         return gmap->getHeight(x, y);
 
     return VMAP_INVALID_HEIGHT_VALUE;

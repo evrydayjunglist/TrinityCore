@@ -91,6 +91,7 @@ public:
     void GetZoneAndAreaId(PhaseShift const& phaseShift, uint32 mapId, uint32& zoneid, uint32& areaid, float x, float y, float z, DynamicMapTree const* dynamicMapTree = nullptr);
     void GetZoneAndAreaId(PhaseShift const& phaseShift, uint32 mapId, uint32& zoneid, uint32& areaid, Position const& pos, DynamicMapTree const* dynamicMapTree = nullptr) { GetZoneAndAreaId(phaseShift, mapId, zoneid, areaid, pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), dynamicMapTree); }
 
+    // Height probes: never cold-load via GetGrid(loadIfMissing=true). See TerrainMgr.cpp.
     float GetMinHeight(PhaseShift const& phaseShift, uint32 mapId, float x, float y);
     float GetGridHeight(PhaseShift const& phaseShift, uint32 mapId, float x, float y);
     float GetStaticHeight(PhaseShift const& phaseShift, uint32 mapId, float x, float y, float z, bool checkVMap = true, float maxSearchDist = DEFAULT_HEIGHT_SEARCH);
