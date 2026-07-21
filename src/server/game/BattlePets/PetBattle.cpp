@@ -41,7 +41,11 @@ constexpr uint8 PET_BATTLE_WILD_PBOID = 3;
 // team input flags (BfaCore PetBattleTeamInputFlags)
 constexpr uint8 PET_BATTLE_INPUT_FLAG_SELECT_NEW_PET = 0x08;
 
-// effect target type (BfaCore PetBattleEffectTargetType)
+// effect / target types (BfaCore PetBattleEffectTargetType / ePetBattleEvents)
+// Midnight PB-W1 FIRST_ROUND hex uses EffectType 0 with FRONT_PET targets for the
+// initial lock-in (BfaCore names that PET_SWAP=4 on older builds — do not invent 4 here).
+constexpr uint8 PET_BATTLE_EFFECT_TYPE_FRONT_PET_LOCK = 0;
+constexpr uint8 PET_BATTLE_EFFECT_TARGET_FRONT_PET = 0;
 constexpr uint8 PET_BATTLE_EFFECT_TARGET_PET = 3;
 
 // abilityId -> { base damage points, damage BattlePetAbilityEffect.ID }
@@ -372,6 +376,26 @@ void PetBattle::SendFirstRound()
     packet.MsgData.NextTrapStatus[0] = 4;
     packet.MsgData.NextInputFlags[1] = 0;
     packet.MsgData.NextTrapStatus[1] = 2;
+
+    // PB-W1 FIRST_ROUND is non-empty (~82 B): initial front-pet lock effects before input.
+    // Empty EffectsCount was a likely post-BreedQuality client crash (REPLACE → FIRST_ROUND).
+    auto makeFrontPetLock = [](int8 pboid)
+    {
+        WorldPackets::BattlePet::PetBattleEffect effect;
+        effect.EffectType = PET_BATTLE_EFFECT_TYPE_FRONT_PET_LOCK;
+        effect.CasterPBOID = pboid;
+        WorldPackets::BattlePet::PetBattleEffectTarget target;
+        target.Type = PET_BATTLE_EFFECT_TARGET_FRONT_PET;
+        target.Petx = pboid;
+        effect.Targets.push_back(target);
+        return effect;
+    };
+
+    if (PetBattleCombatant const* playerPet = GetActivePlayerPet())
+        packet.MsgData.Effects.push_back(makeFrontPetLock(int8(playerPet->Pboid)));
+    if (PetBattleCombatant const* wildPet = GetActiveWildPet())
+        packet.MsgData.Effects.push_back(makeFrontPetLock(int8(wildPet->Pboid)));
+
     _owner->SendPacket(packet.Write());
 }
 
