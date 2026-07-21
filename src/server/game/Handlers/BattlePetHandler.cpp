@@ -166,7 +166,7 @@ void WorldSession::HandlePetBattleRequestWild(WorldPackets::BattlePet::PetBattle
 
 void WorldSession::HandlePetBattleRequestUpdate(WorldPackets::BattlePet::PetBattleRequestUpdate& /*petBattleRequestUpdate*/)
 {
-    // V1: no queued/pending update state to reconcile.
+    // NYI: reconcile pending/queued battle state (V1 wild path has nothing to answer yet).
 }
 
 void WorldSession::HandlePetBattleInput(WorldPackets::BattlePet::PetBattleInput& petBattleInput)

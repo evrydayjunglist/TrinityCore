@@ -105,13 +105,14 @@ private:
     void SendInitialUpdate();
     void SendFirstRound();
     void SendRoundResult(std::vector<WorldPackets::BattlePet::PetBattleEffect> effects, std::vector<uint8> petsDied, bool awaitingReplacement);
+    void SendReplacementsMade();
 
     void ResolveRound(uint32 playerAbilityId, bool playerPasses, std::vector<WorldPackets::BattlePet::PetBattleEffect>& effects, std::vector<uint8>& petsDied);
     uint32 PickWildAbility(PetBattleCombatant const& wild) const;
     int32 ApplyAbilityDamage(PetBattleCombatant const& caster, PetBattleCombatant& target, uint32 abilityId, std::vector<WorldPackets::BattlePet::PetBattleEffect>& effects);
 
     void FinishBattle(bool playerWon, bool abandoned);
-    void WriteJournalResults(bool playerWon);
+    void WriteJournalResults();
 
     WorldSession* _owner;
     PetBattleStatus _status = PetBattleStatus::Creation;

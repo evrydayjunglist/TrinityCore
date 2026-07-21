@@ -129,6 +129,7 @@ std::vector<PetBattleCombatantAbility> PickAbilities(uint32 speciesId, uint16 le
         }
     }
 
+    // NYI: Ability.Cooldown / CooldownRemaining tracking across rounds.
     std::vector<PetBattleCombatantAbility> abilities;
     for (uint8 slot = 0; slot < 3; ++slot)
         if (slots[slot].Set)
@@ -137,7 +138,9 @@ std::vector<PetBattleCombatantAbility> PickAbilities(uint32 speciesId, uint16 le
     return abilities;
 }
 
-// XP a killer pet earns for defeating a target (BfaCore BattlePetInstance::GetXPEarn).
+// owner-approved stub: XP amount from BfaCore BattlePetInstance::GetXPEarn (lead only).
+// Wire flag AwardedXP follows PB-W2/W4 (SeenAction && !abandoned); amount not re-verified
+// against Midnight sniff XP deltas yet.
 uint32 GetXPEarn(uint16 killerLevel, uint16 targetLevel)
 {
     int32 levelDiff = int32(targetLevel) - int32(killerLevel);
@@ -301,8 +304,8 @@ void PetBattle::BuildPetUpdate(PetBattleCombatant const& combatant, WorldPackets
         out.Abilities.push_back(active);
     }
 
-    // Minimal stat states (18 Power / 19 Stamina / 20 Speed) + slice marker 40. V1 does not
-    // emit the full raw species/breed state table.
+    // NYI: full species/breed BattlePetState table. V1 emits only Power / Stamina / Speed
+    // plus state 40 (slice marker observed in INITIAL_UPDATE).
     out.States.push_back({ STATE_STAT_POWER, combatant.Power });
     out.States.push_back({ STATE_STAT_STAMINA, combatant.MaxHealth });
     out.States.push_back({ STATE_STAT_SPEED, combatant.Speed });
@@ -355,7 +358,7 @@ void PetBattle::SendInitialUpdate()
     msg.ForfeitPenalty = 10;
     msg.CurPetBattleState = 1;
     msg.IsPVP = false;
-    msg.CanAwardXP = false;
+    msg.CanAwardXP = false; // PB-W2 INITIAL_UPDATE: CanAwardXP False (XP still via FINAL_ROUND AwardedXP)
 
     _owner->SendPacket(packet.Write());
 }
@@ -386,6 +389,20 @@ void PetBattle::SendRoundResult(std::vector<WorldPackets::BattlePet::PetBattleEf
     _owner->SendPacket(packet.Write());
 }
 
+void PetBattle::SendReplacementsMade()
+{
+    // Announce the swap; no damage exchanged on the replacement/voluntary-swap packet
+    // (PB-W4: REPLACE_FRONT_PET → REPLACEMENTS_MADE).
+    WorldPackets::BattlePet::PetBattleRound packet(SMSG_PET_BATTLE_REPLACEMENTS_MADE);
+    packet.MsgData.CurRound = _round;
+    packet.MsgData.NextPetBattleState = 2;
+    packet.MsgData.NextInputFlags[0] = 0;
+    packet.MsgData.NextTrapStatus[0] = 4;
+    packet.MsgData.NextInputFlags[1] = 0;
+    packet.MsgData.NextTrapStatus[1] = 2;
+    _owner->SendPacket(packet.Write());
+}
+
 void PetBattle::HandleReplaceFrontPet(uint8 frontPet)
 {
     if (_status == PetBattleStatus::Creation)
@@ -404,16 +421,18 @@ void PetBattle::HandleReplaceFrontPet(uint8 frontPet)
             _playerActive = frontPet;
 
         _status = PetBattleStatus::Running;
+        SendReplacementsMade();
+        return;
+    }
 
-        // Announce the swap; no damage exchanged on the replacement round.
-        WorldPackets::BattlePet::PetBattleRound packet(SMSG_PET_BATTLE_REPLACEMENTS_MADE);
-        packet.MsgData.CurRound = _round;
-        packet.MsgData.NextPetBattleState = 2;
-        packet.MsgData.NextInputFlags[0] = 0;
-        packet.MsgData.NextTrapStatus[0] = 4;
-        packet.MsgData.NextInputFlags[1] = 0;
-        packet.MsgData.NextTrapStatus[1] = 2;
-        _owner->SendPacket(packet.Write());
+    // PB-W4: voluntary mid-battle REPLACE_FRONT_PET while Running → REPLACEMENTS_MADE.
+    if (_status == PetBattleStatus::Running)
+    {
+        if (frontPet >= _playerTeam.size() || !_playerTeam[frontPet].IsAlive() || frontPet == _playerActive)
+            return;
+
+        _playerActive = frontPet;
+        SendReplacementsMade();
     }
 }
 
@@ -439,13 +458,16 @@ int32 PetBattle::ApplyAbilityDamage(PetBattleCombatant const& caster, PetBattleC
     std::unordered_map<uint32, std::pair<int32, uint32>> const& damageMap = GetAbilityDamageMap();
     auto itr = damageMap.find(abilityId);
     if (itr == damageMap.end() || itr->second.first <= 0)
-        return 0; // utility ability - no damage modelled in V1
+        return 0; // NYI: non-damage / utility BattlePetAbilityEffect catalog (buffs, auras, weather)
 
     int32 points = itr->second.first;
     uint32 effectId = itr->second.second;
 
-    // Retail-like damage (BfaCore PetBattleAbilityEffect::CalculateDamage, simplified for V1:
-    // Power scaling + pet-type effectiveness; no crit / passive / flat-state modifiers).
+    // owner-approved stub: provisional V1 damage for playtest.
+    // Lead: BfaCore PetBattleAbilityEffect::CalculateDamage (Power% + TypeDamageMod).
+    // DB2 inputs: AbilityEffect.Param[0] (Points), Ability.PetTypeEnum, gtBattlePetTypeDamageMod.
+    // NYI / not yet re-verified vs Midnight sniff HP deltas: crit, passives, flat state mods,
+    // multi-effect turns. Do not treat as retail-like until Phase 2A HP-delta pass.
     int32 damage = points;
     int32 modPct = CalculatePct(caster.Power, 5);
     damage += CalculatePct(damage, modPct);
@@ -505,7 +527,7 @@ void PetBattle::ResolveRound(uint32 playerAbilityId, bool playerPasses, std::vec
             ApplyAbilityDamage(*wildPet, *playerPet, wildAbilityId, effects);
     };
 
-    // Higher Speed acts first; ties resolve to the player (tie ordering is a V1 choice / NYI).
+    // Higher Speed acts first. NYI: retail speed-tie ordering (V1 always prefers the player).
     if (playerPet->Speed >= wildPet->Speed)
     {
         castPlayer();
@@ -537,7 +559,8 @@ void PetBattle::HandleInput(WorldPackets::BattlePet::PetBattleInput const& input
         return;
     }
 
-    // Trap always fails in V1 (capture chance math is NYI); treat it as a pass.
+    // NYI: trap success/fail outcomes + capture chance math (PB-W5/W6 wire known; % not).
+    // V1 treats MoveType 3 as a pass so the round loop stays playable without inventing %.
     bool playerPasses = input.MoveType == PET_BATTLE_INPUT_MOVE_PASS || input.MoveType == PET_BATTLE_INPUT_MOVE_TRAP;
     uint32 abilityId = input.MoveType == PET_BATTLE_INPUT_MOVE_ABILITY ? uint32(input.AbilityID) : 0u;
 
@@ -597,7 +620,8 @@ void PetBattle::FinishBattle(bool playerWon, bool abandoned)
 
     for (PetBattleCombatant& combatant : _playerTeam)
     {
-        combatant.AwardedXP = playerWon && combatant.SeenAction;
+        // PB-W2/W4: AwardedXP tracks SeenAction, not Winner. PB-W1 forfeit: AwardedXP false.
+        combatant.AwardedXP = combatant.SeenAction && !abandoned;
 
         WorldPackets::BattlePet::PetBattleFinalPet finalPet;
         finalPet.Guid = combatant.JournalGuid;
@@ -639,11 +663,11 @@ void PetBattle::HandleFinalNotify()
     WorldPackets::BattlePet::PetBattleFinished finished;
     _owner->SendPacket(finished.Write());
 
-    WriteJournalResults(_finalPlayerWon);
+    WriteJournalResults();
     _status = PetBattleStatus::Finished;
 }
 
-void PetBattle::WriteJournalResults(bool playerWon)
+void PetBattle::WriteJournalResults()
 {
     BattlePetMgr* mgr = _owner->GetBattlePetMgr();
     if (!mgr)
@@ -660,7 +684,8 @@ void PetBattle::WriteJournalResults(bool playerWon)
 
         // GrantBattlePetExperience recalculates stats and resets Health to MaxHealth, so award
         // XP first, then re-apply the injured Health persisted from the battle.
-        if (playerWon && combatant.AwardedXP)
+        // PB-W4: grant when AwardedXP (lose still awards); forfeit leaves AwardedXP false.
+        if (combatant.AwardedXP)
         {
             if (uint32 xp = GetXPEarn(combatant.Level, wildLevel))
                 mgr->GrantBattlePetExperience(combatant.JournalGuid, uint16(std::min<uint32>(xp, 0xFFFF)), BattlePetXpSource::PetBattle);
@@ -673,6 +698,7 @@ void PetBattle::WriteJournalResults(bool playerWon)
         updates.push_back(*journalPet);
     }
 
+    // NYI: post-battle auto HealBattlePetsPct / spell 125439 (PB-W4: no auto revive in sniff).
     if (!updates.empty())
         mgr->SendUpdates(updates, false);
 }
