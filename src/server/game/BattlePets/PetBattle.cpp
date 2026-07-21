@@ -48,6 +48,22 @@ constexpr uint8 PET_BATTLE_EFFECT_TYPE_FRONT_PET_LOCK = 0;
 constexpr uint8 PET_BATTLE_EFFECT_TARGET_FRONT_PET = 0;
 constexpr uint8 PET_BATTLE_EFFECT_TARGET_PET = 3;
 
+// PB-W FIRST_ROUND / ROUND_RESULT effect0: 4× FRONT_PET petx {0,0,1,0} (constant retail hex).
+WorldPackets::BattlePet::PetBattleEffect MakeRetailFrontPetLockEffect()
+{
+    WorldPackets::BattlePet::PetBattleEffect frontLock;
+    frontLock.EffectType = PET_BATTLE_EFFECT_TYPE_FRONT_PET_LOCK;
+    frontLock.CasterPBOID = 0;
+    for (int8 petx : { int8(0), int8(0), int8(1), int8(0) })
+    {
+        WorldPackets::BattlePet::PetBattleEffectTarget target;
+        target.Type = PET_BATTLE_EFFECT_TARGET_FRONT_PET;
+        target.Petx = petx;
+        frontLock.Targets.push_back(target);
+    }
+    return frontLock;
+}
+
 // abilityId -> { base damage points, damage BattlePetAbilityEffect.ID }
 std::unordered_map<uint32, std::pair<int32, uint32>> const& GetAbilityDamageMap()
 {
@@ -379,19 +395,8 @@ void PetBattle::SendFirstRound()
 
     // PB-W1..W6 FIRST_ROUND is always 82 B. Empty (22 B) passed REPLACE but crashed on
     // ROUND_RESULT (pbu3). Two single-target locks (60 B) crashed on FIRST_ROUND (pbu4).
-    // Retail hex (constant across wild starts): effect0 with 4 FRONT_PET targets
-    // petx {0,0,1,0}, empty effect1, then 18 B after PetXDied that WPP leaves unread.
-    WorldPackets::BattlePet::PetBattleEffect frontLock;
-    frontLock.EffectType = PET_BATTLE_EFFECT_TYPE_FRONT_PET_LOCK;
-    frontLock.CasterPBOID = 0;
-    for (int8 petx : { int8(0), int8(0), int8(1), int8(0) })
-    {
-        WorldPackets::BattlePet::PetBattleEffectTarget target;
-        target.Type = PET_BATTLE_EFFECT_TARGET_FRONT_PET;
-        target.Petx = petx;
-        frontLock.Targets.push_back(target);
-    }
-    packet.MsgData.Effects.push_back(std::move(frontLock));
+    // Retail hex: effect0 4× FRONT_PET {0,0,1,0}, empty effect1, 18 B trailer after PetXDied.
+    packet.MsgData.Effects.push_back(MakeRetailFrontPetLockEffect());
     packet.MsgData.Effects.emplace_back(); // empty effect1 (caster 0, no targets)
 
     packet.MsgData.TrailingBytes = {
@@ -412,7 +417,12 @@ void PetBattle::SendRoundResult(std::vector<WorldPackets::BattlePet::PetBattleEf
     packet.MsgData.NextTrapStatus[0] = 4;
     packet.MsgData.NextInputFlags[1] = 0;
     packet.MsgData.NextTrapStatus[1] = 2;
-    packet.MsgData.Effects = std::move(effects);
+    // PB-W ROUND_RESULT (cdc=0) also leads with the same 4× FRONT_PET lock effect0 as
+    // FIRST_ROUND. Sending bare damage effects alone crashed on ability use (same null+4
+    // site as pbu4 FIRST_ROUND) — dump 2026-07-21_16.23.15.
+    packet.MsgData.Effects.push_back(MakeRetailFrontPetLockEffect());
+    for (WorldPackets::BattlePet::PetBattleEffect& effect : effects)
+        packet.MsgData.Effects.push_back(std::move(effect));
     packet.MsgData.PetXDied = std::move(petsDied);
     _owner->SendPacket(packet.Write());
 }
@@ -518,8 +528,9 @@ int32 PetBattle::ApplyAbilityDamage(PetBattleCombatant const& caster, PetBattleC
 
     WorldPackets::BattlePet::PetBattleEffect effect;
     effect.AbilityEffectID = effectId;
-    effect.EffectType = 0; // set health
+    effect.EffectType = 0; // set health (BfaCore PETBATTLE_EVENT_SET_HEALTH)
     effect.CasterPBOID = int8(caster.Pboid);
+    effect.StackDepth = 1;
 
     WorldPackets::BattlePet::PetBattleEffectTarget effectTarget;
     effectTarget.Type = PET_BATTLE_EFFECT_TARGET_PET;
