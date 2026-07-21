@@ -740,7 +740,8 @@ struct BattlePetSpeciesXAbilityLoadInfo
         { .IsSigned = false, .Type = FT_SHORT, .Name = "BattlePetAbilityID" },
         { .IsSigned = false, .Type = FT_BYTE, .Name = "RequiredLevel" },
         { .IsSigned = true, .Type = FT_BYTE, .Name = "SlotEnum" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "BattlePetSpeciesID" },
+        // ParentIndexField — DB2Meta::IsSignedField always treats parent as unsigned
+        { .IsSigned = false, .Type = FT_INT, .Name = "BattlePetSpeciesID" },
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 5, &BattlePetSpeciesXAbilityMeta::Instance, HOTFIX_SEL_BATTLE_PET_SPECIES_X_ABILITY };
@@ -825,7 +826,8 @@ struct BattlePetAbilityStateLoadInfo
         { .IsSigned = false, .Type = FT_INT, .Name = "ID" },
         { .IsSigned = false, .Type = FT_INT, .Name = "BattlePetStateID" },
         { .IsSigned = true, .Type = FT_INT, .Name = "Value" },
-        { .IsSigned = true, .Type = FT_INT, .Name = "BattlePetAbilityID" },
+        // ParentIndexField — DB2Meta::IsSignedField always treats parent as unsigned
+        { .IsSigned = false, .Type = FT_INT, .Name = "BattlePetAbilityID" },
     };
 
     static constexpr DB2LoadInfo Instance{ Fields, 4, &BattlePetAbilityStateMeta::Instance, HOTFIX_SEL_BATTLE_PET_ABILITY_STATE };
