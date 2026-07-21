@@ -354,7 +354,7 @@ namespace WorldPackets
             int32 Power = 0;
             int32 Speed = 0;
             uint32 NpcTeamMemberID = 0;
-            uint16 BreedQuality = 0;
+            uint8 BreedQuality = 0; // TWW+: 1 byte on wire (journal Quality already uint8)
             uint16 StatusFlags = 0;
             uint8 Slot = 0;
             std::vector<PetBattleActiveAbility> Abilities;

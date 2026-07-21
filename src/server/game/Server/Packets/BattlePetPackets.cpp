@@ -309,7 +309,7 @@ ByteBuffer& operator<<(ByteBuffer& data, PetBattlePetUpdate const& pet)
     data << int32(pet.Power);
     data << int32(pet.Speed);
     data << uint32(pet.NpcTeamMemberID);
-    data << uint16(pet.BreedQuality);
+    data << uint8(pet.BreedQuality);
     data << uint16(pet.StatusFlags);
     data << uint8(pet.Slot);
     data << Size<uint32>(pet.Abilities);
