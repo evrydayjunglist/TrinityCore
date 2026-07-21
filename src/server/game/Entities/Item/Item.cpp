@@ -2237,6 +2237,11 @@ uint32 Item::GetSellPrice(Player const* owner, bool forVendor /*= false*/) const
     int64 price = Item::GetSellPrice(itemTemplate, GetQuality(), GetItemLevel(owner));
     if (forVendor)
     {
+        // Unsellable items (base sell price 0) must stay unsellable. The durability floor below
+        // would otherwise turn price 0 + repairCost 0 into 1 copper and bypass CanSellItemToVendor.
+        if (price <= 0)
+            return 0;
+
         std::span<ItemEffectEntry const* const> effects = GetEffects();
         auto effectWithCharges = std::ranges::find_if(effects,
             [](ItemEffectEntry const* itemEffect) { return itemEffect->SpellID && itemEffect->TriggerType == ITEM_SPELLTRIGGER_ON_USE && itemEffect->Charges < 0; });
