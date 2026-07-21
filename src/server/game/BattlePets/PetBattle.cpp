@@ -377,24 +377,28 @@ void PetBattle::SendFirstRound()
     packet.MsgData.NextInputFlags[1] = 0;
     packet.MsgData.NextTrapStatus[1] = 2;
 
-    // PB-W1 FIRST_ROUND is non-empty (~82 B): initial front-pet lock effects before input.
-    // Empty EffectsCount was a likely post-BreedQuality client crash (REPLACE → FIRST_ROUND).
-    auto makeFrontPetLock = [](int8 pboid)
+    // PB-W1..W6 FIRST_ROUND is always 82 B. Empty (22 B) passed REPLACE but crashed on
+    // ROUND_RESULT (pbu3). Two single-target locks (60 B) crashed on FIRST_ROUND (pbu4).
+    // Retail hex (constant across wild starts): effect0 with 4 FRONT_PET targets
+    // petx {0,0,1,0}, empty effect1, then 18 B after PetXDied that WPP leaves unread.
+    WorldPackets::BattlePet::PetBattleEffect frontLock;
+    frontLock.EffectType = PET_BATTLE_EFFECT_TYPE_FRONT_PET_LOCK;
+    frontLock.CasterPBOID = 0;
+    for (int8 petx : { int8(0), int8(0), int8(1), int8(0) })
     {
-        WorldPackets::BattlePet::PetBattleEffect effect;
-        effect.EffectType = PET_BATTLE_EFFECT_TYPE_FRONT_PET_LOCK;
-        effect.CasterPBOID = pboid;
         WorldPackets::BattlePet::PetBattleEffectTarget target;
         target.Type = PET_BATTLE_EFFECT_TARGET_FRONT_PET;
-        target.Petx = pboid;
-        effect.Targets.push_back(target);
-        return effect;
-    };
+        target.Petx = petx;
+        frontLock.Targets.push_back(target);
+    }
+    packet.MsgData.Effects.push_back(std::move(frontLock));
+    packet.MsgData.Effects.emplace_back(); // empty effect1 (caster 0, no targets)
 
-    if (PetBattleCombatant const* playerPet = GetActivePlayerPet())
-        packet.MsgData.Effects.push_back(makeFrontPetLock(int8(playerPet->Pboid)));
-    if (PetBattleCombatant const* wildPet = GetActiveWildPet())
-        packet.MsgData.Effects.push_back(makeFrontPetLock(int8(wildPet->Pboid)));
+    packet.MsgData.TrailingBytes = {
+        0x04, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+        0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00,
+        0x00, 0x00
+    };
 
     _owner->SendPacket(packet.Write());
 }

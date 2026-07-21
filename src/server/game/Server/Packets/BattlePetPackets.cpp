@@ -482,6 +482,9 @@ WorldPacket const* PetBattleRound::Write()
     for (uint8 petX : MsgData.PetXDied)
         _worldPacket << uint8(petX);
 
+    if (!MsgData.TrailingBytes.empty())
+        _worldPacket.append(MsgData.TrailingBytes.data(), MsgData.TrailingBytes.size());
+
     return &_worldPacket;
 }
 
