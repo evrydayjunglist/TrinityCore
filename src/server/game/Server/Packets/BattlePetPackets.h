@@ -339,6 +339,8 @@ namespace WorldPackets
             std::vector<PetBattleEffect> Effects;
             std::vector<PetBattleActiveAbility> Cooldowns;
             std::vector<uint8> PetXDied;
+            // Bytes after PetXDied that WPP still leaves unread (PB-W FIRST_ROUND trailer).
+            std::vector<uint8> TrailingBytes;
         };
 
         struct PetBattlePetUpdate
