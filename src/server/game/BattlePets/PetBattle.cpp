@@ -29,6 +29,10 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+// #region agent log
+#include <ctime>
+#include <fstream>
+// #endregion
 #include <unordered_map>
 #include <unordered_set>
 
@@ -41,27 +45,56 @@ constexpr uint8 PET_BATTLE_WILD_PBOID = 3;
 // team input flags (BfaCore PetBattleTeamInputFlags)
 constexpr uint8 PET_BATTLE_INPUT_FLAG_SELECT_NEW_PET = 0x08;
 
-// effect / target types (BfaCore PetBattleEffectTargetType / ePetBattleEvents)
-// Midnight PB-W1 FIRST_ROUND hex uses EffectType 0 with FRONT_PET targets for the
-// initial lock-in (BfaCore names that PET_SWAP=4 on older builds — do not invent 4 here).
-constexpr uint8 PET_BATTLE_EFFECT_TYPE_FRONT_PET_LOCK = 0;
+// effect / target types — Midnight wire values recovered from the PB-W retail sniffs
+// (all 31 FIRST_ROUND / ROUND_RESULT / REPLACEMENTS_MADE packets in pbw2/pbw4 parse
+// byte-exactly with this map). EffectType is uint32 on the Midnight wire:
+// 0 = set health, 1 = aura apply, 3 = aura round-tick, 4 = front-pet lock/swap,
+// 6 = set state, 13/14 = round bookkeeping markers targeting pboid 9.
+constexpr uint32 PET_BATTLE_EFFECT_TYPE_SET_HEALTH = 0;
+constexpr uint32 PET_BATTLE_EFFECT_TYPE_FRONT_PET_LOCK = 4;
+constexpr uint32 PET_BATTLE_EFFECT_TYPE_ROUND_MARKER_BEGIN = 13;
+constexpr uint32 PET_BATTLE_EFFECT_TYPE_ROUND_MARKER_END = 14;
 constexpr uint8 PET_BATTLE_EFFECT_TARGET_FRONT_PET = 0;
 constexpr uint8 PET_BATTLE_EFFECT_TARGET_PET = 3;
 
-// PB-W FIRST_ROUND / ROUND_RESULT effect0: 4× FRONT_PET petx {0,0,1,0} (constant retail hex).
-WorldPackets::BattlePet::PetBattleEffect MakeRetailFrontPetLockEffect()
+// PB-W: the marker pair (EffectType 13/14) always casts on / targets petx 9 — an
+// environment slot beyond both teams' pboids (constant across battles and rounds).
+constexpr int8 PET_BATTLE_MARKER_PBOID = 9;
+
+// PB-W effect flags observed on the wire.
+constexpr uint16 PET_BATTLE_EFFECT_FLAG_ROUND_LOCK = 0x0001; // ROUND_RESULT front-pet lock
+constexpr uint16 PET_BATTLE_EFFECT_FLAG_HIT = 0x1000;        // successful damage application
+
+// PB-W: every round packet carries a front-pet lock effect per affected team —
+// FIRST_ROUND one per team (petx 0 and 3), ROUND_RESULT the player's front pet with
+// Flags 0x1, REPLACEMENTS_MADE the new front pet. Caster echoes the pet (0 on REPL).
+WorldPackets::BattlePet::PetBattleEffect MakeFrontPetLockEffect(int32 petx, uint16 flags, uint32 casterPboid)
 {
     WorldPackets::BattlePet::PetBattleEffect frontLock;
     frontLock.EffectType = PET_BATTLE_EFFECT_TYPE_FRONT_PET_LOCK;
-    frontLock.CasterPBOID = 0;
-    for (int8 petx : { int8(0), int8(0), int8(1), int8(0) })
-    {
-        WorldPackets::BattlePet::PetBattleEffectTarget target;
-        target.Type = PET_BATTLE_EFFECT_TARGET_FRONT_PET;
-        target.Petx = petx;
-        frontLock.Targets.push_back(target);
-    }
+    frontLock.CasterPBOID = casterPboid;
+    frontLock.Flags = flags;
+
+    WorldPackets::BattlePet::PetBattleEffectTarget target;
+    target.Type = PET_BATTLE_EFFECT_TARGET_FRONT_PET;
+    target.Petx = petx;
+    frontLock.Targets.push_back(target);
     return frontLock;
+}
+
+// PB-W ROUND_RESULT bookkeeping: marker 13 after the action effects, marker 14 at the
+// end of the round (auras tick between them on retail).
+WorldPackets::BattlePet::PetBattleEffect MakeRoundMarkerEffect(uint32 markerType)
+{
+    WorldPackets::BattlePet::PetBattleEffect marker;
+    marker.EffectType = markerType;
+    marker.CasterPBOID = uint32(PET_BATTLE_MARKER_PBOID);
+
+    WorldPackets::BattlePet::PetBattleEffectTarget target;
+    target.Type = PET_BATTLE_EFFECT_TARGET_FRONT_PET;
+    target.Petx = PET_BATTLE_MARKER_PBOID;
+    marker.Targets.push_back(target);
+    return marker;
 }
 
 // abilityId -> { base damage points, damage BattlePetAbilityEffect.ID }
@@ -383,6 +416,28 @@ void PetBattle::SendInitialUpdate()
     _owner->SendPacket(packet.Write());
 }
 
+// #region agent log
+namespace
+{
+void DebugLogPbPacket(char const* opname, WorldPacket const* packet,
+    uint32 effectsCount, uint32 cooldownsCount, uint32 petXDiedCount)
+{
+    std::ofstream logFile("D:/WOWEmulation/Emulators/Source/TrinityCore-evry/debug-04461e.log", std::ios::app);
+    if (!logFile || !packet)
+        return;
+    std::string hex = Trinity::Impl::ByteArrayToHexStr(packet->data(), packet->size());
+    logFile << "{\"sessionId\":\"04461e\",\"runId\":\"layout-v1\",\"hypothesisId\":\"H-midnight-layout\","
+        << "\"location\":\"PetBattle.cpp:Send\",\"message\":\"" << opname
+        << "\",\"data\":{\"size\":" << packet->size()
+        << ",\"effects\":" << effectsCount
+        << ",\"cooldowns\":" << cooldownsCount
+        << ",\"petXDied\":" << petXDiedCount
+        << ",\"hex\":\"" << hex
+        << "\"},\"timestamp\":" << (int64(time(nullptr)) * 1000) << "}\n";
+}
+}
+// #endregion
+
 void PetBattle::SendFirstRound()
 {
     WorldPackets::BattlePet::PetBattleRound packet(SMSG_PET_BATTLE_FIRST_ROUND);
@@ -393,19 +448,20 @@ void PetBattle::SendFirstRound()
     packet.MsgData.NextInputFlags[1] = 0;
     packet.MsgData.NextTrapStatus[1] = 2;
 
-    // PB-W1..W6 FIRST_ROUND is always 82 B. Empty (22 B) passed REPLACE but crashed on
-    // ROUND_RESULT (pbu3). Two single-target locks (60 B) crashed on FIRST_ROUND (pbu4).
-    // Retail hex: effect0 4× FRONT_PET {0,0,1,0}, empty effect1, 18 B trailer after PetXDied.
-    packet.MsgData.Effects.push_back(MakeRetailFrontPetLockEffect());
-    packet.MsgData.Effects.emplace_back(); // empty effect1 (caster 0, no targets)
+    // PB-W FIRST_ROUND (82 B, byte-exact vs pbw1/2/4 under the 25 B effect header):
+    // two front-pet lock effects, one per team, caster = target = the team's front pet.
+    // The earlier "18 B trailer" reading was an artifact of the old 13 B header — the
+    // same retail bytes are simply these two effects.
+    packet.MsgData.Effects.push_back(MakeFrontPetLockEffect(int32(_playerActive), 0, _playerActive));
+    packet.MsgData.Effects.push_back(MakeFrontPetLockEffect(int32(PET_BATTLE_WILD_PBOID), 0, PET_BATTLE_WILD_PBOID));
 
-    packet.MsgData.TrailingBytes = {
-        0x04, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-        0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00,
-        0x00, 0x00
-    };
-
-    _owner->SendPacket(packet.Write());
+    WorldPacket const* data = packet.Write();
+    // #region agent log
+    DebugLogPbPacket("SMSG_PET_BATTLE_FIRST_ROUND", data,
+        uint32(packet.MsgData.Effects.size()), uint32(packet.MsgData.Cooldowns.size()),
+        uint32(packet.MsgData.PetXDied.size()));
+    // #endregion
+    _owner->SendPacket(data);
 }
 
 void PetBattle::SendRoundResult(std::vector<WorldPackets::BattlePet::PetBattleEffect> effects, std::vector<uint8> petsDied, bool awaitingReplacement)
@@ -417,20 +473,29 @@ void PetBattle::SendRoundResult(std::vector<WorldPackets::BattlePet::PetBattleEf
     packet.MsgData.NextTrapStatus[0] = 4;
     packet.MsgData.NextInputFlags[1] = 0;
     packet.MsgData.NextTrapStatus[1] = 2;
-    // PB-W ROUND_RESULT (cdc=0) also leads with the same 4× FRONT_PET lock effect0 as
-    // FIRST_ROUND. Sending bare damage effects alone crashed on ability use (same null+4
-    // site as pbu4 FIRST_ROUND) — dump 2026-07-21_16.23.15.
-    packet.MsgData.Effects.push_back(MakeRetailFrontPetLockEffect());
+    // PB-W ROUND_RESULT shape: front-pet lock (Flags 0x1) → action effects →
+    // marker 13 → aura round-ticks (none in V1) → marker 14.
+    packet.MsgData.Effects.push_back(MakeFrontPetLockEffect(int32(_playerActive), PET_BATTLE_EFFECT_FLAG_ROUND_LOCK, _playerActive));
     for (WorldPackets::BattlePet::PetBattleEffect& effect : effects)
         packet.MsgData.Effects.push_back(std::move(effect));
+    packet.MsgData.Effects.push_back(MakeRoundMarkerEffect(PET_BATTLE_EFFECT_TYPE_ROUND_MARKER_BEGIN));
+    packet.MsgData.Effects.push_back(MakeRoundMarkerEffect(PET_BATTLE_EFFECT_TYPE_ROUND_MARKER_END));
     packet.MsgData.PetXDied = std::move(petsDied);
-    _owner->SendPacket(packet.Write());
+
+    WorldPacket const* data = packet.Write();
+    // #region agent log
+    DebugLogPbPacket("SMSG_PET_BATTLE_ROUND_RESULT", data,
+        uint32(packet.MsgData.Effects.size()), uint32(packet.MsgData.Cooldowns.size()),
+        uint32(packet.MsgData.PetXDied.size()));
+    // #endregion
+    _owner->SendPacket(data);
 }
 
 void PetBattle::SendReplacementsMade()
 {
     // Announce the swap; no damage exchanged on the replacement/voluntary-swap packet
-    // (PB-W4: REPLACE_FRONT_PET → REPLACEMENTS_MADE).
+    // (PB-W4: REPLACE_FRONT_PET → REPLACEMENTS_MADE, 52 B: one front-pet lock effect
+    // for the new front pet, caster 0 on the wire).
     WorldPackets::BattlePet::PetBattleRound packet(SMSG_PET_BATTLE_REPLACEMENTS_MADE);
     packet.MsgData.CurRound = _round;
     packet.MsgData.NextPetBattleState = 2;
@@ -438,7 +503,15 @@ void PetBattle::SendReplacementsMade()
     packet.MsgData.NextTrapStatus[0] = 4;
     packet.MsgData.NextInputFlags[1] = 0;
     packet.MsgData.NextTrapStatus[1] = 2;
-    _owner->SendPacket(packet.Write());
+    packet.MsgData.Effects.push_back(MakeFrontPetLockEffect(int32(_playerActive), 0, 0));
+
+    WorldPacket const* data = packet.Write();
+    // #region agent log
+    DebugLogPbPacket("SMSG_PET_BATTLE_REPLACEMENTS_MADE", data,
+        uint32(packet.MsgData.Effects.size()), uint32(packet.MsgData.Cooldowns.size()),
+        uint32(packet.MsgData.PetXDied.size()));
+    // #endregion
+    _owner->SendPacket(data);
 }
 
 void PetBattle::HandleReplaceFrontPet(uint8 frontPet)
@@ -528,13 +601,14 @@ int32 PetBattle::ApplyAbilityDamage(PetBattleCombatant const& caster, PetBattleC
 
     WorldPackets::BattlePet::PetBattleEffect effect;
     effect.AbilityEffectID = effectId;
-    effect.EffectType = 0; // set health (BfaCore PETBATTLE_EVENT_SET_HEALTH)
-    effect.CasterPBOID = int8(caster.Pboid);
+    effect.EffectType = PET_BATTLE_EFFECT_TYPE_SET_HEALTH;
+    effect.CasterPBOID = caster.Pboid;
+    effect.Flags = PET_BATTLE_EFFECT_FLAG_HIT;
     effect.StackDepth = 1;
 
     WorldPackets::BattlePet::PetBattleEffectTarget effectTarget;
     effectTarget.Type = PET_BATTLE_EFFECT_TARGET_PET;
-    effectTarget.Petx = int8(target.Pboid);
+    effectTarget.Petx = int32(target.Pboid);
     effectTarget.Health = std::max<int32>(0, target.Health);
     effect.Targets.push_back(effectTarget);
 
@@ -554,16 +628,30 @@ void PetBattle::ResolveRound(uint32 playerAbilityId, bool playerPasses, std::vec
 
     uint32 wildAbilityId = PickWildAbility(*wildPet);
 
+    // PB-W: each action's effects share a TurnInstanceID (1, 2, ..) within the round;
+    // bookkeeping effects (locks/markers) stay 0.
+    uint8 nextTurnInstance = 0;
+
     auto castPlayer = [&]()
     {
         if (!playerPasses && playerAbilityId && playerPet->IsAlive() && wildPet->IsAlive())
+        {
+            size_t before = effects.size();
             ApplyAbilityDamage(*playerPet, *wildPet, playerAbilityId, effects);
+            if (effects.size() > before)
+                effects.back().TurnInstanceID = ++nextTurnInstance;
+        }
     };
 
     auto castWild = [&]()
     {
         if (wildAbilityId && wildPet->IsAlive() && playerPet->IsAlive())
+        {
+            size_t before = effects.size();
             ApplyAbilityDamage(*wildPet, *playerPet, wildAbilityId, effects);
+            if (effects.size() > before)
+                effects.back().TurnInstanceID = ++nextTurnInstance;
+        }
     };
 
     // Higher Speed acts first. NYI: retail speed-tie ordering (V1 always prefers the player).
