@@ -27515,8 +27515,12 @@ void Player::OnArchaeologyFindLooted(GameObject* find)
     uint32 const branchId = _pendingArchaeologyFind->ResearchBranchId;
     _pendingArchaeologyFind.reset();
 
-    // The normal chest loot path has already granted the branch currency. Surface the branch's
-    // current project immediately; login initialization remains the disconnect fallback.
+    // Phase 2C: first successful unique-find acquisition grants +1 Archaeology (reveal / reopen do not).
+    // Guaranteed for the observed skill range; near-cap chance curves stay out of scope.
+    UpdateSkillPro(SKILL_ARCHAEOLOGY, 1000, 1);
+
+    // The normal chest loot path has already granted the branch currency (+ optional provisional
+    // keystone). Surface the branch's current project immediately; login remains the disconnect fallback.
     EnsureResearchProject(branchId);
 }
 
@@ -27837,8 +27841,22 @@ void Player::CompleteResearchProjectSolve(ArchaeologySolvePlan const& plan)
     UpdateCriteria(CriteriaType::CompleteAnyResearchProject, project->Rarity, plan.BranchID);
     AdvanceResearchProject(plan.BranchID, plan.ProjectID);
 
-    // Solving a project trains Archaeology (retail's main skill-up source for the profession).
-    UpdateGatherSkill(SKILL_ARCHAEOLOGY, GetPureSkillValue(SKILL_ARCHAEOLOGY), 0);
+    // Phase 2C: solve skill-ups follow SkillLineAbility.NumSkillUps for Archaeology (selected-branch
+    // commons 5 / rares 15). Spells with no Archaeology SLA row grant nothing (e.g. observed BfA).
+    // Generic UpdateCraftSkill skips these rows because SkillupSkillLineID is 0.
+    if (project->SpellID > 0)
+    {
+        SkillLineAbilityMapBounds const bounds = sSpellMgr->GetSkillLineAbilityMapBounds(uint32(project->SpellID));
+        for (SkillLineAbilityMap::const_iterator itr = bounds.first; itr != bounds.second; ++itr)
+        {
+            SkillLineAbilityEntry const* ability = itr->second;
+            if (!ability || ability->SkillLine != SKILL_ARCHAEOLOGY || ability->NumSkillUps <= 0)
+                continue;
+
+            UpdateSkillPro(SKILL_ARCHAEOLOGY, 1000, uint32(ability->NumSkillUps));
+            break;
+        }
+    }
 }
 
 void Player::RecordCompletedProject(uint32 projectId)
