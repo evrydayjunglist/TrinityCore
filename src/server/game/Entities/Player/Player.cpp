@@ -27340,13 +27340,15 @@ void Player::HandleArchaeologySurvey()
     // position and advances site progress immediately. Dig/open-lock and fragment award then use the
     // normal GameObject chest path. Retail 12.0.7.68453 also spawns an approximate red/yellow/green
     // direction tool on misses and applies Standing On It while the player is over the hidden point.
+    // Distance bands: docs/midnight-assessment/archaeology/archaeology-survey-distance-retail-sniff.md
+    // (ADOPT from retail dig sniffs — not Ashamane 5/35/85).
     constexpr uint32 SPELL_ARCHAEOLOGY_SURVEY = 80451;
     constexpr uint32 GO_SURVEY_TOOL_GREEN = 204272;
     constexpr uint32 GO_SURVEY_TOOL_YELLOW = 206589;
     constexpr uint32 GO_SURVEY_TOOL_RED = 206590;
-    constexpr float SURVEY_FIND_DISTANCE = 5.0f;
-    constexpr float SURVEY_GREEN_DISTANCE = 35.0f;
-    constexpr float SURVEY_YELLOW_DISTANCE = 85.0f;
+    constexpr float SURVEY_FIND_DISTANCE = 8.0f;
+    constexpr float SURVEY_GREEN_DISTANCE = 40.0f;
+    constexpr float SURVEY_YELLOW_DISTANCE = 80.0f;
     constexpr Seconds SURVEY_TOOL_DURATION = 5s;
     constexpr Seconds ARCHAEOLOGY_FIND_DURATION = 2min;
 
@@ -27423,7 +27425,8 @@ void Player::HandleArchaeologySurvey()
         return;
 
     float const dist = GetExactDist2d(fx, fy);
-    bool found = dist <= SURVEY_FIND_DISTANCE;
+    // Reveal when strictly inside the sniff band; dist == 8.0f is still green guidance.
+    bool found = dist < SURVEY_FIND_DISTANCE;
 
     if (found)
     {
@@ -27544,7 +27547,8 @@ bool Player::_EnsureResearchSiteFindLocation(uint32 researchSiteId, float& x, fl
 
 void Player::_UpdateArchaeologySurveyIndicator()
 {
-    constexpr float SURVEY_FIND_DISTANCE = 5.0f;
+    // Match HandleArchaeologySurvey reveal radius (retail sniff ADOPT).
+    constexpr float SURVEY_FIND_DISTANCE = 8.0f;
 
     bool standingOnFind = false;
     if (HasSkill(SKILL_ARCHAEOLOGY))
@@ -27582,7 +27586,7 @@ void Player::_UpdateArchaeologySurveyIndicator()
 
             float fx, fy;
             standingOnFind = _EnsureResearchSiteFindLocation(siteId, fx, fy) &&
-                GetExactDist2d(fx, fy) <= SURVEY_FIND_DISTANCE;
+                GetExactDist2d(fx, fy) < SURVEY_FIND_DISTANCE;
             break;
         }
     }
