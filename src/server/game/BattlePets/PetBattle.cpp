@@ -29,10 +29,6 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
-// #region agent log
-#include <ctime>
-#include <fstream>
-// #endregion
 #include <unordered_map>
 #include <unordered_set>
 
@@ -416,28 +412,6 @@ void PetBattle::SendInitialUpdate()
     _owner->SendPacket(packet.Write());
 }
 
-// #region agent log
-namespace
-{
-void DebugLogPbPacket(char const* opname, WorldPacket const* packet,
-    uint32 effectsCount, uint32 cooldownsCount, uint32 petXDiedCount)
-{
-    std::ofstream logFile("D:/WOWEmulation/Emulators/Source/TrinityCore-evry/debug-04461e.log", std::ios::app);
-    if (!logFile || !packet)
-        return;
-    std::string hex = Trinity::Impl::ByteArrayToHexStr(packet->data(), packet->size());
-    logFile << "{\"sessionId\":\"04461e\",\"runId\":\"layout-v1\",\"hypothesisId\":\"H-midnight-layout\","
-        << "\"location\":\"PetBattle.cpp:Send\",\"message\":\"" << opname
-        << "\",\"data\":{\"size\":" << packet->size()
-        << ",\"effects\":" << effectsCount
-        << ",\"cooldowns\":" << cooldownsCount
-        << ",\"petXDied\":" << petXDiedCount
-        << ",\"hex\":\"" << hex
-        << "\"},\"timestamp\":" << (int64(time(nullptr)) * 1000) << "}\n";
-}
-}
-// #endregion
-
 void PetBattle::SendFirstRound()
 {
     WorldPackets::BattlePet::PetBattleRound packet(SMSG_PET_BATTLE_FIRST_ROUND);
@@ -455,13 +429,7 @@ void PetBattle::SendFirstRound()
     packet.MsgData.Effects.push_back(MakeFrontPetLockEffect(int32(_playerActive), 0, _playerActive));
     packet.MsgData.Effects.push_back(MakeFrontPetLockEffect(int32(PET_BATTLE_WILD_PBOID), 0, PET_BATTLE_WILD_PBOID));
 
-    WorldPacket const* data = packet.Write();
-    // #region agent log
-    DebugLogPbPacket("SMSG_PET_BATTLE_FIRST_ROUND", data,
-        uint32(packet.MsgData.Effects.size()), uint32(packet.MsgData.Cooldowns.size()),
-        uint32(packet.MsgData.PetXDied.size()));
-    // #endregion
-    _owner->SendPacket(data);
+    _owner->SendPacket(packet.Write());
 }
 
 void PetBattle::SendRoundResult(std::vector<WorldPackets::BattlePet::PetBattleEffect> effects, std::vector<uint8> petsDied, bool awaitingReplacement)
@@ -482,13 +450,7 @@ void PetBattle::SendRoundResult(std::vector<WorldPackets::BattlePet::PetBattleEf
     packet.MsgData.Effects.push_back(MakeRoundMarkerEffect(PET_BATTLE_EFFECT_TYPE_ROUND_MARKER_END));
     packet.MsgData.PetXDied = std::move(petsDied);
 
-    WorldPacket const* data = packet.Write();
-    // #region agent log
-    DebugLogPbPacket("SMSG_PET_BATTLE_ROUND_RESULT", data,
-        uint32(packet.MsgData.Effects.size()), uint32(packet.MsgData.Cooldowns.size()),
-        uint32(packet.MsgData.PetXDied.size()));
-    // #endregion
-    _owner->SendPacket(data);
+    _owner->SendPacket(packet.Write());
 }
 
 void PetBattle::SendReplacementsMade()
@@ -505,13 +467,7 @@ void PetBattle::SendReplacementsMade()
     packet.MsgData.NextTrapStatus[1] = 2;
     packet.MsgData.Effects.push_back(MakeFrontPetLockEffect(int32(_playerActive), 0, 0));
 
-    WorldPacket const* data = packet.Write();
-    // #region agent log
-    DebugLogPbPacket("SMSG_PET_BATTLE_REPLACEMENTS_MADE", data,
-        uint32(packet.MsgData.Effects.size()), uint32(packet.MsgData.Cooldowns.size()),
-        uint32(packet.MsgData.PetXDied.size()));
-    // #endregion
-    _owner->SendPacket(data);
+    _owner->SendPacket(packet.Write());
 }
 
 void PetBattle::HandleReplaceFrontPet(uint8 frontPet)
