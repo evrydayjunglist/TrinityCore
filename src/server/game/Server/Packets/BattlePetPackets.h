@@ -287,7 +287,7 @@ namespace WorldPackets
         struct PetBattleEffectTarget
         {
             uint8 Type = 0;
-            int8 Petx = 0;
+            int32 Petx = 0;        // Midnight PB-W: widened to int32 on the wire
             int32 Health = 0;      // PET_BATTLE_EFFECT_TARGET_PET
             uint32 StateID = 0;    // PET_BATTLE_EFFECT_TARGET_STATE
             int32 StateValue = 0;  // PET_BATTLE_EFFECT_TARGET_STATE
@@ -298,9 +298,10 @@ namespace WorldPackets
             uint32 AbilityEffectID = 0;
             uint16 Flags = 0;
             uint16 SourceAuraInstanceID = 0;
-            uint16 TurnInstanceID = 0;
-            uint8 EffectType = 0;
-            int8 CasterPBOID = 0;
+            uint16 UnkU16 = 0;         // Midnight PB-W: pre-12.0 TurnInstanceID slot, always 0 on the wire
+            uint8 TurnInstanceID = 0;  // Midnight PB-W: 1,2,.. per action within the round; 0 for bookkeeping
+            uint32 EffectType = 0;     // Midnight PB-W: widened to uint32
+            uint32 CasterPBOID = 0;    // Midnight PB-W: widened to uint32
             uint8 StackDepth = 0;
             std::vector<PetBattleEffectTarget> Targets;
         };
@@ -339,8 +340,6 @@ namespace WorldPackets
             std::vector<PetBattleEffect> Effects;
             std::vector<PetBattleActiveAbility> Cooldowns;
             std::vector<uint8> PetXDied;
-            // Bytes after PetXDied that WPP still leaves unread (PB-W FIRST_ROUND trailer).
-            std::vector<uint8> TrailingBytes;
         };
 
         struct PetBattlePetUpdate

@@ -231,10 +231,11 @@ ByteBuffer& operator<<(ByteBuffer& data, PetBattleLocation const& location)
 
 ByteBuffer& operator<<(ByteBuffer& data, PetBattleEffectTarget const& target)
 {
-    // Match BfaCore / retail: byte-align, then 4-bit Type (WPP's Bits<3> mis-reads Midnight).
-    data.FlushBits();
-    data << Bits<4>(target.Type);
-    data << int8(target.Petx);
+    // Midnight PB-W wire (31/31 retail round packets parse exactly with this layout):
+    // one byte with Type in the high nibble (each target starts byte-aligned), then
+    // Petx widened to 32 bits, then the per-type payload.
+    data << uint8(uint8(target.Type) << 4);
+    data << int32(target.Petx);
 
     switch (target.Type)
     {
@@ -245,7 +246,7 @@ ByteBuffer& operator<<(ByteBuffer& data, PetBattleEffectTarget const& target)
             data << int32(target.StateID);
             data << int32(target.StateValue);
             break;
-        default: // FRONT_PET (0) and others carry no extra payload in V1
+        default: // FRONT_PET (0) / markers — no payload. Aura (1) NYI for V1 combat.
             break;
     }
 
@@ -254,12 +255,16 @@ ByteBuffer& operator<<(ByteBuffer& data, PetBattleEffectTarget const& target)
 
 ByteBuffer& operator<<(ByteBuffer& data, PetBattleEffect const& effect)
 {
+    // Midnight PB-W effect header is 25 bytes: EffectType and CasterPBOID widened to
+    // uint32, TurnInstanceID narrowed to one byte after the always-zero pre-12.0 slot.
     data << uint32(effect.AbilityEffectID);
     data << uint16(effect.Flags);
     data << uint16(effect.SourceAuraInstanceID);
-    data << uint16(effect.TurnInstanceID);
-    data << uint8(effect.EffectType);
-    data << int8(effect.CasterPBOID);
+    data << uint16(effect.UnkU16);
+    data << uint8(effect.TurnInstanceID);
+    data << uint8(0); // always 0 in PB-W sniffs
+    data << uint32(effect.EffectType);
+    data << uint32(effect.CasterPBOID);
     data << uint8(effect.StackDepth);
     data << Size<uint32>(effect.Targets);
     for (PetBattleEffectTarget const& target : effect.Targets)
@@ -454,9 +459,10 @@ WorldPacket const* PetBattleInitialUpdate::Write()
 
 WorldPacket const* PetBattleRound::Write()
 {
-    // Wire order from PB-W1 FIRST_ROUND hex + WPP ReadPetBattleRoundResult:
-    // EffectsCount → team flags → CooldownsCount → Effects[] → Cooldowns[] → PetXDied bits.
-    // (Older BfaCore wrote cooldowns/bits before effects; that shifts Midnight readers.)
+    // Midnight PB-W wire order (validated exactly against every FIRST_ROUND /
+    // ROUND_RESULT / REPLACEMENTS_MADE in the pbw2/pbw4 retail sniffs):
+    // EffectsCount → team flags → CooldownsCount → Cooldowns[] → PetXDied bit count →
+    // Effects[] → PetXDied bytes.
     _worldPacket << uint32(MsgData.CurRound);
     _worldPacket << uint8(MsgData.NextPetBattleState);
     _worldPacket << uint32(MsgData.Effects.size());
@@ -470,20 +476,17 @@ WorldPacket const* PetBattleRound::Write()
 
     _worldPacket << uint32(MsgData.Cooldowns.size());
 
-    for (PetBattleEffect const& effect : MsgData.Effects)
-        _worldPacket << effect;
-
     for (PetBattleActiveAbility const& cooldown : MsgData.Cooldowns)
         _worldPacket << cooldown;
 
     _worldPacket << Bits<3>(uint32(MsgData.PetXDied.size()));
     _worldPacket.FlushBits();
 
+    for (PetBattleEffect const& effect : MsgData.Effects)
+        _worldPacket << effect;
+
     for (uint8 petX : MsgData.PetXDied)
         _worldPacket << uint8(petX);
-
-    if (!MsgData.TrailingBytes.empty())
-        _worldPacket.append(MsgData.TrailingBytes.data(), MsgData.TrailingBytes.size());
 
     return &_worldPacket;
 }
