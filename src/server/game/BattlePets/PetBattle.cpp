@@ -689,7 +689,26 @@ void PetBattle::HandleInput(WorldPackets::BattlePet::PetBattleInput const& input
     // NYI: trap success/fail outcomes + capture chance math (PB-W5/W6 wire known; % not).
     // V1 treats MoveType 3 as a pass so the round loop stays playable without inventing %.
     bool playerPasses = input.MoveType == PET_BATTLE_INPUT_MOVE_PASS || input.MoveType == PET_BATTLE_INPUT_MOVE_TRAP;
-    uint32 abilityId = input.MoveType == PET_BATTLE_INPUT_MOVE_ABILITY ? uint32(input.AbilityID) : 0u;
+    uint32 abilityId = 0;
+    if (input.MoveType == PET_BATTLE_INPUT_MOVE_ABILITY)
+    {
+        // AbilityID is client-trusted on the wire. Reject moves that are not on the active
+        // combatant's legal ability list so forged high-damage IDs cannot force a win and
+        // permanently grant WinPetBattle / Learning the Ropes credit (WriteJournalResults).
+        PetBattleCombatant const* activePet = GetActivePlayerPet();
+        if (!activePet)
+            return;
+
+        uint32 requestedAbilityId = uint32(input.AbilityID);
+        bool ownsAbility = std::ranges::any_of(activePet->Abilities, [requestedAbilityId](PetBattleCombatantAbility const& ability)
+        {
+            return ability.AbilityID == requestedAbilityId;
+        });
+        if (!ownsAbility)
+            return;
+
+        abilityId = requestedAbilityId;
+    }
 
     std::vector<WorldPackets::BattlePet::PetBattleEffect> effects;
     std::vector<uint8> petsDied;
