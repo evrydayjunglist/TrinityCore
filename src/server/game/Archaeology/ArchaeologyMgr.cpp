@@ -357,8 +357,11 @@ uint32 ArchaeologyMgr::RollResearchProject(uint32 branchId, std::unordered_set<u
     if (!IsResearchBranchEnabled(branchId))
         return 0;
 
-    // Split the branch's projects by rarity (0 = common, 1 = rare). Retail heavily favours commons;
-    // rares appear roughly one roll in five when any exist.
+    // Phase 2E Forward option 1 (2026-07-22): provisional selection — not a sniffed retail rate.
+    // Split by rarity (0 = common, 1 = rare); prefer uncompleted within a tier; 20% rare when both
+    // tiers have candidates. Known debt: retail weight, absolute fresh-before-repeat, pity.
+    // Fuse: change the 20 below (and/or policy) when a sample or owner authorization replaces this.
+    // See docs/midnight-assessment/archaeology/archaeology-phase2e-rare-history-handoff.md.
     std::vector<uint32> commons, rares;
     for (ResearchProjectEntry const* project : sResearchProjectStore)
     {
@@ -382,7 +385,8 @@ uint32 ArchaeologyMgr::RollResearchProject(uint32 branchId, std::unordered_set<u
     dropCompleted(commons);
     dropCompleted(rares);
 
-    bool const pickRare = !rares.empty() && (commons.empty() || urand(0, 99) < 20);
+    constexpr uint32 PROVISIONAL_RARE_CHANCE_PERCENT = 20; // Phase 2E option 1 fuse — not retail-proven
+    bool const pickRare = !rares.empty() && (commons.empty() || urand(0, 99) < PROVISIONAL_RARE_CHANCE_PERCENT);
     std::vector<uint32> const& pool = pickRare ? rares : (!commons.empty() ? commons : rares);
     if (pool.empty())
         return 0;

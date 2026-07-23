@@ -111,8 +111,9 @@ class TC_GAME_API ArchaeologyMgr
         // exhausted site). Returns 0 if none are available.
         uint32 RollReplacementSite(uint32 mapId, std::vector<uint32> const& exclude) const;
 
-        // Pick a random research project for a branch (rarity-weighted toward commons), preferring
-        // projects not in `completed`. Returns the ResearchProject.db2 ID, or 0 if the branch has none.
+        // Pick a random research project for a branch. Phase 2E Forward option 1: provisional
+        // common/rare split + prefer-uncompleted + 20% rare roll (known debt — not a sniffed rate).
+        // Returns the ResearchProject.db2 ID, or 0 if the branch has none.
         uint32 RollResearchProject(uint32 branchId, std::unordered_set<uint32> const& completed) const;
 
         // The research project whose solve spell is `spellId` (the spell a player casts to complete it),
