@@ -521,6 +521,15 @@ typedef std::unordered_map<uint32, std::vector<uint32>> UiMapQuestLinesMap;
 typedef std::unordered_map<uint32, std::vector<uint32>> UiMapQuestsMap;
 typedef std::unordered_map<uint32, VehicleSeatAddon> VehicleSeatAddonContainer;
 
+struct ChromieTimeExpansionQuest
+{
+    uint32 UiExpansionId = 0;
+    uint32 AllianceQuestId = 0;
+    uint32 HordeQuestId = 0;
+};
+
+typedef std::unordered_map<uint32, ChromieTimeExpansionQuest> ChromieTimeExpansionQuestContainer;
+
 struct GossipMenuItemsLocale
 {
     std::vector<std::string> OptionText;
@@ -1178,6 +1187,7 @@ class TC_GAME_API ObjectMgr
 
         std::vector<uint32> const* GetUiMapQuestLinesList(uint32 uiMapId) const;
         std::vector<uint32> const* GetUiMapQuestsList(uint32 uiMapId) const;
+        ChromieTimeExpansionQuest const* GetChromieTimeExpansionQuest(uint32 uiExpansionId) const;
 
         VehicleTemplate const* GetVehicleTemplate(Vehicle* veh) const;
         VehicleAccessoryList const* GetVehicleAccessoryList(Vehicle* veh) const;
@@ -1317,6 +1327,7 @@ class TC_GAME_API ObjectMgr
 
         void LoadUiMapQuestLines();
         void LoadUiMapQuests();
+        void LoadChromieTimeExpansionQuests();
 
         void LoadSpawnTrackingTemplates();
         void LoadSpawnTrackingQuestObjectives();
@@ -1868,6 +1879,7 @@ class TC_GAME_API ObjectMgr
 
         UiMapQuestLinesMap _uiMapQuestLinesStore;
         UiMapQuestsMap _uiMapQuestsStore;
+        ChromieTimeExpansionQuestContainer _chromieTimeExpansionQuestStore;
 
         std::unordered_map<int32, JumpChargeParams> _jumpChargeParams;
 
