@@ -27442,36 +27442,43 @@ void Player::HandleArchaeologySurvey()
             found = false;
         else
         {
-            float fz = GetPositionZ();
-            UpdateGroundPositionZ(fx, fy, fz);
-            float const facing = GetOrientation();
-            if (GameObject* find = SummonGameObject(findGameObjectId, Position(fx, fy, fz, facing),
-                QuaternionData::fromEulerAnglesZYX(facing, 0.0f, 0.0f), ARCHAEOLOGY_FIND_DURATION,
-                GO_SUMMON_TIMED_OR_CORPSE_DESPAWN, GetGUID()))
-            {
-                _pendingArchaeologyFind = PendingArchaeologyFind
-                {
-                    .GameObjectGuid = find->GetGUID(),
-                    .ResearchSiteId = siteId,
-                    .ResearchBranchId = info->BranchID
-                };
-
-                ++progress;
-                SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSiteProgress, 0).ModifyValue(siteIndex), progress);
-                UpdateCriteria(CriteriaType::FindResearchObject, findGameObjectId);
-                RemoveAurasDueToSpell(SPELL_ARCHAEOLOGY_STANDING_ON_IT);
-
-                // Progress advances at reveal on retail. Generate and retain the next point now so
-                // relog/restart cannot relocate an in-progress site's hidden find.
-                if (progress < info->FindCount)
-                {
-                    _researchSiteFindLocations.erase(siteId);
-                    float nextX, nextY;
-                    _EnsureResearchSiteFindLocation(siteId, nextX, nextY);
-                }
-            }
-            else
+            // Sibling: ArchaeologyMgr::IsUsableFindTerrain / Creature spawn — resolve Z from
+            // MAX_HEIGHT, not player Z. UpdateGroundPositionZ searches downward from the seed; on
+            // inclines the dig XY ground can sit above the player and the GO clips underground.
+            float const fz = GetMap()->GetHeight(GetPhaseShift(), fx, fy, MAX_HEIGHT, true, MAX_FALL_DISTANCE);
+            if (fz <= INVALID_HEIGHT || !Trinity::IsValidMapCoord(fx, fy, fz))
                 found = false;
+            else
+            {
+                float const facing = GetOrientation();
+                if (GameObject* find = SummonGameObject(findGameObjectId, Position(fx, fy, fz, facing),
+                    QuaternionData::fromEulerAnglesZYX(facing, 0.0f, 0.0f), ARCHAEOLOGY_FIND_DURATION,
+                    GO_SUMMON_TIMED_OR_CORPSE_DESPAWN, GetGUID()))
+                {
+                    _pendingArchaeologyFind = PendingArchaeologyFind
+                    {
+                        .GameObjectGuid = find->GetGUID(),
+                        .ResearchSiteId = siteId,
+                        .ResearchBranchId = info->BranchID
+                    };
+
+                    ++progress;
+                    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData).ModifyValue(&UF::ActivePlayerData::ResearchSiteProgress, 0).ModifyValue(siteIndex), progress);
+                    UpdateCriteria(CriteriaType::FindResearchObject, findGameObjectId);
+                    RemoveAurasDueToSpell(SPELL_ARCHAEOLOGY_STANDING_ON_IT);
+
+                    // Progress advances at reveal on retail. Generate and retain the next point now so
+                    // relog/restart cannot relocate an in-progress site's hidden find.
+                    if (progress < info->FindCount)
+                    {
+                        _researchSiteFindLocations.erase(siteId);
+                        float nextX, nextY;
+                        _EnsureResearchSiteFindLocation(siteId, nextX, nextY);
+                    }
+                }
+                else
+                    found = false;
+            }
         }
     }
     if (!found)
@@ -27486,20 +27493,21 @@ void Player::HandleArchaeologySurvey()
         // Retail spawns the theodolite beside the player (small ring), not under feet.
         float const spawnAngle = frand(0.0f, float(2 * M_PI));
         float const spawnDist = frand(SURVEY_TOOL_SPAWN_MIN, SURVEY_TOOL_SPAWN_MAX);
-        float tx = px + spawnDist * std::cos(spawnAngle);
-        float ty = py + spawnDist * std::sin(spawnAngle);
-        float tz = GetPositionZ();
-        UpdateGroundPositionZ(tx, ty, tz);
-
-        // Facing is tool->find with a band-dependent cone (red noisier than yellow/green).
-        Position const toolPos(tx, ty, tz);
-        float const facing = Position::NormalizeOrientation(
-            toolPos.GetAbsoluteAngle(fx, fy) + frand(-facingCone, facingCone));
-        if (GameObject* tool = SummonGameObject(toolEntry, Position(tx, ty, tz, facing),
-            QuaternionData::fromEulerAnglesZYX(facing, 0.0f, 0.0f), SURVEY_TOOL_DURATION))
+        float const tx = px + spawnDist * std::cos(spawnAngle);
+        float const ty = py + spawnDist * std::sin(spawnAngle);
+        float const tz = GetMap()->GetHeight(GetPhaseShift(), tx, ty, MAX_HEIGHT, true, MAX_FALL_DISTANCE);
+        if (tz > INVALID_HEIGHT && Trinity::IsValidMapCoord(tx, ty, tz))
         {
-            tool->SetSpellId(SPELL_ARCHAEOLOGY_SURVEY);
-            m_ObjectSlot[1] = tool->GetGUID();
+            // Facing is tool->find with a band-dependent cone (red noisier than yellow/green).
+            Position const toolPos(tx, ty, tz);
+            float const facing = Position::NormalizeOrientation(
+                toolPos.GetAbsoluteAngle(fx, fy) + frand(-facingCone, facingCone));
+            if (GameObject* tool = SummonGameObject(toolEntry, Position(tx, ty, tz, facing),
+                QuaternionData::fromEulerAnglesZYX(facing, 0.0f, 0.0f), SURVEY_TOOL_DURATION))
+            {
+                tool->SetSpellId(SPELL_ARCHAEOLOGY_SURVEY);
+                m_ObjectSlot[1] = tool->GetGUID();
+            }
         }
     }
 
