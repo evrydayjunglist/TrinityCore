@@ -27690,11 +27690,11 @@ void Player::_LoadResearchSites(PreparedQueryResult result)
 
 void Player::InitializeResearchSites()
 {
-    // Archaeology (from the ground up) - Cataclysm introduction continents: Eastern Kingdoms (0),
-    // Kalimdor (1), Outland (530), Northrend (571). Per-continent active count 4 matches the Phase 0
-    // retail 68453 EK/Kalimdor observation and the historical four-continent seed pattern (Jade /
-    // BfaCore AddDigsitesToMap). MoP+ continents remain later phases. Finer eligibility than
-    // skill + surveyability is known debt (Phase 2F nine-branch posture).
+    // Archaeology (from the ground up) - introduction continents: Eastern Kingdoms (0), Kalimdor (1),
+    // Outland (530), Northrend (571), Pandaria (870). Per-continent active count 4 matches the Phase 0
+    // retail 68453 EK/Kalimdor observation, Engadget 2012 Pandaria "four random digsites", and the
+    // historical AddDigsitesToMap seed pattern. Finer eligibility than skill + surveyability is known
+    // debt (Phase 2F / 3A posture).
     if (!HasSkill(SKILL_ARCHAEOLOGY))
         return;
 
@@ -27703,7 +27703,7 @@ void Player::InitializeResearchSites()
     for (uint16 siteId : m_activePlayerData->ResearchSites[0])
         activeSites.push_back(siteId);
 
-    for (uint32 mapId : { 0u, 1u, 530u, 571u })
+    for (uint32 mapId : { 0u, 1u, 530u, 571u, 870u })
     {
         uint32 activeCount = 0;
         for (uint32 siteId : activeSites)

@@ -152,7 +152,7 @@ namespace
             missingBranch.NumSockets = 0;
             missingBranch.RequiredWeight = 65;
 
-            for (uint32 branchId : { 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 27u })
+            for (uint32 branchId : { 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 27u, 29u, 229u, 231u })
             {
                 ResearchProjectEntry& project = loader.Add();
                 project.ID = 6000 + branchId;
@@ -168,11 +168,12 @@ namespace
 TEST_CASE("Archaeology project selection follows enabled branch policy", "[Archaeology]")
 {
     LoadArchaeologySolveData();
-    // Nine-branch Cataclysm introduction policy (Phase 2F): six EK/Kalimdor branches plus
-    // Draenei/Orc/Vrykul. Disabled-branch rejection is covered by an out-of-policy id below.
-    ArchaeologyMgrTestAccess::SetEnabledBranches({ 1, 2, 3, 4, 5, 6, 7, 8, 27 });
+    // Twelve-branch introduction policy (Phase 3A): Cataclysm nine-branch set plus Mantid /
+    // Pandaren / Mogu. TEMPLATE digsites 949/951 are excluded in dig-site SQL (not rolled —
+    // IsSurveyableDigSite requires archaeology_dig_site + polygon). Out-of-policy rejection below.
+    ArchaeologyMgrTestAccess::SetEnabledBranches({ 1, 2, 3, 4, 5, 6, 7, 8, 27, 29, 229, 231 });
 
-    for (uint32 branchId : { 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 27u })
+    for (uint32 branchId : { 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 27u, 29u, 229u, 231u })
     {
         CHECK(sArchaeologyMgr->IsResearchBranchEnabled(branchId));
         CHECK(sArchaeologyMgr->RollResearchProject(branchId, {}) == 6000 + branchId);
@@ -180,6 +181,9 @@ TEST_CASE("Archaeology project selection follows enabled branch policy", "[Archa
 
     CHECK_FALSE(sArchaeologyMgr->IsResearchBranchEnabled(423));
     CHECK(sArchaeologyMgr->RollResearchProject(423, {}) == 0);
+    // Still out of policy when MoP is enabled (WoD+/BFA branches stay off).
+    CHECK_FALSE(sArchaeologyMgr->IsResearchBranchEnabled(315));
+    CHECK(sArchaeologyMgr->RollResearchProject(315, {}) == 0);
 
     // Orc solve plan accepted when branch 6 is enabled (policy + DB2 weights).
     {
