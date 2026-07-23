@@ -27341,7 +27341,8 @@ void Player::HandleArchaeologySurvey()
     // normal GameObject chest path. Retail 12.0.7.68453 also spawns an approximate red/yellow/green
     // direction tool on misses and applies Standing On It while the player is over the hidden point.
     // Distance bands: docs/midnight-assessment/archaeology/archaeology-survey-distance-retail-sniff.md
-    // (ADOPT from retail dig sniffs — not Ashamane 5/35/85).
+    // Facing / tool spawn: docs/midnight-assessment/archaeology/archaeology-survey-facing-retail-sniff.md
+    // (ADOPT — band-dependent cone + near-player ring; not Ashamane feet+±45°).
     constexpr uint32 SPELL_ARCHAEOLOGY_SURVEY = 80451;
     constexpr uint32 GO_SURVEY_TOOL_GREEN = 204272;
     constexpr uint32 GO_SURVEY_TOOL_YELLOW = 206589;
@@ -27349,6 +27350,12 @@ void Player::HandleArchaeologySurvey()
     constexpr float SURVEY_FIND_DISTANCE = 8.0f;
     constexpr float SURVEY_GREEN_DISTANCE = 40.0f;
     constexpr float SURVEY_YELLOW_DISTANCE = 80.0f;
+    // Dig 4 survey-facing max |err_tool->find| lean (radians).
+    constexpr float SURVEY_FACING_CONE_GREEN = float(8.0 * M_PI / 180.0);
+    constexpr float SURVEY_FACING_CONE_YELLOW = float(20.0 * M_PI / 180.0);
+    constexpr float SURVEY_FACING_CONE_RED = float(40.0 * M_PI / 180.0);
+    constexpr float SURVEY_TOOL_SPAWN_MIN = 2.0f;
+    constexpr float SURVEY_TOOL_SPAWN_MAX = 4.0f;
     constexpr Seconds SURVEY_TOOL_DURATION = 5s;
     constexpr Seconds ARCHAEOLOGY_FIND_DURATION = 2min;
 
@@ -27472,11 +27479,23 @@ void Player::HandleArchaeologySurvey()
         uint32 const toolEntry = dist < SURVEY_GREEN_DISTANCE ? GO_SURVEY_TOOL_GREEN
                                : dist < SURVEY_YELLOW_DISTANCE ? GO_SURVEY_TOOL_YELLOW
                                : GO_SURVEY_TOOL_RED;
-        // The captured tools deviate by up to roughly 45 degrees from the exact bearing; they guide
-        // rather than reveal a straight-line coordinate.
+        float const facingCone = dist < SURVEY_GREEN_DISTANCE ? SURVEY_FACING_CONE_GREEN
+                               : dist < SURVEY_YELLOW_DISTANCE ? SURVEY_FACING_CONE_YELLOW
+                               : SURVEY_FACING_CONE_RED;
+
+        // Retail spawns the theodolite beside the player (small ring), not under feet.
+        float const spawnAngle = frand(0.0f, float(2 * M_PI));
+        float const spawnDist = frand(SURVEY_TOOL_SPAWN_MIN, SURVEY_TOOL_SPAWN_MAX);
+        float tx = px + spawnDist * std::cos(spawnAngle);
+        float ty = py + spawnDist * std::sin(spawnAngle);
+        float tz = GetPositionZ();
+        UpdateGroundPositionZ(tx, ty, tz);
+
+        // Facing is tool->find with a band-dependent cone (red noisier than yellow/green).
+        Position const toolPos(tx, ty, tz);
         float const facing = Position::NormalizeOrientation(
-            GetAbsoluteAngle(fx, fy) + frand(-float(M_PI_4), float(M_PI_4)));
-        if (GameObject* tool = SummonGameObject(toolEntry, Position(px, py, GetPositionZ(), facing),
+            toolPos.GetAbsoluteAngle(fx, fy) + frand(-facingCone, facingCone));
+        if (GameObject* tool = SummonGameObject(toolEntry, Position(tx, ty, tz, facing),
             QuaternionData::fromEulerAnglesZYX(facing, 0.0f, 0.0f), SURVEY_TOOL_DURATION))
         {
             tool->SetSpellId(SPELL_ARCHAEOLOGY_SURVEY);
