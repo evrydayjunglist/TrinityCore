@@ -29,6 +29,9 @@ struct ResearchProjectEntry;
 struct ResearchSiteEntry;
 struct ArchaeologyMgrTestAccess;
 
+class Map;
+class PhaseShift;
+
 namespace WorldPackets::Spells
 {
     struct SpellWeight;
@@ -89,9 +92,10 @@ class TC_GAME_API ArchaeologyMgr
         // True if the world position (x, y) is inside the dig site's boundary polygon.
         bool IsInsideDigSite(uint32 researchSiteId, float x, float y) const;
 
-        // Generate a uniformly distributed hidden-find location inside the dig-site polygon.
-        // Returns false if the site has no usable polygon.
-        bool GenerateFindLocation(uint32 researchSiteId, float& x, float& y) const;
+        // Generate a uniformly distributed hidden-find location inside the dig-site polygon,
+        // rejecting Map samples with invalid ground, liquid, or locally extreme slope.
+        // Returns false if the site has no usable polygon or no sample passes rejectors.
+        bool GenerateFindLocation(uint32 researchSiteId, float& x, float& y, Map* map, PhaseShift const& phaseShift) const;
 
         // True if the server has every policy needed to drive this site through Survey and loot.
         bool IsSurveyableDigSite(uint32 researchSiteId) const;

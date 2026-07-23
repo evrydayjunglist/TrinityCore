@@ -20,13 +20,62 @@
 #include "DatabaseEnv.h"
 #include "DB2Stores.h"
 #include "GameObjectData.h"
+#include "GridDefines.h"
 #include "Log.h"
+#include "Map.h"
 #include "ObjectMgr.h"
 #include "Random.h"
 #include "SpellPackets.h"
 #include "Timer.h"
 #include <algorithm>
+#include <cmath>
 #include <limits>
+
+namespace
+{
+// Sibling: WorldObject::MovePosition default maxHeightChange — cheap local-slope reject without PathGenerator.
+constexpr float FIND_TERRAIN_PROBE_DISTANCE = 2.0f;
+constexpr float FIND_TERRAIN_MAX_HEIGHT_CHANGE = 6.0f;
+
+bool IsUsableFindTerrain(Map* map, PhaseShift const& phaseShift, float x, float y)
+{
+    if (!map || !Trinity::IsValidMapCoord(x, y))
+        return false;
+
+    float const z = map->GetHeight(phaseShift, x, y, MAX_HEIGHT, true, MAX_FALL_DISTANCE);
+    if (z <= INVALID_HEIGHT || !Trinity::IsValidMapCoord(x, y, z))
+        return false;
+
+    // Sibling: Map::IsInWater / TerrainInfo::IsInWater (IN_WATER | UNDER_WATER).
+    if (map->IsInWater(phaseShift, x, y, z))
+        return false;
+
+    static constexpr float probeOffsets[4][2] =
+    {
+        { FIND_TERRAIN_PROBE_DISTANCE, 0.0f },
+        { -FIND_TERRAIN_PROBE_DISTANCE, 0.0f },
+        { 0.0f, FIND_TERRAIN_PROBE_DISTANCE },
+        { 0.0f, -FIND_TERRAIN_PROBE_DISTANCE }
+    };
+
+    for (float const (&offset)[2] : probeOffsets)
+    {
+        float const nx = x + offset[0];
+        float const ny = y + offset[1];
+        if (!Trinity::IsValidMapCoord(nx, ny))
+            continue;
+
+        float const nz = map->GetHeight(phaseShift, nx, ny, MAX_HEIGHT, true, MAX_FALL_DISTANCE);
+        if (nz <= INVALID_HEIGHT)
+            continue;
+
+        if (std::fabs(nz - z) > FIND_TERRAIN_MAX_HEIGHT_CHANGE)
+            return false;
+    }
+
+    return true;
+}
+}
 
 ArchaeologyMgr::ArchaeologyMgr() = default;
 ArchaeologyMgr::~ArchaeologyMgr() = default;
@@ -212,10 +261,10 @@ bool ArchaeologyMgr::IsInsideDigSite(uint32 researchSiteId, float x, float y) co
     return inside;
 }
 
-bool ArchaeologyMgr::GenerateFindLocation(uint32 researchSiteId, float& x, float& y) const
+bool ArchaeologyMgr::GenerateFindLocation(uint32 researchSiteId, float& x, float& y, Map* map, PhaseShift const& phaseShift) const
 {
     ArchaeologyDigSiteInfo const* info = GetDigSiteInfo(researchSiteId);
-    if (!info || info->Polygon.size() < 3)
+    if (!info || info->Polygon.size() < 3 || !map)
         return false;
 
     float minX = info->Polygon.front().first;
@@ -233,12 +282,18 @@ bool ArchaeologyMgr::GenerateFindLocation(uint32 researchSiteId, float& x, float
     // Rejection sampling over the polygon's bounding box is uniform over the polygon, works for
     // concave boundaries, and runs only when assigning the next hidden find. Retail carries no fixed
     // find coordinates in ResearchSite.db2; the generated point is persisted with character state.
+    // Terrain rejectors (#4) keep that distribution while discarding unusable Map samples.
     for (uint32 attempt = 0; attempt < 1000; ++attempt)
     {
         x = frand(minX, maxX);
         y = frand(minY, maxY);
-        if (IsInsideDigSite(researchSiteId, x, y))
-            return true;
+        if (!IsInsideDigSite(researchSiteId, x, y))
+            continue;
+
+        if (!IsUsableFindTerrain(map, phaseShift, x, y))
+            continue;
+
+        return true;
     }
 
     return false;

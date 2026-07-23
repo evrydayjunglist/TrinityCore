@@ -27557,7 +27557,7 @@ bool Player::_EnsureResearchSiteFindLocation(uint32 researchSiteId, float& x, fl
         return true;
     }
 
-    if (!sArchaeologyMgr->GenerateFindLocation(researchSiteId, x, y))
+    if (!sArchaeologyMgr->GenerateFindLocation(researchSiteId, x, y, GetMap(), GetPhaseShift()))
         return false;
 
     _researchSiteFindLocations[researchSiteId] = { x, y };
