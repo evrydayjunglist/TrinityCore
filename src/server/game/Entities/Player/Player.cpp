@@ -27682,19 +27682,20 @@ void Player::_LoadResearchSites(PreparedQueryResult result)
 
 void Player::InitializeResearchSites()
 {
-    // Archaeology (from the ground up) - Phase 1 Cataclysm vertical slice: seed active dig sites for
-    // Eastern Kingdoms (0) and Kalimdor (1) only. Later phases extend to the other continents retail
-    // assigns (Draenor/Legion/Zandalar/Kul Tiras). Per-continent active count 4 (retail 68453 sniff
-    // observed 4-5 per continent).
+    // Archaeology (from the ground up) - Cataclysm introduction continents: Eastern Kingdoms (0),
+    // Kalimdor (1), Outland (530), Northrend (571). Per-continent active count 4 matches the Phase 0
+    // retail 68453 EK/Kalimdor observation and the historical four-continent seed pattern (Jade /
+    // BfaCore AddDigsitesToMap). MoP+ continents remain later phases. Finer eligibility than
+    // skill + surveyability is known debt (Phase 2F nine-branch posture).
     if (!HasSkill(SKILL_ARCHAEOLOGY))
         return;
 
     std::vector<uint32> activeSites;
-    activeSites.reserve(m_activePlayerData->ResearchSites[0].size() + 8);
+    activeSites.reserve(m_activePlayerData->ResearchSites[0].size() + 16);
     for (uint16 siteId : m_activePlayerData->ResearchSites[0])
         activeSites.push_back(siteId);
 
-    for (uint32 mapId : { 0u, 1u })
+    for (uint32 mapId : { 0u, 1u, 530u, 571u })
     {
         uint32 activeCount = 0;
         for (uint32 siteId : activeSites)

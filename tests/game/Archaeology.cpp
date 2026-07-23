@@ -168,26 +168,32 @@ namespace
 TEST_CASE("Archaeology project selection follows enabled branch policy", "[Archaeology]")
 {
     LoadArchaeologySolveData();
-    ArchaeologyMgrTestAccess::SetEnabledBranches({ 1, 3, 4, 5, 7, 8 });
+    // Nine-branch Cataclysm introduction policy (Phase 2F): six EK/Kalimdor branches plus
+    // Draenei/Orc/Vrykul. Disabled-branch rejection is covered by an out-of-policy id below.
+    ArchaeologyMgrTestAccess::SetEnabledBranches({ 1, 2, 3, 4, 5, 6, 7, 8, 27 });
 
-    for (uint32 branchId : { 1u, 3u, 4u, 5u, 7u, 8u })
+    for (uint32 branchId : { 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 27u })
     {
         CHECK(sArchaeologyMgr->IsResearchBranchEnabled(branchId));
         CHECK(sArchaeologyMgr->RollResearchProject(branchId, {}) == 6000 + branchId);
     }
 
-    for (uint32 branchId : { 2u, 6u, 27u })
-    {
-        CHECK_FALSE(sArchaeologyMgr->IsResearchBranchEnabled(branchId));
-        CHECK(sArchaeologyMgr->RollResearchProject(branchId, {}) == 0);
-    }
+    CHECK_FALSE(sArchaeologyMgr->IsResearchBranchEnabled(423));
+    CHECK(sArchaeologyMgr->RollResearchProject(423, {}) == 0);
 
-    CHECK_FALSE(sArchaeologyMgr->BuildSolvePlan(7006, { Weight(1, 397, 45) }).has_value());
+    // Orc solve plan accepted when branch 6 is enabled (policy + DB2 weights).
+    {
+        auto plan = sArchaeologyMgr->BuildSolvePlan(7006, { Weight(1, 397, 45) });
+        REQUIRE(plan.has_value());
+        CHECK(plan->BranchID == 6);
+        CHECK(plan->FragmentCount == 45);
+    }
 }
 
 TEST_CASE("Archaeology solve plans use DB2 weights and project socket caps", "[Archaeology]")
 {
     LoadArchaeologySolveData();
+    ArchaeologyMgrTestAccess::SetEnabledBranches({ BranchId });
 
     SECTION("Currency-only zero-socket solve")
     {
@@ -230,6 +236,7 @@ TEST_CASE("Archaeology solve plans use DB2 weights and project socket caps", "[A
 TEST_CASE("Archaeology solve plans reject invalid data-backed resource shapes", "[Archaeology]")
 {
     LoadArchaeologySolveData();
+    ArchaeologyMgrTestAccess::SetEnabledBranches({ BranchId });
 
     CHECK_FALSE(sArchaeologyMgr->BuildSolvePlan(5002,
         { Weight(2, 154990, 2), Weight(1, FragmentCurrencyId, 41) }).has_value());
