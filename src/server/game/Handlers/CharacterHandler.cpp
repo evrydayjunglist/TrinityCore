@@ -397,11 +397,17 @@ constexpr uint32 ARATHI_RPE_SCENE_SPELL_STASIS  = 1248494; // SceneId 3749 / pac
 // Provisional until sniff A locks the retail inactivity window (owner-approved stub).
 constexpr time_t ARATHI_RPE_INACTIVE_SECONDS = time_t(60) * DAY;
 
+// Same gate for EnumCharacters (UI) and CMSG_PLAYER_LOGIN.RPE (actual teleport).
+// Client RPE bit must not relocate recently-active characters.
+bool IsArathiRpeEligible(time_t lastActive)
+{
+    return lastActive > 0
+        && (GameTime::GetGameTime() >= lastActive + ARATHI_RPE_INACTIVE_SECONDS);
+}
+
 void ApplyArathiRpeEnumEligibility(WorldPackets::Character::EnumCharactersResult::CharacterInfo& charInfo)
 {
-    time_t const lastActive = time_t(charInfo.Basic.LastActiveTime);
-    bool const inactiveLongEnough = lastActive > 0
-        && (GameTime::GetGameTime() >= lastActive + ARATHI_RPE_INACTIVE_SECONDS);
+    bool const inactiveLongEnough = IsArathiRpeEligible(time_t(charInfo.Basic.LastActiveTime));
 
     charInfo.RestrictionsAndMails.RpeAvailable = inactiveLongEnough;
     // NoRpeReason 4 = "recently active" (CharacterPackets.h default comment).
@@ -1323,8 +1329,16 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder const& holder)
     // Catch Up Experience (Arathi RPE): honor CMSG_PLAYER_LOGIN.RPE (retail sniff B, map 2927).
     // LoadFromDB already CreateMap+SetMap(saved); WorldRelocate alone updates WorldLocation only.
     // Rebind like MovementHandler::HandleMoveWorldportAck so GetMap()->GetId() == 2927 for spawns/AI.
-    bool const enterArathiRpe = m_playerLoginRPE;
+    // Re-check inactivity here: EnumCharacters only advertises RpeAvailable; a modified client can
+    // still set the RPE bit and would otherwise force-relocate any character to map 2927.
+    bool enterArathiRpe = m_playerLoginRPE;
     m_playerLoginRPE = false;
+    if (enterArathiRpe && !IsArathiRpeEligible(time_t(pCurrChar->m_playerData->LogoutTime)))
+    {
+        TC_LOG_ERROR("network", "Player {} requested Arathi RPE login but is not eligible (LogoutTime={})",
+            pCurrChar->GetGUID().ToString(), int64(pCurrChar->m_playerData->LogoutTime));
+        enterArathiRpe = false;
+    }
     if (enterArathiRpe)
     {
         if (sMapStore.LookupEntry(ARATHI_RPE_MAP_ID))
