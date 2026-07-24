@@ -95,6 +95,7 @@ DumpTable const DumpTables[] =
     { "character_action",                 DTT_CHAR_TABLE },
     { "character_aura",                   DTT_CHAR_TABLE },
     { "character_aura_effect",            DTT_CHAR_TABLE },
+    { "character_chromie_time",           DTT_CHAR_TABLE },
     { "character_cuf_profiles",           DTT_CHAR_TABLE },
     { "character_currency",               DTT_CURRENCY   },
     { "character_declinedname",           DTT_CHAR_TABLE },
