@@ -44,6 +44,7 @@
 #include "CharacterPackets.h"
 #include "CharmInfo.h"
 #include "Chat.h"
+#include "ChromieTimePackets.h"
 #include "ChatPackets.h"
 #include "ChatTextBuilder.h"
 #include "CinematicMgr.h"
@@ -2312,6 +2313,11 @@ void Player::GiveLevel(uint8 level)
         UpdateCriteria(CriteriaType::GainLevels, level - oldLevel);
     if (IsMaxLevel())
         UpdateCriteria(CriteriaType::ReachMaxLevel);
+
+    // Chromie Time end band (Phase 3/5/polish). Silent clear — not confirmation spell 335807.
+    // Wiki: also teleported to capital; coords = world Chromie 167032 (SW/Org embassy spawns).
+    if (m_activePlayerData->UiChromieTimeExpansionID && level >= GetChromieTimeEndLevel())
+        RemoveFromChromieTime(true);
 
     PushQuests();
 
@@ -14508,6 +14514,12 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
     switch (gossipOptionNpc)
     {
         case GossipOptionNpc::None:
+            // Retail leaves Chromie Time via gossip SpellID (e.g. 335807 / effect 277 MiscValue 0)
+            if (item->SpellID)
+            {
+                PlayerTalkClass->SendCloseGossip();
+                CastSpell(this, uint32(*item->SpellID), true);
+            }
             break;
         case GossipOptionNpc::Vendor:
             GetSession()->SendListInventory(guid);
@@ -14589,8 +14601,6 @@ void Player::OnGossipSelect(WorldObject* source, int32 gossipOptionId, uint32 me
         case GossipOptionNpc::GarrisonTradeskillNpc: // NYI
             break;
         case GossipOptionNpc::GarrisonRecruitment: // NYI
-            break;
-        case GossipOptionNpc::ChromieTimeNpc: // NYI
             break;
         case GossipOptionNpc::RuneforgeLegendaryCrafting: // NYI
             break;
@@ -19315,6 +19325,7 @@ bool Player::LoadFromDB(ObjectGuid guid, CharacterDatabaseQueryHolder const& hol
     _LoadCUFProfiles(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_CUF_PROFILES));
 
     _LoadPlayerData(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_DATA_ELEMENTS), holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_DATA_FLAGS));
+    _LoadChromieTime(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_CHROMIE_TIME));
 
     std::unique_ptr<Garrison> garrison = std::make_unique<Garrison>(this);
     if (garrison->LoadFromDB(holder.GetPreparedResult(PLAYER_LOGIN_QUERY_LOAD_GARRISON),
@@ -21271,6 +21282,7 @@ void Player::SaveToDB(LoginDatabaseTransaction loginTransaction, CharacterDataba
     _SaveCUFProfiles(trans);
     _SavePlayerData(trans);
     _SaveCharacterBankTabSettings(trans);
+    _SaveChromieTime(trans);
     if (_garrison)
         _garrison->SaveToDB(trans);
 
@@ -22287,6 +22299,38 @@ void Player::_SaveCharacterBankTabSettings(CharacterDatabaseTransaction trans) c
         stmt->setInt32(5, *tabSetting.DepositFlags);
         trans->Append(stmt);
     }
+}
+
+void Player::_LoadChromieTime(PreparedQueryResult result)
+{
+    if (!result)
+        return;
+
+    uint32 uiExpansionId = result->Fetch()[0].GetUInt32();
+    if (!uiExpansionId)
+        return;
+
+    // Do not restore Chromie past the ContentTuning end band (UF stays 0 → save deletes row).
+    if (GetLevel() >= GetChromieTimeEndLevel())
+        return;
+
+    SetChromieTimeExpansion(uiExpansionId);
+}
+
+void Player::_SaveChromieTime(CharacterDatabaseTransaction trans) const
+{
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER_CHROMIE_TIME);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    trans->Append(stmt);
+
+    int32 uiExpansionId = m_activePlayerData->UiChromieTimeExpansionID;
+    if (uiExpansionId <= 0)
+        return;
+
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER_CHROMIE_TIME);
+    stmt->setUInt64(0, GetGUID().GetCounter());
+    stmt->setUInt32(1, uint32(uiExpansionId));
+    trans->Append(stmt);
 }
 
 void Player::outDebugValues() const
@@ -31589,6 +31633,140 @@ void Player::SetDataElementCharacter(uint32 dataElementId, std::variant<int64, f
     }
 
     _playerDataElementsNeedSave.insert(dataElementId);
+}
+
+UF::CTROptions Player::BuildCtrOptionsForChromieTime(uint32 uiExpansionId) const
+{
+    UF::CTROptions options = *m_playerData->CtrOptions;
+    options.FactionGroup = GetFactionGroupForRace(GetRace());
+
+    if (uiExpansionId)
+    {
+        if (UIChromieTimeExpansionInfoEntry const* info = sUIChromieTimeExpansionInfoStore.LookupEntry(uiExpansionId))
+            options.ChromieTimeExpansionMask = uint32(info->ExpansionMask);
+        else
+            options.ChromieTimeExpansionMask = 0;
+
+        if (options.ConditionalFlags.empty())
+            options.ConditionalFlags.push_back(1u);
+        else
+            options.ConditionalFlags[0] |= 1u;
+    }
+    else
+    {
+        options.ChromieTimeExpansionMask = 0;
+        if (!options.ConditionalFlags.empty())
+            options.ConditionalFlags[0] &= ~1u;
+    }
+
+    return options;
+}
+
+uint32 Player::GetChromieTimeStartLevel()
+{
+    // UIChromieTimeExpansionInfo ContentTuning rows (e.g. 1700/1736): MinLevelSquish = 10.
+    // Blizzard news: available at level 10 or after finishing Exile's Reach (see HasCompletedExilesReach).
+    return 10u;
+}
+
+uint32 Player::GetChromieTimeSelectLockLevel()
+{
+    // PROVISIONAL — Blizzard support 275056 (Timewalking Campaign No Longer Available):
+    // "option to choose" removed upon reaching level 68. Applies to start/re-enter from
+    // present only; stay-in scaling continues to GetChromieTimeEndLevel() (ContentTuning).
+    // Midnight article body not proven updated; forums still report ~68 re-enter lock.
+    return 68u;
+}
+
+uint32 Player::GetChromieTimeEndLevel()
+{
+    // ContentTuning Chromie MaxLevelSquish=1 + MaxLevelType PrevExpansionMaxLevel
+    return 1u + GetMaxLevelForExpansion(uint32(std::max(int32(CURRENT_EXPANSION) - 1, 0)));
+}
+
+bool Player::HasCompletedExilesReach() const
+{
+    // Capital arrival after leaving map 2175 — not achievement 14222 (that CriteriaTree is the
+    // old Alliance/Horde NPE BfA funnel: Nation of Kul Tiras / Mission Statement).
+    constexpr uint32 QUEST_WELCOME_TO_STORMWIND = 59583;
+    constexpr uint32 QUEST_WELCOME_TO_ORGRIMMAR = 60343;
+
+    return IsQuestRewarded(QUEST_WELCOME_TO_STORMWIND) || IsQuestRewarded(QUEST_WELCOME_TO_ORGRIMMAR);
+}
+
+bool Player::CanSelectChromieTimeExpansion() const
+{
+    uint32 const level = GetLevel();
+
+    // Blizzard news 23574988: available at level 10 or after completing Exile's Reach.
+    // Racial starters never reward Welcome to SW/Org — they still need level 10.
+    if (level < GetChromieTimeStartLevel() && !HasCompletedExilesReach())
+        return false;
+
+    // Past ContentTuning Chromie end band — refuse select; kick clears on level-up when already in.
+    if (level >= GetChromieTimeEndLevel())
+        return false;
+
+    // PROVISIONAL Midnight model (no sniff A/B yet):
+    // - Start/re-enter from present: locked at GetChromieTimeSelectLockLevel() (68).
+    // - Already in a campaign: may change timelines until end band (stay-in ≠ re-enter).
+    // Evidence: support 275056 "choice" wording; ContentTuning max ~81; Hierophant 2026-04
+    // (leveled to 80 in Chromie / L70 alt cannot start; change while in at 70 reported).
+    // Counter-reports exist (no swap after ~70) — revisit if retail sniff contradicts.
+    if (!m_activePlayerData->UiChromieTimeExpansionID && level >= GetChromieTimeSelectLockLevel())
+        return false;
+
+    return true;
+}
+
+void Player::SetChromieTimeExpansion(uint32 uiExpansionId)
+{
+    if (uiExpansionId && !sUIChromieTimeExpansionInfoStore.LookupEntry(uiExpansionId))
+        return;
+
+    UF::CTROptions const& current = *m_playerData->CtrOptions;
+    UF::CTROptions options = BuildCtrOptionsForChromieTime(uiExpansionId);
+
+    // CT-A leave + select: SMSG_SET_CTR_OPTIONS (from → to) accompanies Chromie CTR changes.
+    // Skip during load (not in world) and when nothing changed.
+    if (IsInWorld() && (current != options || m_activePlayerData->UiChromieTimeExpansionID != int32(uiExpansionId)))
+    {
+        WorldPackets::ChromieTime::SetCtrOptions setCtrOptions;
+        setCtrOptions.From.ConditionalFlags = current.ConditionalFlags;
+        setCtrOptions.From.FactionGroup = int8(current.FactionGroup);
+        setCtrOptions.From.ChromieTimeExpansionMask = current.ChromieTimeExpansionMask;
+        setCtrOptions.To.ConditionalFlags = options.ConditionalFlags;
+        setCtrOptions.To.FactionGroup = int8(options.FactionGroup);
+        setCtrOptions.To.ChromieTimeExpansionMask = options.ChromieTimeExpansionMask;
+        SendDirectMessage(setCtrOptions.Write());
+    }
+
+    SetUpdateFieldValue(m_values.ModifyValue(&Player::m_activePlayerData)
+        .ModifyValue(&UF::ActivePlayerData::UiChromieTimeExpansionID), int32(uiExpansionId));
+
+    auto ctrOptions = m_values.ModifyValue(&Player::m_playerData).ModifyValue(&UF::PlayerData::CtrOptions);
+    SetUpdateFieldValue(ctrOptions.ModifyValue(&UF::CTROptions::FactionGroup), options.FactionGroup);
+    SetUpdateFieldValue(ctrOptions.ModifyValue(&UF::CTROptions::ChromieTimeExpansionMask), options.ChromieTimeExpansionMask);
+    SetUpdateFieldValue(ctrOptions.ModifyValue(&UF::CTROptions::ConditionalFlags), std::move(options.ConditionalFlags));
+}
+
+void Player::RemoveFromChromieTime(bool teleportToCapital /*= false*/)
+{
+    if (!m_activePlayerData->UiChromieTimeExpansionID)
+        return;
+
+    SetChromieTimeExpansion(0);
+
+    if (!teleportToCapital || !IsInWorld())
+        return;
+
+    // Wiki kick → capital near Chromie 167032 — not on her / hourglass / campfire.
+    // Org: Chromie (1557.18,-4216.54) faces ~NE toward bonfire GO 204676 (1558.98,-4212.85);
+    //      stand SW of pedestal at ground Z, facing Chromie. SW: no campfire in the pad.
+    if (GetTeamId() == TEAM_ALLIANCE)
+        TeleportTo(0, -8196.72f, 742.37f, 76.50f, 4.57677f); // ~3 yd from Chromie, face her (o+π)
+    else
+        TeleportTo(1, 1554.80f, -4219.20f, 54.25f, 0.95f);   // clear of hourglass 350063 + bonfire 204676
 }
 
 bool Player::HasDataFlagAccount(uint32 dataFlagId) const

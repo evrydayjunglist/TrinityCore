@@ -1029,6 +1029,7 @@ enum PlayerLoginQueryIndex
     PLAYER_LOGIN_QUERY_LOAD_DATA_ELEMENTS,
     PLAYER_LOGIN_QUERY_LOAD_DATA_FLAGS,
     PLAYER_LOGIN_QUERY_LOAD_BANK_TAB_SETTINGS,
+    PLAYER_LOGIN_QUERY_LOAD_CHROMIE_TIME,
     MAX_PLAYER_LOGIN_QUERY
 };
 
@@ -3098,6 +3099,23 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         std::variant<int64, float> GetDataElementCharacter(uint32 dataElementId) const;
         void SetDataElementCharacter(uint32 dataElementId, std::variant<int64, float> value);
 
+        UF::CTROptions BuildCtrOptionsForChromieTime(uint32 uiExpansionId) const;
+        void SetChromieTimeExpansion(uint32 uiExpansionId);
+        /// ContentTuning Chromie outdoor MinLevelSquish (campaign CTs use 10).
+        static uint32 GetChromieTimeStartLevel();
+        /// PROVISIONAL: first level at which Chromie start/re-enter from present is refused
+        /// (Blizzard support 275056). Stay-in change uses CanSelectChromieTimeExpansion().
+        static uint32 GetChromieTimeSelectLockLevel();
+        /// ContentTuning Chromie max band: 1 + GetMaxLevelForExpansion(CURRENT_EXPANSION - 1).
+        static uint32 GetChromieTimeEndLevel();
+        /// Left Exile's Reach (capital arrival quest rewarded). Blizzard news: Chromie at L10 OR after ER.
+        bool HasCompletedExilesReach() const;
+        /// PROVISIONAL Midnight model: start/re-enter locked at select-lock; stay-in may change
+        /// until end band. See chromie-time-polish-start-gates-handoff.md.
+        bool CanSelectChromieTimeExpansion() const;
+        /// Clear Chromie UF/CTR; optional capital teleport to faction Chromie (end-level kick).
+        void RemoveFromChromieTime(bool teleportToCapital = false);
+
         bool HasDataFlagAccount(uint32 dataFlagId) const;
         void SetDataFlagAccount(uint32 dataFlagId, bool on);
 
@@ -3239,6 +3257,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void _LoadCUFProfiles(PreparedQueryResult result);
         void _LoadPlayerData(PreparedQueryResult elementsResult, PreparedQueryResult flagsResult);
         void _LoadCharacterBankTabSettings(PreparedQueryResult result);
+        void _LoadChromieTime(PreparedQueryResult result);
 
         /*********************************************************/
         /***                   SAVE SYSTEM                     ***/
@@ -3272,6 +3291,7 @@ class TC_GAME_API Player final : public Unit, public GridObject<Player>
         void _SaveCUFProfiles(CharacterDatabaseTransaction trans);
         void _SavePlayerData(CharacterDatabaseTransaction trans);
         void _SaveCharacterBankTabSettings(CharacterDatabaseTransaction trans) const;
+        void _SaveChromieTime(CharacterDatabaseTransaction trans) const;
 
         /*********************************************************/
         /***              ENVIRONMENTAL SYSTEM                 ***/

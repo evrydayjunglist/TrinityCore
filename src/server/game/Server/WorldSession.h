@@ -122,6 +122,11 @@ namespace WorldPackets
         class AdventureMapStartQuest;
     }
 
+    namespace ChromieTime
+    {
+        class ChromieTimeSelectExpansion;
+    }
+
     namespace AreaTrigger
     {
         class AreaTrigger;
@@ -1880,6 +1885,9 @@ class TC_GAME_API WorldSession
         // Adventure Map
         void HandleCheckIsAdventureMapPoiValid(WorldPackets::AdventureMap::CheckIsAdventureMapPoiValid& CheckIsAdventureMapPoiValid);
         void HandleAdventureMapStartQuest(WorldPackets::AdventureMap::AdventureMapStartQuest& startQuest);
+
+        // Chromie Time
+        void HandleChromieTimeSelectExpansion(WorldPackets::ChromieTime::ChromieTimeSelectExpansion& selectExpansion);
 
         // Toys
         void HandleAddToy(WorldPackets::Toy::AddToy& packet);
